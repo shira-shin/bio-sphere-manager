@@ -93,6 +93,13 @@
     .card-section{border:1px solid #223247; border-radius:12px; padding:14px; background:#0f1824; margin-top:10px;}
     .stack{display:grid; gap:12px;}
     .panel-note{margin:4px 0 0; font-size:12px; color:#8ea7c4;}
+    .species-list{display:grid; gap:8px;}
+    .species-row{display:grid; grid-template-columns: auto 1fr 150px; align-items:center; gap:10px; padding:10px; border:1px solid #223247; border-radius:10px; background:#0f1824;}
+    .species-head{display:flex; align-items:center; gap:8px; font-weight:700; color:#e6edf3;}
+    .species-pill{display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; border:1px solid #2a3a52; background:#132235; font-size:12px;}
+    .species-shape{width:18px; height:18px; display:inline-block; border:2px solid #e6edf3; border-radius:50%;}
+    .species-shape.triangle{width:0; height:0; border-left:10px solid transparent; border-right:10px solid transparent; border-top:18px solid #e6edf3; border-radius:0; border:0;}
+    .species-controls{display:flex; gap:10px; align-items:center; justify-content:flex-end;}
     .modal-backdrop{
       position:fixed; inset:0; background:rgba(8,12,18,0.72); display:none; align-items:center; justify-content:center; z-index:20;
     }
@@ -121,7 +128,7 @@
       <div class="pad" id="p5-container">
       </div>
       <div class="pad note">
-        描画：草（緑のセル）／草食（青）／肉食（赤紫）で表示しています。<br>
+        描画：草（緑のセル）／草食・肉食は種ごとに色と形状が異なります（凡例参照）。<br>
         ルール：ランダム移動 → 捕食/採食 → 代謝 → 繁殖。<br>
         同じseed・同じ初期パラメータなら挙動が再現されます（Math.randomは未使用）。
       </div>
@@ -228,14 +235,10 @@
                   <label>初期 草 数<div class="help">開始時の草セル数</div></label>
                   <input id="inInitGrass" type="number" min="0" max="2500" value="800" />
                 </div>
-                <div class="ctrl">
-                  <label>初期 草食 数<div class="help">開始時の草食動物数</div></label>
-                  <input id="inInitHerb" type="number" min="0" max="500" value="80" />
-                </div>
-                <div class="ctrl">
-                  <label>初期 肉食 数<div class="help">開始時の肉食動物数</div></label>
-                  <input id="inInitCarn" type="number" min="0" max="300" value="20" />
-                </div>
+              </div>
+              <div class="card-section">
+                <div class="note">種ごとの有効化と初期個体数を設定できます（草食2種・肉食2種）。</div>
+                <div id="speciesList" class="species-list"></div>
               </div>
             </div>
           </details>
@@ -341,7 +344,7 @@
               <div class="row" style="margin-top:10px;">
                 <button id="btnCopyResult">結果をコピー</button>
               </div>
-              <div class="note">CSV列: schema_version, seed, step, grass_count, herbivore_count, carnivore_count, death_herbivore_starve, death_herbivore_eaten, death_carnivore_starve, death_herbivore_age, death_carnivore_age, herb_K, carn_K, competition_enabled, herb_repro_success_rate, carn_repro_success_rate</div>
+              <div class="note">CSV列: schema_version, seed, step, grass_count, herbivore_count, carnivore_count, death_herbivore_starve, death_herbivore_eaten, death_carnivore_starve, death_herbivore_age, death_carnivore_age, herb_K, carn_K, competition_enabled, herb_repro_success_rate, carn_repro_success_rate, 以降に各species_count列</div>
             </div>
           </details>
           <details class="section" open>
@@ -418,6 +421,62 @@ const CELL = CANVAS / GRID; // 12
 const N = GRID * GRID;
 const SCHEMA_VERSION = 3;
 
+const SPECIES_DEFS = [
+  {
+    id: 'herb_a',
+    nameJP: 'ハミング草食',
+    color: [70, 180, 255],
+    shape: 'circle',
+    diet: 'herbivore',
+    metabolism: 1,
+    maxAge: 130,
+    gains: {grassDelta: 0},
+    reproDelta: 0,
+    defaultEnabled: true,
+    defaultInit: 50,
+  },
+  {
+    id: 'herb_b',
+    nameJP: 'モグモグ草食',
+    color: [90, 220, 200],
+    shape: 'circle',
+    diet: 'herbivore',
+    metabolism: 1,
+    maxAge: 150,
+    gains: {grassDelta: -2},
+    reproDelta: -4,
+    defaultEnabled: true,
+    defaultInit: 40,
+  },
+  {
+    id: 'carn_a',
+    nameJP: 'シャドウ肉食',
+    color: [240, 90, 170],
+    shape: 'triangle',
+    diet: 'carnivore',
+    metabolism: 1,
+    maxAge: 180,
+    gains: {herbivoreDelta: 0},
+    reproDelta: 0,
+    defaultEnabled: true,
+    defaultInit: 16,
+  },
+  {
+    id: 'carn_b',
+    nameJP: 'ブレード肉食',
+    color: [255, 140, 90],
+    shape: 'triangle',
+    diet: 'carnivore',
+    metabolism: 2,
+    maxAge: 150,
+    gains: {herbivoreDelta: -4},
+    reproDelta: -6,
+    defaultEnabled: true,
+    defaultInit: 10,
+  },
+];
+const SPECIES_MAP = Object.fromEntries(SPECIES_DEFS.map(s=>[s.id, s]));
+
 let rng = mulberry32(1);
 let running = false;
 let step = 0;
@@ -430,11 +489,14 @@ let grass = new Uint8Array(N);
 let grassTone = new Uint8Array(N); // 草の濃淡（決定論）
 
 // 動物
-let herbs = []; // {x,y,energy,alive}
-let carns = []; // {x,y,energy,alive}
+let animals = {};
 
 // 作業用：セルごとの草食インデックス（再利用してGCを抑える）
-let herbsAt = Array.from({length:N}, ()=>[]);
+let herbivoreAt = Array.from({length:N}, ()=>[]);
+
+let speciesSettings = {};
+let activeHerbSpecies = [];
+let activeCarnSpecies = [];
 
 // ログ（CSV出力用）
 let logs = [];
@@ -449,7 +511,8 @@ const PRESETS = {
   grassland: {
     label: '草原（安定）',
     values: {
-      initGrass: 1250, initHerb: 90, initCarn: 18,
+      initGrass: 1250,
+      species: {herb_a: 55, herb_b: 35, carn_a: 11, carn_b: 7},
       grassGrowthRate: 0.018, herbGain: 12, carnGain: 22,
       herbRepro: 28, carnRepro: 45, herbMaxAge: 130, carnMaxAge: 170,
       endCondition: 'animalExtinct', maxSteps: 2600, logEvery: 5
@@ -458,7 +521,8 @@ const PRESETS = {
   dryCollapse: {
     label: '乾燥（崩壊）',
     values: {
-      initGrass: 620, initHerb: 60, initCarn: 16,
+      initGrass: 620,
+      species: {herb_a: 38, herb_b: 22, carn_a: 9, carn_b: 7},
       grassGrowthRate: 0.009, herbGain: 11, carnGain: 20,
       herbRepro: 30, carnRepro: 48, herbMaxAge: 120, carnMaxAge: 165,
       endCondition: 'anyExtinct', maxSteps: 1800, logEvery: 4
@@ -469,8 +533,6 @@ const PRESETS = {
 // パラメータ（UIから読み込み）
 let P = {
   initGrass: 800,
-  initHerb: 80,
-  initCarn: 20,
   grassGrowthRate: 0.02,
   herbGain: 12,
   herbRepro: 28,
@@ -517,8 +579,6 @@ function getSeedString(){
 
 function readParamsFromUI(){
   P.initGrass = clampInt(parseInt(el('inInitGrass').value,10), 0, N);
-  P.initHerb  = clampInt(parseInt(el('inInitHerb').value,10), 0, 5000);
-  P.initCarn  = clampInt(parseInt(el('inInitCarn').value,10), 0, 5000);
   P.grassGrowthRate = clampFloat(parseFloat(el('slGrass').value), 0, 0.2);
   P.herbGain  = clampInt(parseInt(el('inHerbGain').value,10), 1, 200);
   P.herbRepro = clampInt(parseInt(el('inHerbRepro').value,10), 2, 500);
@@ -540,6 +600,9 @@ function readParamsFromUI(){
 
   el('valGrass').textContent = P.grassGrowthRate.toFixed(3);
   el('valFPS').textContent = String(fps);
+  updateSpeciesSettingsFromUI();
+  updateActiveSpeciesLists();
+  refreshSpeciesTraitLabels();
 }
 function clampInt(v,min,max){ if(Number.isNaN(v)) v=min; return Math.min(max, Math.max(min, v)); }
 function clampFloat(v,min,max){ if(Number.isNaN(v)) v=min; return Math.min(max, Math.max(min, v)); }
@@ -552,7 +615,7 @@ function drawTriangle(p, cx, cy, size){
   p.triangle(cx, cy - h / 2, cx - size / 2, cy + h / 2, cx + size / 2, cy + h / 2);
 }
 function drawLegend(p){
-  const x = 12; const y = 12; const w = 220; const h = 96;
+  const x = 12; const y = 12; const w = 240; const h = 60 + SPECIES_DEFS.length * 22;
   p.noStroke();
   p.fill(10, 16, 24, 230);
   p.rect(x, y, w, h, 12);
@@ -567,23 +630,25 @@ function drawLegend(p){
   p.fill(215);
   p.text('草（濃淡で草量）', x + 44, y + 40);
 
-  // 草食
-  p.stroke(245);
-  p.strokeWeight(2.1);
-  p.fill(70, 180, 255);
-  p.circle(x + 24, y + 62, 16);
-  p.noStroke();
-  p.fill(215);
-  p.text('草食（円・白縁）', x + 44, y + 62);
-
-  // 肉食
-  p.stroke(245);
-  p.strokeWeight(2.1);
-  p.fill(240, 90, 170);
-  drawTriangle(p, x + 24, y + 82, 18);
-  p.noStroke();
-  p.fill(215);
-  p.text('肉食（三角・白縁）', x + 44, y + 82);
+  let offsetY = 60;
+  for(const sp of SPECIES_DEFS){
+    const c = `rgb(${sp.color.join(',')})`;
+    p.stroke(245);
+    p.strokeWeight(2.1);
+    p.fill(...sp.color);
+    if(sp.shape === 'triangle'){
+      drawTriangle(p, x + 24, y + offsetY, 18);
+    } else {
+      p.circle(x + 24, y + offsetY, 16);
+    }
+    p.noStroke();
+    p.fill(215);
+    p.text(`${sp.nameJP}（${sp.diet==='herbivore'?'草食':'肉食'}）`, x + 44, y + offsetY);
+    offsetY += 20;
+  }
+}
+function speciesColor(sp){
+  return `rgb(${sp.color.join(',')})`;
 }
 function updateGrassToneMap(seedStr){
   for(let i=0;i<N;i++){
@@ -591,13 +656,124 @@ function updateGrassToneMap(seedStr){
     grassTone[i] = h % 80; // 0-79の明度
   }
 }
+function defaultSpeciesSettings(){
+  const s = {};
+  for(const sp of SPECIES_DEFS){
+    s[sp.id] = {enabled: sp.defaultEnabled !== false, init: sp.defaultInit || 0};
+  }
+  return s;
+}
+function updateSpeciesSettingsFromUI(){
+  for(const sp of SPECIES_DEFS){
+    const chk = el(`chk-${sp.id}`);
+    const inp = el(`inInit-${sp.id}`);
+    const enabled = chk ? chk.checked : true;
+    const init = inp ? clampInt(parseInt(inp.value,10), 0, 5000) : (sp.defaultInit || 0);
+    speciesSettings[sp.id] = {enabled, init};
+  }
+}
+function applySpeciesSettingsToUI(settings){
+  for(const sp of SPECIES_DEFS){
+    const st = settings[sp.id];
+    if(!st) continue;
+    const chk = el(`chk-${sp.id}`);
+    const inp = el(`inInit-${sp.id}`);
+    if(chk) chk.checked = !!st.enabled;
+    if(inp) inp.value = st.init;
+  }
+  updateSpeciesSettingsFromUI();
+  updateActiveSpeciesLists();
+}
+function updateActiveSpeciesLists(){
+  activeHerbSpecies = SPECIES_DEFS.filter(sp => speciesSettings[sp.id]?.enabled && sp.diet === 'herbivore');
+  activeCarnSpecies = SPECIES_DEFS.filter(sp => speciesSettings[sp.id]?.enabled && sp.diet === 'carnivore');
+}
+function getSpeciesTraits(def){
+  const baseGain = def.diet === 'herbivore' ? P.herbGain : P.carnGain;
+  const baseRepro = def.diet === 'herbivore' ? P.herbRepro : P.carnRepro;
+  const gainDelta = def.gains?.grassDelta ?? def.gains?.herbivoreDelta ?? 0;
+  return {
+    gain: clampInt(baseGain + gainDelta, 1, 800),
+    reproduction: clampInt(baseRepro + (def.reproDelta || 0), 2, 1200),
+    metabolism: Math.max(0, def.metabolism ?? P.metabolism),
+    maxAge: def.maxAge ?? (def.diet === 'herbivore' ? P.herbMaxAge : P.carnMaxAge),
+  };
+}
+function buildSpeciesControls(){
+  const listEl = el('speciesList');
+  listEl.innerHTML = '';
+  speciesSettings = defaultSpeciesSettings();
+  for(const sp of SPECIES_DEFS){
+    const row = document.createElement('div');
+    row.className = 'species-row';
+
+    const head = document.createElement('div');
+    head.className = 'species-head';
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.id = `chk-${sp.id}`;
+    chk.checked = speciesSettings[sp.id].enabled;
+    chk.addEventListener('change', readParamsFromUI);
+    const pill = document.createElement('span');
+    pill.className = 'species-pill';
+    const shape = document.createElement('span');
+    shape.className = `species-shape${sp.shape === 'triangle' ? ' triangle' : ''}`;
+    if(sp.shape === 'triangle'){
+      shape.style.borderTopColor = speciesColor(sp);
+    } else {
+      shape.style.background = speciesColor(sp);
+    }
+    pill.appendChild(shape);
+    pill.appendChild(document.createTextNode(sp.diet === 'herbivore' ? '草食' : '肉食'));
+    const name = document.createElement('span');
+    name.textContent = sp.nameJP;
+    head.append(chk, pill, name);
+
+    const desc = document.createElement('div');
+    desc.className = 'help';
+    desc.id = `desc-${sp.id}`;
+    const traits = getSpeciesTraits(sp);
+    desc.textContent = `採食/捕食: +${traits.gain} / 代謝: -${traits.metabolism} / 寿命: ${traits.maxAge} / 繁殖閾値: ${traits.reproduction}`;
+
+    const controls = document.createElement('div');
+    controls.className = 'species-controls';
+    const lbl = document.createElement('label');
+    lbl.textContent = '初期個体数';
+    lbl.className = 'note';
+    const inp = document.createElement('input');
+    inp.type = 'number';
+    inp.id = `inInit-${sp.id}`;
+    inp.min = '0';
+    inp.max = '5000';
+    inp.value = speciesSettings[sp.id].init;
+    inp.addEventListener('change', readParamsFromUI);
+    controls.append(lbl, inp);
+
+    row.append(head, desc, controls);
+    listEl.appendChild(row);
+  }
+}
+function refreshSpeciesTraitLabels(){
+  for(const sp of SPECIES_DEFS){
+    const desc = el(`desc-${sp.id}`);
+    if(!desc) continue;
+    const traits = getSpeciesTraits(sp);
+    desc.textContent = `採食/捕食: +${traits.gain} / 代謝: -${traits.metabolism} / 寿命: ${traits.maxAge} / 繁殖閾値: ${traits.reproduction}`;
+  }
+}
+function countAliveFor(list){
+  let total = 0;
+  for(const sp of list){
+    const animalsFor = animals[sp.id] || [];
+    for(const a of animalsFor){ if(a.alive) total++; }
+  }
+  return total;
+}
 function applyPresetToUI(key){
   const p = PRESETS[key];
   if(!p) return;
   const v = p.values;
   el('inInitGrass').value = v.initGrass;
-  el('inInitHerb').value  = v.initHerb;
-  el('inInitCarn').value  = v.initCarn;
   el('slGrass').value     = v.grassGrowthRate;
   el('inHerbGain').value  = v.herbGain;
   el('inCarnGain').value  = v.carnGain;
@@ -605,6 +781,16 @@ function applyPresetToUI(key){
   el('inCarnRepro').value = v.carnRepro;
   el('inHerbMaxAge').value = v.herbMaxAge;
   el('inCarnMaxAge').value = v.carnMaxAge;
+  const speciesPreset = v.species || {};
+  const nextSpeciesSettings = {};
+  for(const sp of SPECIES_DEFS){
+    const presetCount = speciesPreset[sp.id];
+    const baseSetting = speciesSettings[sp.id] || {enabled: sp.defaultEnabled !== false, init: sp.defaultInit || 0};
+    const init = presetCount !== undefined ? presetCount : baseSetting.init;
+    const enabled = presetCount !== undefined ? presetCount > 0 : baseSetting.enabled;
+    nextSpeciesSettings[sp.id] = {enabled, init};
+  }
+  applySpeciesSettingsToUI(nextSpeciesSettings);
   if(v.endCondition) el('selEndCondition').value = v.endCondition;
   if(v.maxSteps) el('inMaxSteps').value = v.maxSteps;
   if(v.logEvery) el('inLogEvery').value = v.logEvery;
@@ -636,8 +822,10 @@ function resetSim(){
   statusMessage = '停止中';
   hideEndModal();
   grass.fill(0);
-  herbs = [];
-  carns = [];
+  animals = {};
+  for(const sp of SPECIES_DEFS){
+    animals[sp.id] = [];
+  }
   logs = [];
   deathHerbStarve = 0;
   deathCarnStarve = 0;
@@ -662,13 +850,23 @@ function resetSim(){
   }
 
   // 草食
-  for(let i=0;i<P.initHerb;i++){
-    herbs.push({x: randInt(GRID), y: randInt(GRID), energy: 10 + randInt(10), alive:true, age:0});
+  for(const sp of activeHerbSpecies){
+    const setting = speciesSettings[sp.id] || {enabled:true, init:0};
+    const traits = getSpeciesTraits(sp);
+    for(let i=0;i<setting.init;i++){
+      const baseEnergy = Math.max(6, Math.floor(traits.reproduction * 0.5));
+      animals[sp.id].push({x: randInt(GRID), y: randInt(GRID), energy: baseEnergy + randInt(8), alive:true, age:0, speciesId: sp.id});
+    }
   }
 
   // 肉食
-  for(let i=0;i<P.initCarn;i++){
-    carns.push({x: randInt(GRID), y: randInt(GRID), energy: 14 + randInt(12), alive:true, age:0});
+  for(const sp of activeCarnSpecies){
+    const setting = speciesSettings[sp.id] || {enabled:true, init:0};
+    const traits = getSpeciesTraits(sp);
+    for(let i=0;i<setting.init;i++){
+      const baseEnergy = Math.max(8, Math.floor(traits.reproduction * 0.4));
+      animals[sp.id].push({x: randInt(GRID), y: randInt(GRID), energy: baseEnergy + randInt(10), alive:true, age:0, speciesId: sp.id});
+    }
   }
 
   peakCounts = getCounts();
@@ -697,118 +895,129 @@ function tick(){
     }
   }
 
-  let herbAliveCount = 0;
-  for(const h of herbs) if(h.alive) herbAliveCount++;
-  let carnAliveCount = 0;
-  for(const c of carns) if(c.alive) carnAliveCount++;
+  let herbAliveCount = countAliveFor(activeHerbSpecies);
+  let carnAliveCount = countAliveFor(activeCarnSpecies);
 
   // 2) 草食の行動：移動→採食→代謝→繁殖
-  for(const h of herbs){
-    if(!h.alive) continue;
+  for(const sp of activeHerbSpecies){
+    const traits = getSpeciesTraits(sp);
+    const list = animals[sp.id] || [];
+    for(const h of list){
+      if(!h.alive) continue;
 
-    h.age += 1;
-    if(h.age >= P.herbMaxAge){
-      h.alive = false;
-      deathHerbAge++;
-      continue;
-    }
+      h.age += 1;
+      if(h.age >= traits.maxAge){
+        h.alive = false;
+        herbAliveCount--;
+        deathHerbAge++;
+        continue;
+      }
 
-    moveRandom(h);
+      moveRandom(h);
 
-    const idx = h.y * GRID + h.x;
-    if(grass[idx] === 1){
-      grass[idx] = 0;
-      h.energy += P.herbGain;
-    }
+      const idx = h.y * GRID + h.x;
+      if(grass[idx] === 1){
+        grass[idx] = 0;
+        h.energy += traits.gain;
+      }
 
-    const herbExtraCost = competitionExtraCost(herbAliveCount, P.herbK);
-    h.energy -= (P.metabolism + herbExtraCost);
-    if(h.energy <= 0){
-      h.alive = false;
-      herbAliveCount--;
-      deathHerbStarve++;
-      continue;
-    }
+      const herbExtraCost = competitionExtraCost(herbAliveCount, P.herbK);
+      h.energy -= (traits.metabolism + herbExtraCost);
+      if(h.energy <= 0){
+        h.alive = false;
+        herbAliveCount--;
+        deathHerbStarve++;
+        continue;
+      }
 
-    if(h.energy >= P.herbRepro){
-      herbReproAttempts++;
-      if(competitionReproPass(herbAliveCount, P.herbK)){
-        herbReproSuccess++;
-        // 簡易繁殖：エネルギーを半分に分けてコピー
-        const childEnergy = Math.floor(h.energy / 2);
-        h.energy = h.energy - childEnergy;
-        herbs.push({x:h.x, y:h.y, energy: childEnergy, alive:true, age:0});
-        herbAliveCount++;
+      if(h.energy >= traits.reproduction){
+        herbReproAttempts++;
+        if(competitionReproPass(herbAliveCount, P.herbK)){
+          herbReproSuccess++;
+          const childEnergy = Math.floor(h.energy / 2);
+          h.energy = h.energy - childEnergy;
+          list.push({x:h.x, y:h.y, energy: childEnergy, alive:true, age:0, speciesId: sp.id});
+          herbAliveCount++;
+        }
       }
     }
   }
 
   // 3) 草食のセル配置（肉食が捕食するため）
-  for(let i=0;i<N;i++) herbsAt[i].length = 0;
-  for(let i=0;i<herbs.length;i++){
-    const h = herbs[i];
-    if(!h.alive) continue;
-    herbsAt[h.y * GRID + h.x].push(i);
+  for(let i=0;i<N;i++) herbivoreAt[i].length = 0;
+  for(const sp of activeHerbSpecies){
+    const list = animals[sp.id] || [];
+    for(let i=0;i<list.length;i++){
+      const h = list[i];
+      if(!h.alive) continue;
+      herbivoreAt[h.y * GRID + h.x].push({sid: sp.id, idx: i});
+    }
   }
 
   // 4) 肉食の行動：移動→捕食→代謝→繁殖
-  for(const c of carns){
-    if(!c.alive) continue;
+  for(const sp of activeCarnSpecies){
+    const traits = getSpeciesTraits(sp);
+    const list = animals[sp.id] || [];
+    for(const c of list){
+      if(!c.alive) continue;
 
-    c.age += 1;
-    if(c.age >= P.carnMaxAge){
-      c.alive = false;
-      deathCarnAge++;
-      continue;
-    }
+      c.age += 1;
+      if(c.age >= traits.maxAge){
+        c.alive = false;
+        carnAliveCount--;
+        deathCarnAge++;
+        continue;
+      }
 
-    moveRandom(c);
+      moveRandom(c);
 
-    const idx = c.y * GRID + c.x;
-    const list = herbsAt[idx];
-    if(list.length > 0){
-      // そのセルの草食を1個体捕食（最後の要素）
-      const hi = list.pop();
-      if(hi !== undefined){
-        const prey = herbs[hi];
-        if(prey && prey.alive){
-          prey.alive = false;
-          deathHerbEaten++;
-          c.energy += P.carnGain;
-          herbAliveCount--;
+      const idx = c.y * GRID + c.x;
+      const cellList = herbivoreAt[idx];
+      if(cellList.length > 0){
+        const preyRef = cellList.pop();
+        if(preyRef){
+          const preyList = animals[preyRef.sid];
+          const prey = preyList && preyList[preyRef.idx];
+          if(prey && prey.alive){
+            prey.alive = false;
+            deathHerbEaten++;
+            c.energy += traits.gain;
+            herbAliveCount--;
+          }
         }
       }
-    }
 
-    const carnExtraCost = competitionExtraCost(carnAliveCount, P.carnK);
-    if(list.length === 0){
-      c.energy -= (P.metabolism + carnExtraCost);
-    } else if(carnExtraCost > 0){
-      c.energy -= carnExtraCost;
-    }
-    if(c.energy <= 0){
-      c.alive = false;
-      carnAliveCount--;
-      deathCarnStarve++;
-      continue;
-    }
+      const carnExtraCost = competitionExtraCost(carnAliveCount, P.carnK);
+      if(cellList.length === 0){
+        c.energy -= (traits.metabolism + carnExtraCost);
+      } else if(carnExtraCost > 0){
+        c.energy -= carnExtraCost;
+      }
+      if(c.energy <= 0){
+        c.alive = false;
+        carnAliveCount--;
+        deathCarnStarve++;
+        continue;
+      }
 
-    if(c.energy >= P.carnRepro){
-      carnReproAttempts++;
-      if(competitionReproPass(carnAliveCount, P.carnK)){
-        carnReproSuccess++;
-        const childEnergy = Math.floor(c.energy / 2);
-        c.energy = c.energy - childEnergy;
-        carns.push({x:c.x, y:c.y, energy: childEnergy, alive:true, age:0});
-        carnAliveCount++;
+      if(c.energy >= traits.reproduction){
+        carnReproAttempts++;
+        if(competitionReproPass(carnAliveCount, P.carnK)){
+          carnReproSuccess++;
+          const childEnergy = Math.floor(c.energy / 2);
+          c.energy = c.energy - childEnergy;
+          list.push({x:c.x, y:c.y, energy: childEnergy, alive:true, age:0, speciesId: sp.id});
+          carnAliveCount++;
+        }
       }
     }
   }
 
   // 5) 死体除去（配列を軽く保つ）
   if(step % 10 === 0){
-    herbs = herbs.filter(h=>h.alive);
-    carns = carns.filter(c=>c.alive);
+    for(const sp of SPECIES_DEFS){
+      if(animals[sp.id]) animals[sp.id] = animals[sp.id].filter(a=>a.alive);
+    }
   }
 
   // 6) ログ
@@ -824,25 +1033,27 @@ function tick(){
 
 function checkEndConditions(counts){
   if(endReason) return;
+  const herbRequired = activeHerbSpecies.length > 0;
+  const carnRequired = activeCarnSpecies.length > 0;
   if(P.endCondition === 'anyExtinct'){
     if(counts.grass === 0){
       applyEndCondition('草が絶滅');
       return;
     }
-    if(counts.herb === 0){
+    if(herbRequired && counts.herb === 0){
       applyEndCondition('草食が絶滅');
       return;
     }
-    if(counts.carn === 0){
+    if(carnRequired && counts.carn === 0){
       applyEndCondition('肉食が絶滅');
       return;
     }
   } else if(P.endCondition === 'animalExtinct'){
-    if(counts.herb === 0){
+    if(herbRequired && counts.herb === 0){
       applyEndCondition('草食が絶滅');
       return;
     }
-    if(counts.carn === 0){
+    if(carnRequired && counts.carn === 0){
       applyEndCondition('肉食が絶滅');
       return;
     }
@@ -886,9 +1097,17 @@ function moveRandom(a){
 function getCounts(){
   let gCount = 0;
   for(let i=0;i<N;i++) if(grass[i]===1) gCount++;
-  let hCount = 0; for(const h of herbs) if(h.alive) hCount++;
-  let cCount = 0; for(const c of carns) if(c.alive) cCount++;
-  return {grass:gCount, herb:hCount, carn:cCount};
+  let hCount = 0;
+  let cCount = 0;
+  const species = {};
+  for(const sp of SPECIES_DEFS){
+    let sCount = 0;
+    const list = animals[sp.id] || [];
+    for(const a of list){ if(a.alive) sCount++; }
+    species[sp.id] = sCount;
+    if(sp.diet === 'herbivore') hCount += sCount; else cCount += sCount;
+  }
+  return {grass:gCount, herb:hCount, carn:cCount, species};
 }
 
 function pushLog(){
@@ -912,6 +1131,7 @@ function pushLog(){
     competition_enabled: P.competition ? 1 : 0,
     herb_repro_success_rate: herbRate,
     carn_repro_success_rate: carnRate,
+    species_counts: counts.species,
   });
   pushChartPoint(step, counts.grass, counts.herb, counts.carn);
   herbReproAttempts = 0;
@@ -1004,14 +1224,16 @@ function downloadCSV(){
     "schema_version","seed","step",
     "grass_count","herbivore_count","carnivore_count",
     "death_herbivore_starve","death_herbivore_eaten","death_carnivore_starve","death_herbivore_age","death_carnivore_age",
-    "herb_K","carn_K","competition_enabled","herb_repro_success_rate","carn_repro_success_rate"
+    "herb_K","carn_K","competition_enabled","herb_repro_success_rate","carn_repro_success_rate",
+    ...SPECIES_DEFS.map(sp=>`${sp.id}_count`)
   ].join(",");
 
   const rows = logs.map(r => [
     r.schema_version, JSON.stringify(r.seed), r.step,
     r.grass, r.herb, r.carn,
     r.death_herb_starve, r.death_herb_eaten, r.death_carn_starve, r.death_herb_age, r.death_carn_age,
-    r.herb_K, r.carn_K, r.competition_enabled, r.herb_repro_success_rate, r.carn_repro_success_rate
+    r.herb_K, r.carn_K, r.competition_enabled, r.herb_repro_success_rate, r.carn_repro_success_rate,
+    ...SPECIES_DEFS.map(sp=> r.species_counts ? r.species_counts[sp.id] : '')
   ].join(","));
 
   const csv = [header, ...rows].join("\n");
@@ -1034,7 +1256,8 @@ function buildResultText(){
     `総ステップ: ${step}`,
     `最終個体数: 草${counts.grass} / 草食${counts.herb} / 肉食${counts.carn}`,
     `最大個体数: 草${peakCounts.grass} / 草食${peakCounts.herb} / 肉食${peakCounts.carn}`,
-    `死亡内訳: 草食(飢餓${deathHerbStarve} 捕食${deathHerbEaten} 老衰${deathHerbAge}) / 肉食(飢餓${deathCarnStarve} 老衰${deathCarnAge})`
+    `死亡内訳: 草食(飢餓${deathHerbStarve} 捕食${deathHerbEaten} 老衰${deathHerbAge}) / 肉食(飢餓${deathCarnStarve} 老衰${deathCarnAge})`,
+    `種別カウント: ${SPECIES_DEFS.map(sp=>`${sp.nameJP}:${counts.species[sp.id] ?? 0}`).join(' / ')}`
   ];
   return lines.join('\n');
 }
@@ -1084,24 +1307,32 @@ new p5((p)=>{
       }
     }
 
-    // 草食（青い円：エネルギーでサイズ変化）
-    p.stroke(245);
-    p.strokeWeight(2.2);
-    p.fill(70, 180, 255);
-    for(const h of herbs){
-      if(!h.alive) continue;
-      const size = getEnergySize(h.energy, CELL*0.60, P.herbRepro);
-      p.circle((h.x+0.5)*CELL, (h.y+0.5)*CELL, size);
+    // 草食（エネルギーでサイズ変化）
+    for(const sp of activeHerbSpecies){
+      p.stroke(245);
+      p.strokeWeight(2.2);
+      p.fill(...sp.color);
+      const list = animals[sp.id] || [];
+      const traits = getSpeciesTraits(sp);
+      for(const h of list){
+        if(!h.alive) continue;
+        const size = getEnergySize(h.energy, CELL*0.60, traits.reproduction);
+        p.circle((h.x+0.5)*CELL, (h.y+0.5)*CELL, size);
+      }
     }
 
     // 肉食（三角形）：輪郭つき
-    p.stroke(245);
-    p.strokeWeight(2.3);
-    p.fill(240, 90, 170);
-    for(const c of carns){
-      if(!c.alive) continue;
-      const size = getEnergySize(c.energy, CELL*0.70, P.carnRepro);
-      drawTriangle(p, (c.x+0.5)*CELL, (c.y+0.5)*CELL, size);
+    for(const sp of activeCarnSpecies){
+      p.stroke(245);
+      p.strokeWeight(2.3);
+      p.fill(...sp.color);
+      const list = animals[sp.id] || [];
+      const traits = getSpeciesTraits(sp);
+      for(const c of list){
+        if(!c.alive) continue;
+        const size = getEnergySize(c.energy, CELL*0.70, traits.reproduction);
+        drawTriangle(p, (c.x+0.5)*CELL, (c.y+0.5)*CELL, size);
+      }
     }
 
     p.noStroke();
@@ -1171,6 +1402,9 @@ el('chkDaily').addEventListener('change', ()=>{ resetSim(); });
 el('inSeed').addEventListener('change', ()=>{ resetSim(); });
 
 // 初期化
+buildSpeciesControls();
+updateSpeciesSettingsFromUI();
+updateActiveSpeciesLists();
 readParamsFromUI();
 resetSim();
 </script>
