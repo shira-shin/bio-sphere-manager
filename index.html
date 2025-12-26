@@ -87,13 +87,14 @@
       <div class="pad">
         <div class="row">
           <button id="btnStart" class="primary">開始</button>
-          <button id="btnStep">1ステップ進める</button>
+          <button id="btnStep">1ステップ</button>
           <button id="btnReset" class="danger">リセット</button>
           <button id="btnCSV">CSVダウンロード</button>
         </div>
 
         <div class="note" style="margin-top:6px;">
           CSV列: schema_version, seed, step, grass_count, herbivore_count, carnivore_count, death_herbivore_starve, death_herbivore_eaten, death_carnivore_starve
+          <br>パラメータ変更は次のフレームから即時反映（リセット不要）です。
         </div>
 
         <div style="height:12px"></div>
@@ -122,9 +123,9 @@
         <div style="height:14px"></div>
 
         <div class="row">
-          <label class="note">任意seed文字列（空欄なら日替わりを使用）</label>
+          <label class="note">seed文字列（空欄なら日替わりを使用）</label>
           <input id="inSeed" type="text" placeholder="例: exp-001" />
-          <label class="note"><input id="chkDaily" type="checkbox" checked /> 日替わりseedを使う</label>
+          <label class="note"><input id="chkDaily" type="checkbox" checked /> 日替わりseed</label>
         </div>
 
         <div class="ctrl">
@@ -228,14 +229,16 @@ const GRID = 50;
 const CANVAS = 600;
 const CELL = CANVAS / GRID; // 12
 const N = GRID * GRID;
+const SCHEMA_VERSION = 1;
 
 let rng = mulberry32(1);
 let running = false;
 let step = 0;
 let tickPerFrame = 1;
 let statusMessage = '停止中';
+let currentSeed = 'daily:0000-00-00';
 
-// 草：0/1
+// 草：0/1（Uint8Arrayで軽量に管理）
 let grass = new Uint8Array(N);
 
 // 動物
@@ -309,8 +312,8 @@ function clampFloat(v,min,max){ if(Number.isNaN(v)) v=min; return Math.min(max, 
 function resetSim(){
   readParamsFromUI();
 
-  const seedStr = getSeedString();
-  const seed32 = hash32FromString(seedStr);
+  currentSeed = getSeedString();
+  const seed32 = hash32FromString(currentSeed);
   rng = mulberry32(seed32);
 
   step = 0;
@@ -324,10 +327,14 @@ function resetSim(){
   deathCarnStarve = 0;
   deathHerbEaten  = 0;
 
-  // 草をランダム配置
-  for(let i=0;i<P.initGrass;i++){
+  // 草をランダム配置（重複を避けて指定数を確保）
+  let gPlaced = 0;
+  while(gPlaced < P.initGrass && gPlaced < N){
     const idx = Math.floor(rng()*N);
-    grass[idx] = 1;
+    if(grass[idx] === 0){
+      grass[idx] = 1;
+      gPlaced++;
+    }
   }
 
   // 草食
@@ -340,10 +347,10 @@ function resetSim(){
     carns.push({x: randInt(GRID), y: randInt(GRID), energy: 14 + randInt(12), alive:true});
   }
 
-  // ログ初回
+  resetChart();
+  // ログ初回（チャート初期点を残す）
   pushLog();
   refreshUI();
-  resetChart();
 }
 function randInt(n){ return Math.floor(rng()*n); }
 
@@ -468,6 +475,8 @@ function getCounts(){
 function pushLog(){
   const counts = getCounts();
   logs.push({
+    schema_version: SCHEMA_VERSION,
+    seed: currentSeed,
     step,
     grass: counts.grass,
     herb: counts.herb,
@@ -480,10 +489,9 @@ function pushLog(){
 }
 
 function refreshUI(){
-  const seedStr = getSeedString();
   const counts = getCounts();
   el('outStep').textContent = String(step);
-  el('outSeed').textContent = seedStr;
+  el('outSeed').textContent = currentSeed;
   el('outGrass').textContent = String(counts.grass);
   el('outHerb').textContent  = String(counts.herb);
   el('outCarn').textContent  = String(counts.carn);
@@ -543,7 +551,6 @@ function pushChartPoint(step, g, h, c){
 function downloadCSV(){
   if(logs.length === 0) return;
 
-  const seedStr = getSeedString();
   const header = [
     "schema_version","seed","step",
     "grass_count","herbivore_count","carnivore_count",
@@ -551,7 +558,7 @@ function downloadCSV(){
   ].join(",");
 
   const rows = logs.map(r => [
-    1, JSON.stringify(seedStr), r.step,
+    r.schema_version, JSON.stringify(r.seed), r.step,
     r.grass, r.herb, r.carn,
     r.death_herb_starve, r.death_herb_eaten, r.death_carn_starve
   ].join(","));
