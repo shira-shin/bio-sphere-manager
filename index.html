@@ -13,19 +13,20 @@
     :root { color-scheme: dark; }
     body{
       margin:0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      background:#0b0f14; color:#e6edf3; line-height:1.45;
-      font-size: clamp(16px, 1.4vw, 18px);
+      background:#0b0f14; color:#e6edf3; line-height:1.5;
+      font-size: clamp(16px, 1.6vw, 19px);
+      letter-spacing:0.02em;
     }
     header{
       padding:16px 18px; border-bottom:1px solid #17202b;
       background: linear-gradient(180deg, #0f1620, #0b0f14);
       position: sticky; top:0; z-index:10;
     }
-    header .title{font-size:20px; font-weight:700;}
-    header .sub{font-size:12px; color:#9fb0c3; margin-top:4px;}
+    header .title{font-size:22px; font-weight:800;}
+    header .sub{font-size:13px; color:#9fb0c3; margin-top:6px;}
     .layout{
-      display:grid; grid-template-columns: 640px 1fr; gap:16px;
-      padding:16px; max-width: 1240px; margin:0 auto;
+      display:grid; grid-template-columns: minmax(0, 2.2fr) minmax(340px, 1fr); gap:20px;
+      padding:18px; max-width: 1440px; margin:0 auto;
     }
     .card{
       border:1px solid #1f2a37; border-radius:16px; background:#0f1620;
@@ -56,8 +57,8 @@
     }
     .ctrl label{font-size:13px; color:#c3d5eb;}
     .ctrl input[type="range"]{width: 260px;}
-    #p5-container{position:relative;}
-    canvas{display:block; border-radius:12px;}
+    #p5-container{position:relative; min-height:620px;}
+    canvas{display:block; border-radius:12px; width:100%; height:auto;}
     .note{font-size:12px; color:#9fb0c3; line-height:1.6;}
     .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;}
     .section{
@@ -73,18 +74,20 @@
     .help{font-size:11px; color:#7ea0c4;}
     .preset-row{display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;}
     .badge-warning{color:#f5d97a; background:#4a3810; border:1px solid #8f6d1f; padding:2px 6px; border-radius:8px; font-size:11px;}
-    .hud{
-      border:1px solid #223247; border-radius:12px; padding:12px 14px; margin-bottom:12px;
-      background: linear-gradient(180deg, rgba(31,42,55,0.45), rgba(17,25,36,0.65));
-      display:grid; gap:10px;
-    }
-    .hud-top{display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:space-between;}
-    .hud-status{display:flex; gap:10px; align-items:center;}
-    .hud-pill{padding:6px 10px; border-radius:999px; border:1px solid #2a3a52; font-weight:700; background:#132235; min-width:120px; text-align:center;}
-    .hud-grid{display:grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap:10px;}
-    .hud-item{border:1px solid #223247; border-radius:10px; padding:10px 12px; background:#111826;}
-    .hud-item .label{font-size:12px; color:#9fb0c3; margin-bottom:4px;}
-    .hud-item .value{font-size:22px; font-weight:700; font-variant-numeric: tabular-nums;}
+    .canvas-wrap{position:relative; border:1px solid #1f2a37; border-radius:16px; padding:12px; background:#0b1220; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.02);}
+    .canvas-hud{position:absolute; inset:14px auto auto 14px; z-index:5; min-width:260px; max-width:380px; background:rgba(8,12,18,0.68); backdrop-filter: blur(6px); border:1px solid #223247; border-radius:14px; padding:12px 14px; box-shadow:0 12px 34px rgba(0,0,0,0.45); display:grid; gap:10px;}
+    .hud-top{display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;}
+    .hud-status{display:grid; gap:4px;}
+    .hud-status .label{font-size:12px; color:#9fb0c3;}
+    .hud-pill{padding:8px 12px; border-radius:999px; border:1px solid #2a3a52; font-weight:800; background:#132235; min-width:120px; text-align:center; letter-spacing:0.05em;}
+    .hud-meta{font-size:13px; color:#c3d5eb; font-variant-numeric: tabular-nums;}
+    .hud-grid{display:grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap:10px;}
+    .hud-item{border:1px solid #223247; border-radius:12px; padding:10px 12px; background:rgba(17,24,38,0.9);}
+    .hud-item .label{font-size:12px; color:#9fb0c3; margin-bottom:6px; letter-spacing:0.05em;}
+    .hud-item .value{font-size:24px; font-weight:800; font-variant-numeric: tabular-nums; line-height:1.2;}
+    .kpi-grid{display:grid; grid-template-columns: repeat(auto-fit, minmax(120px,1fr)); gap:8px;}
+    .kpi-item{border:1px solid #223247; border-radius:12px; padding:10px; background:#111826; display:grid; gap:6px;}
+    .kpi-item .value{font-size:22px; font-weight:800;}
     .tabs{display:flex; gap:8px; border-bottom:1px solid #1f2a37; padding:0 4px 8px; margin-bottom:8px; flex-wrap:wrap;}
     .tab-btn{padding:8px 12px; border-radius:10px; border:1px solid #1f2a37; background:#0f1a2a; color:#c9d6e2; cursor:pointer; min-width:92px; text-align:center;}
     .tab-btn.active{background:#1b3554; border-color:#2a466b; color:#e6edf3;}
@@ -109,8 +112,22 @@
     .modal h3{margin:0 0 10px; color:#dce6f3;}
     .modal .kv{grid-template-columns: 120px 1fr;}
     .modal .actions{display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;}
+    .controls-top{display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;}
+    .settings-toggle{display:flex; align-items:center; gap:10px; justify-content:flex-end;}
+    .ghost{background:transparent; border-color:#2a3a52; color:#c9d6e2;}
+    .drawer-backdrop{position:fixed; inset:0; background:rgba(6,10,16,0.6); backdrop-filter: blur(2px); opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:30;}
+    .drawer{position:fixed; top:0; right:0; width:min(480px, 92vw); height:100vh; background:#0f1620; border-left:1px solid #1f2a37; box-shadow:-16px 0 40px rgba(0,0,0,0.45); transform:translateX(100%); transition:transform .25s ease; z-index:31; display:flex; flex-direction:column;}
+    .drawer.open{transform:translateX(0);}
+    .drawer-backdrop.open{opacity:1; pointer-events:auto;}
+    .drawer-header{padding:16px; border-bottom:1px solid #1f2a37; display:flex; justify-content:space-between; align-items:center;}
+    .drawer-title{font-size:18px; font-weight:800;}
+    .drawer-body{padding:16px; overflow-y:auto; height:100%;}
+    .chip{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid #2a3a52; background:#132235; font-size:12px; color:#9fb0c3;}
     @media (max-width: 1100px){
       .layout{grid-template-columns: 1fr; }
+      .canvas-hud{position:relative; inset:auto; margin-top:10px;}
+      .canvas-wrap{padding:10px;}
+      #p5-container{min-height:540px;}
     }
   </style>
 </head>
@@ -125,7 +142,46 @@
     <!-- 左：シミュレーション -->
     <div class="card">
       <h2>シミュレーション</h2>
-      <div class="pad" id="p5-container">
+      <div class="pad">
+        <div class="canvas-wrap">
+          <div id="p5-container"></div>
+          <div class="canvas-hud" aria-live="polite">
+            <div class="hud-top">
+              <div class="hud-status">
+                <div class="label">状態（実行中/停止/終了）</div>
+                <div class="hud-pill" id="outStatus">停止中</div>
+              </div>
+              <div class="hud-meta">ステップ <span id="outStep">0</span></div>
+            </div>
+            <div class="hud-meta mono">シード: <span id="outSeed">daily</span></div>
+            <div class="hud-grid">
+              <div class="hud-item">
+                <div class="label">草</div>
+                <div class="value" id="outGrass">0</div>
+              </div>
+              <div class="hud-item">
+                <div class="label">草食</div>
+                <div class="value" id="outHerb">0</div>
+              </div>
+              <div class="hud-item">
+                <div class="label">肉食</div>
+                <div class="value" id="outCarn">0</div>
+              </div>
+              <div class="hud-item">
+                <div class="label">季節</div>
+                <div class="value" id="outSeason">－</div>
+              </div>
+              <div class="hud-item">
+                <div class="label">気温</div>
+                <div class="value" id="outTemp">－</div>
+              </div>
+              <div class="hud-item">
+                <div class="label">雨量</div>
+                <div class="value" id="outRain">－</div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="pad note">
         描画：草（緑のセル）／草食・肉食は種ごとに色と形状が異なります（凡例参照）。<br>
@@ -134,234 +190,223 @@
       </div>
     </div>
 
-    <!-- 右：操作＆グラフ -->
     <div class="card">
-      <h2>操作パネルとデータ</h2>
+      <h2>操作パネル</h2>
       <div class="pad">
-        <div class="hud" aria-label="現在の状態">
-          <div class="hud-top">
-            <div class="hud-status">
-              <div class="hud-pill" id="outStatus">停止中</div>
-              <div class="mono">シード: <span id="outSeed">daily</span></div>
-            </div>
-            <div class="mono">ステップ: <span id="outStep">0</span></div>
+        <div class="controls-top">
+          <div class="row">
+            <button id="btnStart" class="primary">開始/停止</button>
+            <button id="btnStep">1ステップ</button>
+            <button id="btnReset" class="danger">リセット</button>
+            <button id="btnCSV">CSVダウンロード</button>
           </div>
-          <div class="hud-grid">
-            <div class="hud-item">
-              <div class="label">草</div>
-              <div class="value" id="outGrass">0</div>
-            </div>
-            <div class="hud-item">
-              <div class="label">草食</div>
-              <div class="value" id="outHerb">0</div>
-            </div>
-            <div class="hud-item">
-              <div class="label">肉食</div>
-              <div class="value" id="outCarn">0</div>
-            </div>
+          <div class="settings-toggle">
+            <div class="note">詳細パラメータは設定ドロワーに移動しました。</div>
+            <button id="btnOpenDrawer" class="ghost">⚙ 設定</button>
           </div>
         </div>
-
-        <div class="tabs" role="tablist">
-          <button class="tab-btn active" data-tab="tab-control">操作</button>
-          <button class="tab-btn" data-tab="tab-pop">個体群</button>
-          <button class="tab-btn" data-tab="tab-map">マップ</button>
-          <button class="tab-btn" data-tab="tab-detail">詳細</button>
-        </div>
-
-        <div id="tab-control" class="tab-panel active">
-          <details class="section" open>
-            <summary>基本</summary>
-            <div class="section-body stack">
-              <div class="row">
-                <button id="btnStart" class="primary">開始</button>
-                <button id="btnStep">1ステップ</button>
-                <button id="btnReset" class="danger">リセット</button>
-                <button id="btnCSV">CSVダウンロード</button>
-              </div>
-              <div class="preset-row">
-                <div>
-                  <label class="note">デフォルトモード（シナリオ）</label><br>
-                  <select id="selScenario">
-                    <option value="">選択してください</option>
-                    <option value="grassland">草原（安定）</option>
-                    <option value="dryCollapse">乾燥（崩壊）</option>
-                  </select>
-                </div>
-                <button id="btnApplyScenario" class="primary">適用してリセット</button>
-                <span class="badge-warning">決定論：seed依存</span>
-              </div>
-              <div class="note">シナリオはパラメータ・初期個体数・終了条件をセットしてからリセットします。草原は緩やかに安定、乾燥は資源不足で崩壊しやすい例です。</div>
+        <div class="card-section" style="margin-top:14px;">
+          <div class="preset-row">
+            <div>
+              <label class="note">デフォルトモード（シナリオ）</label><br>
+              <select id="selScenario">
+                <option value="">選択してください</option>
+                <option value="grassland">草原（安定）</option>
+                <option value="dryCollapse">乾燥（崩壊）</option>
+              </select>
             </div>
-          </details>
-          <details class="section" open>
-            <summary>高度</summary>
-            <div class="section-body stack">
-              <div class="row">
-                <div>
-                  <label class="note">seed文字列（空欄なら日替わりを使用）</label><br>
-                  <input id="inSeed" type="text" placeholder="例: exp-001" />
-                </div>
-                <label class="note"><input id="chkDaily" type="checkbox" checked /> 日替わりseed</label>
-              </div>
-              <div class="ctrl">
-                <label>描画速度（FPS）<div class="help">高くすると描画が滑らかになります</div></label>
-                <div class="row">
-                  <input id="slFPS" type="range" min="10" max="60" value="30" />
-                  <span class="mono" id="valFPS">30</span>
-                </div>
-              </div>
-              <div class="ctrl">
-                <label>ログ間隔（ステップ）<div class="help">CSV/グラフの更新頻度</div></label>
-                <input id="inLogEvery" type="number" min="1" max="50" value="5" />
-              </div>
-            </div>
-          </details>
-        </div>
-
-        <div id="tab-pop" class="tab-panel">
-          <details class="section" open>
-            <summary>基本</summary>
-            <div class="section-body stack">
-              <div class="ctrl">
-                <label>草の成長率（0〜0.20）<div class="help">増やすほど草が生えやすくなります</div></label>
-                <div class="row">
-                  <input id="slGrass" type="range" min="0" max="0.20" step="0.005" value="0.02" />
-                  <span class="mono" id="valGrass">0.02</span>
-                </div>
-              </div>
-              <div class="grid2">
-                <div class="ctrl">
-                  <label>初期 草 数<div class="help">開始時の草セル数</div></label>
-                  <input id="inInitGrass" type="number" min="0" max="2500" value="800" />
-                </div>
-              </div>
-              <div class="card-section">
-                <div class="note">種ごとの有効化と初期個体数を設定できます（草食2種・肉食2種）。</div>
-                <div id="speciesList" class="species-list"></div>
-              </div>
-            </div>
-          </details>
-          <details class="section" open>
-            <summary>高度</summary>
-            <div class="section-body stack">
-              <div class="grid2">
-                <div class="ctrl">
-                  <label>草食：採食エネルギー<div class="help">草1セルを食べたときの獲得量</div></label>
-                  <input id="inHerbGain" type="number" min="1" max="50" value="12" />
-                </div>
-                <div class="ctrl">
-                  <label>草食：繁殖閾値<div class="help">エネルギーが閾値以上なら繁殖試行</div></label>
-                  <input id="inHerbRepro" type="number" min="5" max="100" value="28" />
-                </div>
-                <div class="ctrl">
-                  <label>肉食：捕食エネルギー<div class="help">草食を食べたときの獲得量</div></label>
-                  <input id="inCarnGain" type="number" min="1" max="80" value="22" />
-                </div>
-                <div class="ctrl">
-                  <label>肉食：繁殖閾値<div class="help">エネルギーが閾値以上なら繁殖試行</div></label>
-                  <input id="inCarnRepro" type="number" min="5" max="120" value="45" />
-                </div>
-              </div>
-              <div class="card-section">
-                <div class="row" style="margin-bottom:8px;">
-                  <label class="note"><input id="chkCompetition" type="checkbox" /> 競合（密度依存）を有効化</label>
-                </div>
-                <div class="grid2">
-                  <div class="ctrl">
-                    <label>草食の環境収容力K<div class="help">草食が増えるほど繁殖成功率が低下</div></label>
-                    <input id="inHerbK" type="number" min="1" max="5000" value="400" />
-                  </div>
-                  <div class="ctrl">
-                    <label>肉食の環境収容力K<div class="help">肉食が増えるほど繁殖成功率が低下</div></label>
-                    <input id="inCarnK" type="number" min="1" max="5000" value="200" />
-                  </div>
-                </div>
-                <div class="ctrl">
-                  <label>密度コスト係数（代謝追加）<div class="help">個体が密集すると代謝コストが増加</div></label>
-                  <input id="inDensityCost" type="number" min="0" max="50" value="0" />
-                </div>
-              </div>
-              <div class="grid2">
-                <div class="ctrl">
-                  <label>草食の寿命[step]<div class="help">寿命を超えると老衰で死亡</div></label>
-                  <input id="inHerbMaxAge" type="number" min="10" max="2000" value="120" />
-                </div>
-                <div class="ctrl">
-                  <label>肉食の寿命[step]<div class="help">寿命を超えると老衰で死亡</div></label>
-                  <input id="inCarnMaxAge" type="number" min="10" max="2000" value="160" />
-                </div>
-              </div>
-            </div>
-          </details>
-        </div>
-
-        <div id="tab-map" class="tab-panel">
-          <details class="section" open>
-            <summary>基本</summary>
-            <div class="section-body stack">
-              <div class="ctrl">
-                <label>終了条件<div class="help">指定の種が絶滅したら停止</div></label>
-                <select id="selEndCondition">
-                  <option value="anyExtinct">どれか1種が絶滅したら終了</option>
-                  <option value="animalExtinct">草食か肉食が絶滅したら終了</option>
-                </select>
-              </div>
-              <div class="ctrl">
-                <label>最大ステップ<div class="help">上限に達すると終了</div></label>
-                <input id="inMaxSteps" type="number" min="10" max="20000" value="2000" />
-              </div>
-              <div class="note">終了条件はシナリオ適用時にも上書きされます。</div>
-            </div>
-          </details>
-          <details class="section" open>
-            <summary>高度</summary>
-            <div class="section-body stack">
-              <div class="note">マップの描画は緑の濃淡で草の分布を示し、HUDの凡例と同じ形状で個体を描いています。</div>
-            </div>
-          </details>
-        </div>
-
-        <div id="tab-detail" class="tab-panel">
-          <details class="section" open>
-            <summary>基本</summary>
-            <div class="section-body stack">
-              <div class="kv">
-                <div class="label">終了理由</div><div class="value mono" id="outEndReason">-</div>
-              </div>
-              <div class="kv">
-                <div class="label">総ステップ</div><div class="value mono" id="outTotalStep">0</div>
-              </div>
-              <div class="kv">
-                <div class="label">最終個体数</div><div class="value mono" id="outFinalCounts">草0 / 草食0 / 肉食0</div>
-              </div>
-              <div class="kv">
-                <div class="label">最大個体数</div><div class="value mono" id="outPeakCounts">草0 / 草食0 / 肉食0</div>
-              </div>
-              <div class="kv">
-                <div class="label">死亡内訳</div><div class="value mono" id="outDeaths">草食:飢餓0 捕食0 老衰0 / 肉食:飢餓0 老衰0</div>
-              </div>
-              <div class="row" style="margin-top:10px;">
-                <button id="btnCopyResult">結果をコピー</button>
-              </div>
-              <div class="note">CSV列: schema_version, seed, step, grass_count, herbivore_count, carnivore_count, death_herbivore_starve, death_herbivore_eaten, death_carnivore_starve, death_herbivore_age, death_carnivore_age, herb_K, carn_K, competition_enabled, herb_repro_success_rate, carn_repro_success_rate, 以降に各species_count列</div>
-            </div>
-          </details>
-          <details class="section" open>
-            <summary>高度</summary>
-            <div class="section-body">
-              <div class="card" style="border-color:#223247;">
-                <h2 style="padding:12px 12px 0">個体数グラフ</h2>
-                <div class="pad">
-                  <canvas id="chart" height="220"></canvas>
-                </div>
-              </div>
-            </div>
-          </details>
+            <button id="btnApplyScenario" class="primary">適用してリセット</button>
+            <span class="badge-warning">決定論：seed依存</span>
+          </div>
+          <div class="note">開始/停止やシナリオ選択はここから行えます。細かなパラメータは右上の「設定」から。</div>
         </div>
       </div>
     </div>
+  </div>
 
+  <div class="drawer-backdrop" id="drawerBackdrop"></div>
+  <aside class="drawer" id="settingsDrawer" aria-hidden="true">
+    <div class="drawer-header">
+      <div class="drawer-title">設定</div>
+      <div class="chip">高度なパラメータ</div>
+      <button id="btnCloseDrawer" class="ghost">閉じる</button>
+    </div>
+    <div class="drawer-body">
+      <div class="tabs" role="tablist">
+        <button class="tab-btn active" data-tab="tab-control">操作</button>
+        <button class="tab-btn" data-tab="tab-pop">個体群</button>
+        <button class="tab-btn" data-tab="tab-map">マップ</button>
+        <button class="tab-btn" data-tab="tab-detail">詳細</button>
+      </div>
+
+      <div id="tab-control" class="tab-panel active">
+        <details class="section" open>
+          <summary>高度</summary>
+          <div class="section-body stack">
+            <div class="row">
+              <div>
+                <label class="note">seed文字列（空欄なら日替わりを使用）</label><br>
+                <input id="inSeed" type="text" placeholder="例: exp-001" />
+              </div>
+              <label class="note"><input id="chkDaily" type="checkbox" checked /> 日替わりseed</label>
+            </div>
+            <div class="ctrl">
+              <label>描画速度（FPS）<div class="help">高くすると描画が滑らかになります</div></label>
+              <div class="row">
+                <input id="slFPS" type="range" min="10" max="60" value="30" />
+                <span class="mono" id="valFPS">30</span>
+              </div>
+            </div>
+            <div class="ctrl">
+              <label>ログ間隔（ステップ）<div class="help">CSV/グラフの更新頻度</div></label>
+              <input id="inLogEvery" type="number" min="1" max="50" value="5" />
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <div id="tab-pop" class="tab-panel">
+        <details class="section" open>
+          <summary>基本</summary>
+          <div class="section-body stack">
+            <div class="ctrl">
+              <label>草の成長率（0〜0.20）<div class="help">増やすほど草が生えやすくなります</div></label>
+              <div class="row">
+                <input id="slGrass" type="range" min="0" max="0.20" step="0.005" value="0.02" />
+                <span class="mono" id="valGrass">0.02</span>
+              </div>
+            </div>
+            <div class="grid2">
+              <div class="ctrl">
+                <label>初期 草 数<div class="help">開始時の草セル数</div></label>
+                <input id="inInitGrass" type="number" min="0" max="2500" value="800" />
+              </div>
+            </div>
+            <div class="card-section">
+              <div class="note">種ごとの有効化と初期個体数を設定できます（草食2種・肉食2種）。</div>
+              <div id="speciesList" class="species-list"></div>
+            </div>
+          </div>
+        </details>
+        <details class="section" open>
+          <summary>高度</summary>
+          <div class="section-body stack">
+            <div class="grid2">
+              <div class="ctrl">
+                <label>草食：採食エネルギー<div class="help">草1セルを食べたときの獲得量</div></label>
+                <input id="inHerbGain" type="number" min="1" max="50" value="12" />
+              </div>
+              <div class="ctrl">
+                <label>草食：繁殖閾値<div class="help">エネルギーが閾値以上なら繁殖試行</div></label>
+                <input id="inHerbRepro" type="number" min="5" max="100" value="28" />
+              </div>
+              <div class="ctrl">
+                <label>肉食：捕食エネルギー<div class="help">草食を食べたときの獲得量</div></label>
+                <input id="inCarnGain" type="number" min="1" max="80" value="22" />
+              </div>
+              <div class="ctrl">
+                <label>肉食：繁殖閾値<div class="help">エネルギーが閾値以上なら繁殖試行</div></label>
+                <input id="inCarnRepro" type="number" min="5" max="120" value="45" />
+              </div>
+            </div>
+            <div class="card-section">
+              <div class="row" style="margin-bottom:8px;">
+                <label class="note"><input id="chkCompetition" type="checkbox" /> 競合（密度依存）を有効化</label>
+              </div>
+              <div class="grid2">
+                <div class="ctrl">
+                  <label>草食の環境収容力K<div class="help">草食が増えるほど繁殖成功率が低下</div></label>
+                  <input id="inHerbK" type="number" min="1" max="5000" value="400" />
+                </div>
+                <div class="ctrl">
+                  <label>肉食の環境収容力K<div class="help">肉食が増えるほど繁殖成功率が低下</div></label>
+                  <input id="inCarnK" type="number" min="1" max="5000" value="200" />
+                </div>
+              </div>
+              <div class="ctrl">
+                <label>密度コスト係数（代謝追加）<div class="help">個体が密集すると代謝コストが増加</div></label>
+                <input id="inDensityCost" type="number" min="0" max="50" value="0" />
+              </div>
+            </div>
+            <div class="grid2">
+              <div class="ctrl">
+                <label>草食の寿命[step]<div class="help">寿命を超えると老衰で死亡</div></label>
+                <input id="inHerbMaxAge" type="number" min="10" max="2000" value="120" />
+              </div>
+              <div class="ctrl">
+                <label>肉食の寿命[step]<div class="help">寿命を超えると老衰で死亡</div></label>
+                <input id="inCarnMaxAge" type="number" min="10" max="2000" value="160" />
+              </div>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <div id="tab-map" class="tab-panel">
+        <details class="section" open>
+          <summary>基本</summary>
+          <div class="section-body stack">
+            <div class="ctrl">
+              <label>終了条件<div class="help">指定の種が絶滅したら停止</div></label>
+              <select id="selEndCondition">
+                <option value="anyExtinct">どれか1種が絶滅したら終了</option>
+                <option value="animalExtinct">草食か肉食が絶滅したら終了</option>
+              </select>
+            </div>
+            <div class="ctrl">
+              <label>最大ステップ<div class="help">上限に達すると終了</div></label>
+              <input id="inMaxSteps" type="number" min="10" max="20000" value="2000" />
+            </div>
+            <div class="note">終了条件はシナリオ適用時にも上書きされます。</div>
+          </div>
+        </details>
+        <details class="section" open>
+          <summary>高度</summary>
+          <div class="section-body stack">
+            <div class="note">マップの描画は緑の濃淡で草の分布を示し、HUDの凡例と同じ形状で個体を描いています。</div>
+          </div>
+        </details>
+      </div>
+
+      <div id="tab-detail" class="tab-panel">
+        <details class="section" open>
+          <summary>基本</summary>
+          <div class="section-body stack">
+            <div class="kv">
+              <div class="label">終了理由</div><div class="value mono" id="outEndReason">-</div>
+            </div>
+            <div class="kv">
+              <div class="label">総ステップ</div><div class="value mono" id="outTotalStep">0</div>
+            </div>
+            <div class="kv">
+              <div class="label">最終個体数</div><div class="value mono" id="outFinalCounts">草0 / 草食0 / 肉食0</div>
+            </div>
+            <div class="kv">
+              <div class="label">最大個体数</div><div class="value mono" id="outPeakCounts">草0 / 草食0 / 肉食0</div>
+            </div>
+            <div class="kv">
+              <div class="label">死亡内訳</div><div class="value mono" id="outDeaths">草食:飢餓0 捕食0 老衰0 / 肉食:飢餓0 老衰0</div>
+            </div>
+            <div class="row" style="margin-top:10px;">
+              <button id="btnCopyResult">結果をコピー</button>
+            </div>
+            <div class="note">CSV列: schema_version, seed, step, grass_count, herbivore_count, carnivore_count, death_herbivore_starve, death_herbivore_eaten, death_carnivore_starve, death_herbivore_age, death_carnivore_age, herb_K, carn_K, competition_enabled, herb_repro_success_rate, carn_repro_success_rate, 以降に各species_count列</div>
+          </div>
+        </details>
+        <details class="section" open>
+          <summary>高度</summary>
+          <div class="section-body">
+            <div class="card" style="border-color:#223247;">
+              <h2 style="padding:12px 12px 0">個体数グラフ</h2>
+              <div class="pad">
+                <canvas id="chart" height="220"></canvas>
+              </div>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+  </aside>
   <div class="modal-backdrop" id="endModal">
     <div class="modal">
       <h3>シミュレーション終了</h3>
@@ -416,7 +461,7 @@ function mulberry32(seed){
 
 /* ========= シミュレーション設定 ========= */
 const GRID = 50;
-const CANVAS = 600;
+const CANVAS = 720;
 const CELL = CANVAS / GRID; // 12
 const N = GRID * GRID;
 const SCHEMA_VERSION = 3;
@@ -1351,6 +1396,17 @@ new p5((p)=>{
   };
 });
 
+/* ========= 設定ドロワー ========= */
+const drawer = el('settingsDrawer');
+const drawerBackdrop = el('drawerBackdrop');
+function toggleDrawer(open){
+  drawer.classList.toggle('open', open);
+  drawerBackdrop.classList.toggle('open', open);
+  drawer.setAttribute('aria-hidden', open ? 'false' : 'true');
+}
+drawerBackdrop.addEventListener('click', ()=>toggleDrawer(false));
+window.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') toggleDrawer(false); });
+
 /* ========= ボタン配線 ========= */
 el('btnStart').addEventListener('click', ()=>{
   if(endReason){
@@ -1369,6 +1425,8 @@ el('btnReset').addEventListener('click', ()=>{
   resetSim();
 });
 el('btnCSV').addEventListener('click', downloadCSV);
+el('btnOpenDrawer').addEventListener('click', ()=>toggleDrawer(true));
+el('btnCloseDrawer').addEventListener('click', ()=>toggleDrawer(false));
 el('btnCopyResult').addEventListener('click', copyResult);
 el('btnModalReset').addEventListener('click', ()=>{ hideEndModal(); el('btnStart').textContent = '開始'; resetSim(); });
 el('btnModalCSV').addEventListener('click', downloadCSV);
