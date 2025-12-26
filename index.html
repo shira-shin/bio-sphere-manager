@@ -184,8 +184,8 @@
         </div>
       </div>
       <div class="pad note">
-        描画：草（緑のセル）／草食・肉食は種ごとに色と形状が異なります（凡例参照）。<br>
-        ルール：ランダム移動 → 捕食/採食 → 代謝 → 繁殖。<br>
+        描画：草（バイオマスの濃淡）／草食・肉食は種ごとに色と形状が異なります（凡例参照）。<br>
+        ルール：天候・季節で草が増減 → ランダム移動（地形コスト）→ 捕食/採食 → 代謝 → 繁殖。<br>
         同じseed・同じ初期パラメータなら挙動が再現されます（Math.randomは未使用）。
       </div>
     </div>
@@ -211,8 +211,11 @@
               <label class="note">デフォルトモード（シナリオ）</label><br>
               <select id="selScenario">
                 <option value="">選択してください</option>
-                <option value="grassland">草原（安定）</option>
-                <option value="dryCollapse">乾燥（崩壊）</option>
+                <option value="temperate">温帯草原（シカ-オオカミ）</option>
+                <option value="river">河川敷（ウサギ-キツネ）</option>
+                <option value="arid">乾燥地</option>
+                <option value="grassland">旧：草原（安定）</option>
+                <option value="dryCollapse">旧：乾燥（崩壊）</option>
               </select>
             </div>
             <button id="btnApplyScenario" class="primary">適用してリセット</button>
@@ -357,13 +360,27 @@
               <label>最大ステップ<div class="help">上限に達すると終了</div></label>
               <input id="inMaxSteps" type="number" min="10" max="20000" value="2000" />
             </div>
-            <div class="note">終了条件はシナリオ適用時にも上書きされます。</div>
+            <div class="ctrl">
+              <label>気候強度<div class="help">季節の振幅と平均気温・降水をまとめてスケールします</div></label>
+              <div class="row">
+                <input id="slClimate" type="range" min="0.6" max="1.5" step="0.05" value="1" />
+                <span class="mono" id="valClimate">1.00</span>
+              </div>
+            </div>
+            <div class="ctrl">
+              <label>地形ミックス<div class="help">値が大きいほど岩場/河川/森林が増えます</div></label>
+              <div class="row">
+                <input id="slTerrainMix" type="range" min="0" max="1" step="0.05" value="0.35" />
+                <span class="mono" id="valTerrainMix">0.35</span>
+              </div>
+            </div>
+            <div class="note">終了条件や気候・地形はシナリオ適用時にも上書きされます。</div>
           </div>
         </details>
         <details class="section" open>
           <summary>高度</summary>
           <div class="section-body stack">
-            <div class="note">マップの描画は緑の濃淡で草の分布を示し、HUDの凡例と同じ形状で個体を描いています。</div>
+            <div class="note">マップの描画は地形をベースに、草のバイオマスを濃淡で示し、HUDの凡例と同じ形状で個体を描いています。</div>
           </div>
         </details>
       </div>
@@ -390,7 +407,7 @@
             <div class="row" style="margin-top:10px;">
               <button id="btnCopyResult">結果をコピー</button>
             </div>
-            <div class="note">CSV列: schema_version, seed, step, grass_count, herbivore_count, carnivore_count, death_herbivore_starve, death_herbivore_eaten, death_carnivore_starve, death_herbivore_age, death_carnivore_age, herb_K, carn_K, competition_enabled, herb_repro_success_rate, carn_repro_success_rate, 以降に各species_count列</div>
+            <div class="note">CSV列: schema_version, seed, step, grass_count, herbivore_count, carnivore_count, death_herbivore_starve, death_herbivore_eaten, death_carnivore_starve, death_herbivore_age, death_carnivore_age, herb_K, carn_K, competition_enabled, herb_repro_success_rate, carn_repro_success_rate, biomass_total, temperature, rainfall, season_name, 以降に各species_count列</div>
           </div>
         </details>
         <details class="section" open>
@@ -464,7 +481,15 @@ const GRID = 50;
 const CANVAS = 720;
 const CELL = CANVAS / GRID; // 12
 const N = GRID * GRID;
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
+
+const TERRAIN = {
+  GRASSLAND: 0,
+  ROCK: 1,
+  RIVER: 2,
+  FOREST: 3,
+};
+const TERRAIN_KEYS = Object.keys(TERRAIN);
 
 const SPECIES_DEFS = [
   {
@@ -529,9 +554,10 @@ let tickPerFrame = 1;
 let statusMessage = '停止中';
 let currentSeed = 'daily:0000-00-00';
 
-// 草：0/1（Uint8Arrayで軽量に管理）
-let grass = new Uint8Array(N);
+// 草バイオマス（0..plantK）
+let biomass = new Float32Array(N);
 let grassTone = new Uint8Array(N); // 草の濃淡（決定論）
+let terrain = new Uint8Array(N);
 
 // 動物
 let animals = {};
@@ -553,23 +579,58 @@ let carnReproSuccess = 0;
 
 // プリセット（シナリオ）
 const PRESETS = {
+  temperate: {
+    label: '温帯草原（シカ-オオカミ）',
+    values: {
+      initGrass: 1400,
+      species: {herb_a: 62, herb_b: 34, carn_a: 12, carn_b: 6},
+      grassGrowthRate: 0.02, plantK: 10, herbGain: 12, carnGain: 22,
+      herbRepro: 30, carnRepro: 46, herbMaxAge: 140, carnMaxAge: 170,
+      climateIntensity: 1.05, terrainMix: 0.32,
+      endCondition: 'animalExtinct', maxSteps: 3000, logEvery: 5
+    }
+  },
+  river: {
+    label: '河川敷（ウサギ-キツネ）',
+    values: {
+      initGrass: 1320,
+      species: {herb_a: 70, herb_b: 28, carn_a: 10, carn_b: 5},
+      grassGrowthRate: 0.021, plantK: 11, herbGain: 13, carnGain: 21,
+      herbRepro: 29, carnRepro: 44, herbMaxAge: 135, carnMaxAge: 165,
+      climateIntensity: 1.0, terrainMix: 0.52,
+      endCondition: 'animalExtinct', maxSteps: 2800, logEvery: 5
+    }
+  },
+  arid: {
+    label: '乾燥地',
+    values: {
+      initGrass: 720,
+      species: {herb_a: 40, herb_b: 20, carn_a: 9, carn_b: 6},
+      grassGrowthRate: 0.011, plantK: 7, herbGain: 11, carnGain: 20,
+      herbRepro: 31, carnRepro: 48, herbMaxAge: 120, carnMaxAge: 160,
+      climateIntensity: 0.82, terrainMix: 0.46,
+      endCondition: 'anyExtinct', maxSteps: 2200, logEvery: 4
+    }
+  },
   grassland: {
-    label: '草原（安定）',
+    label: '旧：草原（安定）',
     values: {
       initGrass: 1250,
       species: {herb_a: 55, herb_b: 35, carn_a: 11, carn_b: 7},
-      grassGrowthRate: 0.018, herbGain: 12, carnGain: 22,
+      grassGrowthRate: 0.018, plantK: 8, herbGain: 12, carnGain: 22,
       herbRepro: 28, carnRepro: 45, herbMaxAge: 130, carnMaxAge: 170,
+      climateIntensity: 1.0, terrainMix: 0.30,
       endCondition: 'animalExtinct', maxSteps: 2600, logEvery: 5
     }
   },
   dryCollapse: {
-    label: '乾燥（崩壊）',
+    label: '旧：乾燥（崩壊）',
     values: {
       initGrass: 620,
       species: {herb_a: 38, herb_b: 22, carn_a: 9, carn_b: 7},
-      grassGrowthRate: 0.009, herbGain: 11, carnGain: 20,
+      grassGrowthRate: 0.009, plantK: 7, herbGain: 11, carnGain: 20,
       herbRepro: 30, carnRepro: 48, herbMaxAge: 120, carnMaxAge: 165,
+      climateIntensity: 0.9, terrainMix: 0.28,
       endCondition: 'anyExtinct', maxSteps: 1800, logEvery: 4
     }
   }
@@ -579,6 +640,7 @@ const PRESETS = {
 let P = {
   initGrass: 800,
   grassGrowthRate: 0.02,
+  plantK: 8,
   herbGain: 12,
   herbRepro: 28,
   carnGain: 22,
@@ -586,6 +648,8 @@ let P = {
   metabolism: 1,
   herbMaxAge: 120,
   carnMaxAge: 160,
+  climateIntensity: 1,
+  terrainMix: 0.35,
   endCondition: 'anyExtinct',
   maxSteps: 2000,
   competition: false,
@@ -600,6 +664,9 @@ let deathCarnStarve = 0;
 let deathHerbEaten = 0;
 let deathHerbAge = 0;
 let deathCarnAge = 0;
+
+// 気候・季節
+let weatherState = {season:'－', temperature:0, rainfall:0};
 
 // 結果表示用
 let endReason = '';
@@ -631,6 +698,8 @@ function readParamsFromUI(){
   P.carnRepro = clampInt(parseInt(el('inCarnRepro').value,10), 2, 800);
   P.herbMaxAge = clampInt(parseInt(el('inHerbMaxAge').value,10), 10, 2000);
   P.carnMaxAge = clampInt(parseInt(el('inCarnMaxAge').value,10), 10, 2000);
+  P.climateIntensity = clampFloat(parseFloat(el('slClimate').value), 0.6, 1.5);
+  P.terrainMix = clampFloat(parseFloat(el('slTerrainMix').value), 0, 1);
   P.endCondition = el('selEndCondition').value === 'animalExtinct' ? 'animalExtinct' : 'anyExtinct';
   P.maxSteps = clampInt(parseInt(el('inMaxSteps').value,10), 10, 20000);
   P.competition = el('chkCompetition').checked;
@@ -644,6 +713,8 @@ function readParamsFromUI(){
   tickPerFrame = Math.max(1, Math.round(fps / 30)); // ざっくり（後で精密化可）
 
   el('valGrass').textContent = P.grassGrowthRate.toFixed(3);
+  el('valClimate').textContent = P.climateIntensity.toFixed(2);
+  el('valTerrainMix').textContent = P.terrainMix.toFixed(2);
   el('valFPS').textContent = String(fps);
   updateSpeciesSettingsFromUI();
   updateActiveSpeciesLists();
@@ -699,6 +770,22 @@ function updateGrassToneMap(seedStr){
   for(let i=0;i<N;i++){
     const h = hash32FromString(`${seedStr}:${i}`);
     grassTone[i] = h % 80; // 0-79の明度
+  }
+}
+function updateTerrainMap(seedStr){
+  for(let i=0;i<N;i++){
+    const h = hash32FromString(`${seedStr}:terrain:${i}`);
+    const roll = (h % 1000) / 1000;
+    const mix = P.terrainMix;
+    if(roll < 0.08 * mix){
+      terrain[i] = TERRAIN.RIVER;
+    } else if(roll < 0.20 * mix){
+      terrain[i] = TERRAIN.ROCK;
+    } else if(roll < 0.38 * mix){
+      terrain[i] = TERRAIN.FOREST;
+    } else {
+      terrain[i] = TERRAIN.GRASSLAND;
+    }
   }
 }
 function defaultSpeciesSettings(){
@@ -820,12 +907,15 @@ function applyPresetToUI(key){
   const v = p.values;
   el('inInitGrass').value = v.initGrass;
   el('slGrass').value     = v.grassGrowthRate;
+  el('slClimate').value  = v.climateIntensity ?? P.climateIntensity;
+  el('slTerrainMix').value = v.terrainMix ?? P.terrainMix;
   el('inHerbGain').value  = v.herbGain;
   el('inCarnGain').value  = v.carnGain;
   el('inHerbRepro').value = v.herbRepro;
   el('inCarnRepro').value = v.carnRepro;
   el('inHerbMaxAge').value = v.herbMaxAge;
   el('inCarnMaxAge').value = v.carnMaxAge;
+  if(v.plantK) P.plantK = v.plantK;
   const speciesPreset = v.species || {};
   const nextSpeciesSettings = {};
   for(const sp of SPECIES_DEFS){
@@ -853,6 +943,50 @@ function competitionExtraCost(count, k){
   return Math.floor((count / Math.max(1, k)) * P.densityCostScale);
 }
 
+function deterministicNoise(step, key){
+  const h = hash32FromString(`${currentSeed}:${key}:${step}`);
+  return (h / 4294967296);
+}
+
+function getSeasonName(day){
+  const d = day % 365;
+  if(d < 80) return '冬';
+  if(d < 172) return '春';
+  if(d < 264) return '夏';
+  return '秋';
+}
+
+function getWeatherForStep(step){
+  const day = step % 365;
+  const baseTemp = 14 * Math.sin((2*Math.PI*day)/365 - 0.8) + 14;
+  const baseRain = 55 + 35 * Math.sin((2*Math.PI*day)/365 + 1.4);
+  const noiseLevel = 0.15 * P.climateIntensity;
+  const tempNoise = (deterministicNoise(step, 'temp') - 0.5) * 6 * noiseLevel;
+  const rainNoise = (deterministicNoise(step, 'rain') - 0.5) * 40 * noiseLevel;
+  const temperature = (baseTemp * P.climateIntensity) + tempNoise;
+  const rainfall = Math.max(0, (baseRain * P.climateIntensity) + rainNoise);
+  const season = getSeasonName(day);
+  return {season, temperature, rainfall};
+}
+
+function terrainGrowthMultiplier(t){
+  if(t === TERRAIN.ROCK) return 0.25;
+  if(t === TERRAIN.RIVER) return 1.45;
+  if(t === TERRAIN.FOREST) return 1.15;
+  return 1;
+}
+
+function terrainMoveCost(t){
+  if(t === TERRAIN.ROCK) return 1;
+  if(t === TERRAIN.RIVER) return 2;
+  if(t === TERRAIN.FOREST) return 0.5;
+  return 0;
+}
+function terrainPassable(t){
+  if(t === TERRAIN.RIVER) return false;
+  return true;
+}
+
 /* ========= 初期化 ========= */
 function resetSim(){
   readParamsFromUI();
@@ -861,12 +995,13 @@ function resetSim(){
   const seed32 = hash32FromString(currentSeed);
   rng = mulberry32(seed32);
   updateGrassToneMap(currentSeed);
+  updateTerrainMap(currentSeed);
 
   step = 0;
   running = false;
   statusMessage = '停止中';
   hideEndModal();
-  grass.fill(0);
+  biomass.fill(0);
   animals = {};
   for(const sp of SPECIES_DEFS){
     animals[sp.id] = [];
@@ -883,13 +1018,14 @@ function resetSim(){
   carnReproSuccess = 0;
   endReason = '';
   peakCounts = {grass:0, herb:0, carn:0};
+  weatherState = getWeatherForStep(step);
 
   // 草をランダム配置（重複を避けて指定数を確保）
   let gPlaced = 0;
   while(gPlaced < P.initGrass && gPlaced < N){
     const idx = Math.floor(rng()*N);
-    if(grass[idx] === 0){
-      grass[idx] = 1;
+    if(biomass[idx] <= 0){
+      biomass[idx] = P.plantK;
       gPlaced++;
     }
   }
@@ -927,16 +1063,27 @@ function tick(){
   if(endReason) return;
   step++;
 
+  weatherState = getWeatherForStep(step);
+
   if(step >= P.maxSteps){
     applyEndCondition('最大ステップ到達');
     return;
   }
 
-  // 1) 草の成長：空セルに確率で草が生える
-  const g = P.grassGrowthRate;
-  if(g > 0){
-    for(let i=0;i<N;i++){
-      if(grass[i]===0 && rng() < g) grass[i] = 1;
+  // 1) 草の成長：季節と降水・地形で成長率変動（ロジスティック増殖）
+  const tempSuit = clampFloat(1 - Math.abs(weatherState.temperature - 18) / 22, 0, 1.6);
+  const rainSuit = clampFloat(weatherState.rainfall / 80, 0, 1.8);
+  const growthClimate = clampFloat((tempSuit * 0.55) + (rainSuit * 0.45), 0, 1.8);
+  for(let i=0;i<N;i++){
+    const terrainMult = terrainGrowthMultiplier(terrain[i]);
+    const g = P.grassGrowthRate * terrainMult * growthClimate;
+    if(g > 0){
+      const carrying = P.plantK;
+      const growth = g * (1 - (biomass[i] / carrying)) * carrying;
+      biomass[i] = clampFloat(biomass[i] + growth, 0, carrying);
+    }
+    if(rainSuit < 0.5){
+      biomass[i] = clampFloat(biomass[i] - (0.12 * (0.5 - rainSuit)), 0, P.plantK);
     }
   }
 
@@ -958,16 +1105,18 @@ function tick(){
         continue;
       }
 
-      moveRandom(h);
+      const moveCost = moveTerrainAware(h);
 
       const idx = h.y * GRID + h.x;
-      if(grass[idx] === 1){
-        grass[idx] = 0;
-        h.energy += traits.gain;
+      if(biomass[idx] > 0){
+        const eat = Math.min(biomass[idx], traits.gain);
+        biomass[idx] -= eat;
+        h.energy += eat;
       }
 
       const herbExtraCost = competitionExtraCost(herbAliveCount, P.herbK);
-      h.energy -= (traits.metabolism + herbExtraCost);
+      const weatherCost = Math.max(0, Math.abs(weatherState.temperature - 18) * 0.05);
+      h.energy -= (traits.metabolism + herbExtraCost + moveCost + weatherCost);
       if(h.energy <= 0){
         h.alive = false;
         herbAliveCount--;
@@ -1014,7 +1163,7 @@ function tick(){
         continue;
       }
 
-      moveRandom(c);
+      const moveCost = moveTerrainAware(c);
 
       const idx = c.y * GRID + c.x;
       const cellList = herbivoreAt[idx];
@@ -1033,10 +1182,11 @@ function tick(){
       }
 
       const carnExtraCost = competitionExtraCost(carnAliveCount, P.carnK);
+      const weatherCost = Math.max(0, Math.abs(weatherState.temperature - 18) * 0.04);
       if(cellList.length === 0){
-        c.energy -= (traits.metabolism + carnExtraCost);
-      } else if(carnExtraCost > 0){
-        c.energy -= carnExtraCost;
+        c.energy -= (traits.metabolism + carnExtraCost + moveCost + weatherCost);
+      } else {
+        c.energy -= (carnExtraCost + moveCost + weatherCost);
       }
       if(c.energy <= 0){
         c.alive = false;
@@ -1130,18 +1280,26 @@ function hideEndModal(){
   el('endModal').style.display = 'none';
 }
 
-function moveRandom(a){
+function moveTerrainAware(a){
   // トーラス（端で折り返し）にして境界の癖を減らす
-  const r = rng();
-  if(r < 0.25) a.x = (a.x + 1) % GRID;
-  else if(r < 0.50) a.x = (a.x - 1 + GRID) % GRID;
-  else if(r < 0.75) a.y = (a.y + 1) % GRID;
-  else a.y = (a.y - 1 + GRID) % GRID;
+  const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+  const start = Math.floor(rng()*4);
+  let appliedCost = terrainMoveCost(terrain[a.y * GRID + a.x]);
+  for(let i=0;i<4;i++){
+    const d = dirs[(start + i) % 4];
+    const nx = (a.x + d[0] + GRID) % GRID;
+    const ny = (a.y + d[1] + GRID) % GRID;
+    const t = terrain[ny * GRID + nx];
+    if(terrainPassable(t)){
+      a.x = nx; a.y = ny; appliedCost = terrainMoveCost(t); break;
+    }
+  }
+  return appliedCost;
 }
 
 function getCounts(){
-  let gCount = 0;
-  for(let i=0;i<N;i++) if(grass[i]===1) gCount++;
+  let totalBiomass = 0;
+  for(let i=0;i<N;i++) totalBiomass += biomass[i];
   let hCount = 0;
   let cCount = 0;
   const species = {};
@@ -1152,7 +1310,7 @@ function getCounts(){
     species[sp.id] = sCount;
     if(sp.diet === 'herbivore') hCount += sCount; else cCount += sCount;
   }
-  return {grass:gCount, herb:hCount, carn:cCount, species};
+  return {grass: Math.round(totalBiomass), biomassTotal: totalBiomass, herb:hCount, carn:cCount, species};
 }
 
 function pushLog(){
@@ -1176,6 +1334,10 @@ function pushLog(){
     competition_enabled: P.competition ? 1 : 0,
     herb_repro_success_rate: herbRate,
     carn_repro_success_rate: carnRate,
+    biomass_total: counts.biomassTotal.toFixed(2),
+    temperature: weatherState.temperature.toFixed(2),
+    rainfall: weatherState.rainfall.toFixed(2),
+    season_name: weatherState.season,
     species_counts: counts.species,
   });
   pushChartPoint(step, counts.grass, counts.herb, counts.carn);
@@ -1192,6 +1354,9 @@ function refreshUI(){
   el('outGrass').textContent = String(counts.grass);
   el('outHerb').textContent  = String(counts.herb);
   el('outCarn').textContent  = String(counts.carn);
+  el('outSeason').textContent = weatherState.season;
+  el('outTemp').textContent = `${weatherState.temperature.toFixed(1)}℃`;
+  el('outRain').textContent = `${weatherState.rainfall.toFixed(1)} mm`;
   const scenarioStatus = statusMessage.startsWith('シナリオ:');
   if(running){
     statusMessage = '実行中';
@@ -1270,6 +1435,7 @@ function downloadCSV(){
     "grass_count","herbivore_count","carnivore_count",
     "death_herbivore_starve","death_herbivore_eaten","death_carnivore_starve","death_herbivore_age","death_carnivore_age",
     "herb_K","carn_K","competition_enabled","herb_repro_success_rate","carn_repro_success_rate",
+    "biomass_total","temperature","rainfall","season_name",
     ...SPECIES_DEFS.map(sp=>`${sp.id}_count`)
   ].join(",");
 
@@ -1278,6 +1444,7 @@ function downloadCSV(){
     r.grass, r.herb, r.carn,
     r.death_herb_starve, r.death_herb_eaten, r.death_carn_starve, r.death_herb_age, r.death_carn_age,
     r.herb_K, r.carn_K, r.competition_enabled, r.herb_repro_success_rate, r.carn_repro_success_rate,
+    r.biomass_total, r.temperature, r.rainfall, r.season_name,
     ...SPECIES_DEFS.map(sp=> r.species_counts ? r.species_counts[sp.id] : '')
   ].join(","));
 
@@ -1331,22 +1498,34 @@ new p5((p)=>{
     // 背景
     p.background(10, 16, 24);
 
-    // 草（セル塗り：濃淡＋段階表現）
+    // 地形 + 草バイオマス（セル塗り：濃淡＋段階表現）
     p.noStroke();
     for(let y=0;y<GRID;y++){
       for(let x=0;x<GRID;x++){
         const idx = y*GRID + x;
-        if(grass[idx]===1){
-          const tone = grassTone[idx];
-          const stage = tone % 4;
-          const r = 30 + Math.floor(tone * 0.22) + stage * 4;
-          const g = 105 + Math.floor(tone * 0.85) + stage * 7;
-          const b = 55 + Math.floor(tone * 0.32) + stage * 3;
-          p.fill(r, g, b);
+        const t = terrain[idx];
+        let base = [32, 70, 50];
+        if(t === TERRAIN.ROCK) base = [72, 78, 84];
+        else if(t === TERRAIN.RIVER) base = [38, 90, 140];
+        else if(t === TERRAIN.FOREST) base = [26, 68, 44];
+        const tone = grassTone[idx] * 0.4;
+        p.fill(base[0] + tone*0.08, base[1] + tone*0.12, base[2] + tone*0.10);
+        p.rect(x*CELL, y*CELL, CELL, CELL);
+        if(t === TERRAIN.ROCK){
+          p.fill(120,130,140, 60);
           p.rect(x*CELL, y*CELL, CELL, CELL);
-          if(stage >= 2){
-            p.fill(r + 12, g + 10, b + 6, 190);
-            p.rect(x*CELL, y*CELL, CELL, CELL * 0.42);
+        }
+        const bio = biomass[idx];
+        if(bio > 0){
+          const ratio = clampFloat(bio / P.plantK, 0, 1);
+          const r = 40 + tone * 0.15;
+          const g = 120 + tone * 0.9;
+          const b = 66 + tone * 0.32;
+          p.fill(r, g, b, 180);
+          p.rect(x*CELL, y*CELL, CELL, CELL);
+          if(ratio > 0.5){
+            p.fill(r + 16, g + 10, b + 8, 200);
+            p.rect(x*CELL, y*CELL, CELL, CELL * (0.35 + ratio*0.4));
           }
         }
       }
