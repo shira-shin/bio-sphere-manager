@@ -54,7 +54,7 @@
     }
     .ctrl label{font-size:13px; color:#c3d5eb;}
     .ctrl input[type="range"]{width: 260px;}
-    #p5-container{position:relative; min-height:620px;}
+    #p5-container{position:relative; min-height:68vh; min-width:100%;}
     canvas{display:block; border-radius:16px; width:100%; height:auto; box-shadow:0 14px 38px rgba(0,0,0,0.45);}
     .note{font-size:12px; color:#9fb0c3; line-height:1.6;}
     .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;}
@@ -71,7 +71,7 @@
     .help{font-size:11px; color:#7ea0c4;}
     .preset-row{display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;}
     .badge-warning{color:#f5d97a; background:#4a3810; border:1px solid #8f6d1f; padding:2px 6px; border-radius:8px; font-size:11px;}
-    .canvas-wrap{position:relative; border-radius:18px; padding:12px; background:radial-gradient(circle at 30% 20%, rgba(70,120,200,0.08), transparent 42%), linear-gradient(180deg, rgba(16,24,36,0.9), rgba(8,12,18,0.96)); box-shadow:inset 0 0 0 1px rgba(255,255,255,0.02), 0 16px 46px rgba(0,0,0,0.55);}
+    .canvas-wrap{position:relative; border-radius:18px; padding:12px; background:radial-gradient(circle at 30% 20%, rgba(70,120,200,0.08), transparent 42%), linear-gradient(180deg, rgba(16,24,36,0.9), rgba(8,12,18,0.96)); box-shadow:inset 0 0 0 1px rgba(255,255,255,0.02), 0 16px 46px rgba(0,0,0,0.55); min-height:72vh;}
     .canvas-hud{position:absolute; inset:12px auto auto 12px; z-index:8; min-width:240px; max-width:360px; background:rgba(8,12,18,0.78); backdrop-filter: blur(8px); border:1px solid #223247; border-radius:14px; padding:10px 12px; box-shadow:0 12px 34px rgba(0,0,0,0.45); display:grid; gap:8px; cursor:grab;}
     .canvas-hud.dragging{cursor:grabbing;}
     .canvas-hud.collapsed .hud-grid,.canvas-hud.collapsed .hud-top{display:none;}
@@ -123,8 +123,8 @@
     .drawer-title{font-size:18px; font-weight:800;}
     .drawer-body{padding:16px; overflow-y:auto; height:100%;}
     .chip{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid #2a3a52; background:#132235; font-size:12px; color:#9fb0c3;}
-    .stage{max-width:1500px; margin:0 auto; padding:18px; display:grid; gap:14px;}
-    .map-area{display:grid; gap:12px;}
+    .stage{max-width:1600px; margin:0 auto; padding:18px; display:grid; gap:14px;}
+    .map-area{display:grid; gap:10px;}
     .map-head{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;}
     .overlay-switch{display:flex; gap:6px; align-items:center; flex-wrap:wrap;}
     .overlay-switch .label{font-size:13px; color:#9fb0c3;}
@@ -136,10 +136,11 @@
     .legend-swatch{width:16px; height:16px; border-radius:4px; border:1px solid #d9e2f3;}
     .legend-swatch.circle{border-radius:50%;}
     .legend-swatch.tri{width:0; height:0; border-left:9px solid transparent; border-right:9px solid transparent; border-top:16px solid #d9e2f3; border-radius:0; border:0;}
-    .floating-toolbar{position:fixed; right:18px; top:86px; display:flex; flex-direction:column; gap:8px; z-index:20; align-items:flex-end;}
-    .toolbar-row{display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;}
-    .toolbar-card{background:rgba(12,18,26,0.92); border:1px solid #1f2a37; border-radius:14px; padding:10px; box-shadow:0 12px 34px rgba(0,0,0,0.45);}
+    .floating-toolbar{position:absolute; inset:auto 16px 16px auto; display:flex; flex-direction:column; gap:8px; z-index:20; align-items:flex-end; pointer-events:none;}
+    .toolbar-row{display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;}
+    .toolbar-card{background:rgba(12,18,26,0.92); border:1px solid #1f2a37; border-radius:14px; padding:10px; box-shadow:0 12px 34px rgba(0,0,0,0.45); pointer-events:auto; min-width:240px;}
     .floating-settings{position:fixed; right:18px; bottom:20px; z-index:25;}
+    .floating-controls-title{font-size:12px; color:#8ea7c4; margin-bottom:6px;}
     .fab{border-radius:999px; padding:12px 18px; font-weight:700; box-shadow:0 12px 32px rgba(0,0,0,0.45);}
     .hud-grid{grid-template-columns: repeat(auto-fit, minmax(120px,1fr));}
     .hud-item .value{font-size:20px;}
@@ -151,15 +152,19 @@
     .badge{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; background:#12263a; border:1px solid #20354e; color:#9fb0c3; font-size:12px;}
     .compact-note{font-size:13px; color:#8ea7c4;}
     .map-status{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
-    .quick-strip{display:flex; gap:6px; align-items:center; flex-wrap:wrap;}
+    .map-hint{font-size:13px; color:#8ea7c4;}
+    .pill-note{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid #223247; background:rgba(14,22,32,0.86); font-size:12px; color:#9fb0c3;}
+    .quick-controls{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+    .quick-controls button{padding:8px 10px;}
+    .quick-controls .mini{padding:6px 8px; font-size:13px;}
     .tiny{font-size:12px; color:#8ea7c4;}
     .drawer-body .grid3{display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap:12px;}
     @media (max-width: 1100px){
-      .floating-toolbar{position:static; padding:12px; align-items:flex-start;}
+      .floating-toolbar{position:static; padding:8px 0; align-items:flex-start;}
       .floating-settings{position:fixed; right:14px; bottom:14px;}
       .canvas-hud{position:relative; inset:auto; margin-top:10px;}
-      .canvas-wrap{padding:10px;}
-      #p5-container{min-height:540px;}
+      .canvas-wrap{padding:10px; min-height:60vh;}
+      #p5-container{min-height:520px;}
     }
   </style>
 </head>
@@ -175,7 +180,8 @@
       <div class="map-head">
         <div class="map-status">
           <span class="badge">マップ優先ビュー</span>
-          <span class="compact-note">HUDはドラッグで動かせます。設定は右下「設定」から。</span>
+          <span class="compact-note">HUDはドラッグで動かせます。設定ドロワーは右下「設定」から。</span>
+          <span class="pill-note">「全滅まで」モードは長時間になる場合があります</span>
         </div>
         <div class="overlay-switch" role="group" aria-label="表示モード">
           <span class="label">表示モード</span>
@@ -227,6 +233,11 @@
               <div class="label">雨量</div>
               <div class="value" id="outRain">－</div>
             </div>
+            <div class="hud-item">
+              <div class="label">スコア</div>
+              <div class="value" id="outScore">0</div>
+              <div class="tiny" id="outScoreDetail">生存・多様性・安定度</div>
+            </div>
           </div>
         </div>
         <div class="legend-card" id="legendCard">
@@ -236,36 +247,38 @@
           <div class="legend-row"><span class="legend-swatch tri" style="border-top-color:rgb(240,160,80);"></span><span>肉食</span></div>
           <div class="legend-row tiny">地形・天候は「表示モード」で切替</div>
         </div>
+        <div class="floating-toolbar">
+          <div class="toolbar-card">
+            <div class="floating-controls-title">クイック操作</div>
+            <div class="toolbar-row">
+              <button id="btnStart" class="primary">開始/停止</button>
+              <button id="btnStep">1ステップ</button>
+              <button id="btnReset" class="danger">リセット</button>
+              <button id="btnForceEnd" class="ghost">強制終了</button>
+            </div>
+            <div class="toolbar-row" style="margin-top:4px;">
+              <button id="btnCSV">CSV</button>
+              <label class="tiny">デフォルトシナリオ</label>
+              <select id="selScenario">
+                <option value="">選択</option>
+                <option value="temperate">温帯草原（シカ-オオカミ）</option>
+                <option value="river">河川敷（ウサギ-キツネ）</option>
+                <option value="arid">乾燥地</option>
+                <option value="grassland">旧：草原（安定）</option>
+                <option value="dryCollapse">旧：乾燥（崩壊）</option>
+              </select>
+              <button id="btnApplyScenario" class="primary">適用してリセット</button>
+            </div>
+            <div class="toolbar-row" style="margin-top:4px;">
+              <button id="btnOpenDrawerInline" class="primary">⚙ 設定を開く</button>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="note">同じseed・同じ初期パラメータなら挙動が再現されます（Math.randomは未使用）。</div>
     </div>
   </div>
 
-  <div class="floating-toolbar">
-    <div class="toolbar-card">
-      <div class="toolbar-row">
-        <button id="btnStart" class="primary">開始/停止</button>
-        <button id="btnStep">1ステップ</button>
-        <button id="btnReset" class="danger">リセット</button>
-        <button id="btnCSV">CSVダウンロード</button>
-      </div>
-      <div class="toolbar-row" style="margin-top:6px;">
-        <div class="quick-strip">
-          <label class="tiny">デフォルトシナリオ</label>
-          <select id="selScenario">
-            <option value="">選択してください</option>
-            <option value="temperate">温帯草原（シカ-オオカミ）</option>
-            <option value="river">河川敷（ウサギ-キツネ）</option>
-            <option value="arid">乾燥地</option>
-            <option value="grassland">旧：草原（安定）</option>
-            <option value="dryCollapse">旧：乾燥（崩壊）</option>
-          </select>
-          <button id="btnApplyScenario" class="primary">適用してリセット</button>
-          <span class="badge-warning">決定論：seed依存</span>
-        </div>
-      </div>
-    </div>
-  </div>
   <div class="floating-settings">
     <button id="btnOpenDrawer" class="fab primary">⚙ 設定</button>
   </div>
@@ -393,12 +406,14 @@
           <summary>表示と終了条件</summary>
           <div class="section-body stack">
             <div class="ctrl">
-              <label>終了条件<div class="help">指定の種が絶滅したら停止</div></label>
+              <label>終了条件<div class="help">指定の種が絶滅したら停止 / 全滅まで走らせる</div></label>
               <select id="selEndCondition">
                 <option value="anyExtinct">どれか1種が絶滅したら終了</option>
                 <option value="animalExtinct">草食か肉食が絶滅したら終了</option>
+                <option value="totalExtinct">全生物が絶滅するまで</option>
               </select>
             </div>
+            <div class="note">「全滅まで」は植物も含めすべて0になるまで継続します。長く続く場合はクイック操作の「強制終了」を利用してください。</div>
             <div class="ctrl">
               <label>最大ステップ<div class="help">上限に達すると終了</div></label>
               <input id="inMaxSteps" type="number" min="10" max="20000" value="2000" />
@@ -409,6 +424,10 @@
                 <input id="slZoom" type="range" min="1.0" max="2.0" step="0.05" value="1.25" />
                 <span class="mono" id="valZoom">1.25</span>
               </div>
+            </div>
+            <div class="ctrl">
+              <label>演出<div class="help">捕食リング・死亡マーカーなど視認性のための効果（挙動は不変）</div></label>
+              <label class="note"><input id="chkEffects" type="checkbox" checked /> 演出ON</label>
             </div>
           </div>
         </details>
@@ -500,6 +519,7 @@
             </div>
             <div class="row" style="margin-top:10px;">
               <button id="btnCopyResult">結果をコピー</button>
+              <button id="btnCopyScore" class="primary">スコアをコピー</button>
             </div>
             <div class="note">CSV列: schema_version, seed, step, grass_count, herbivore_count, carnivore_count, death_herbivore_starve, death_herbivore_eaten, death_carnivore_starve, death_herbivore_age, death_carnivore_age, herb_K, carn_K, competition_enabled, herb_repro_success_rate, carn_repro_success_rate, biomass_total, temperature, rainfall, season_name, 以降に各species_count列</div>
           </div>
@@ -533,10 +553,17 @@
       <div class="kv">
         <div class="label">死亡内訳</div><div class="value mono" id="modalDeaths">-</div>
       </div>
+      <div class="kv">
+        <div class="label">スコア</div><div class="value mono" id="modalScore">0</div>
+      </div>
+      <div class="kv">
+        <div class="label">スコア内訳</div><div class="value mono" id="modalScoreDetail">-</div>
+      </div>
       <div class="actions">
         <button id="btnModalReset" class="primary">リセット</button>
         <button id="btnModalCSV">CSVダウンロード</button>
         <button id="btnModalCopy">結果をコピー</button>
+        <button id="btnModalCopyScore">スコアをコピー</button>
       </div>
     </div>
   </div>
@@ -578,6 +605,11 @@ let canvasSize = Math.round(BASE_CANVAS * mapScale);
 let cellSize = canvasSize / GRID;
 const N = GRID * GRID;
 const SCHEMA_VERSION = 4;
+const SCORE_BIO_BONUS = 150;
+const SCORE_STABILITY_BASE = 220;
+const MAX_STABILITY_SAMPLES = 160;
+const EFFECT_LIFETIME = 22;
+const DEATH_MARK_LIFETIME = 26;
 
 const TERRAIN = {
   GRASSLAND: 0,
@@ -654,6 +686,7 @@ let currentSeed = 'daily:0000-00-00';
 let biomass = new Float32Array(N);
 let grassTone = new Uint8Array(N); // 草の濃淡（決定論）
 let terrain = new Uint8Array(N);
+let terrainPattern = new Uint32Array(N);
 
 // 動物
 let animals = {};
@@ -676,6 +709,10 @@ let overlayMode = 'life';
 let hudCollapsed = false;
 let hudOffset = {x:12,y:12};
 let p5Instance = null;
+let effectsEnabled = true;
+let visualEffects = [];
+let stabilitySeries = [];
+let scoreState = {total:0, base:0, bioBonus:0, biodiversity:0, stability:0};
 
 // プリセット（シナリオ）
 const PRESETS = {
@@ -831,12 +868,14 @@ function readParamsFromUI(){
   P.rockRatio = clampFloat(parseFloat(el('inRockRatio').value), 0, 0.5);
   P.forestRatio = clampFloat(parseFloat(el('inForestRatio').value), 0, 0.6);
   P.plantGrowthScale = clampFloat(parseFloat(el('inPlantScale').value), 0.2, 2);
-  P.endCondition = el('selEndCondition').value === 'animalExtinct' ? 'animalExtinct' : 'anyExtinct';
+  const endVal = el('selEndCondition').value;
+  P.endCondition = endVal === 'animalExtinct' ? 'animalExtinct' : (endVal === 'totalExtinct' ? 'totalExtinct' : 'anyExtinct');
   P.maxSteps = clampInt(parseInt(el('inMaxSteps').value,10), 10, 20000);
   P.competition = el('chkCompetition').checked;
   P.herbK = clampInt(parseInt(el('inHerbK').value,10), 1, 10000);
   P.carnK = clampInt(parseInt(el('inCarnK').value,10), 1, 10000);
   P.densityCostScale = clampInt(parseInt(el('inDensityCost').value,10), 0, 1000);
+  effectsEnabled = el('chkEffects').checked;
   logEvery = clampInt(parseInt(el('inLogEvery').value,10), 1, 50);
 
   const fps = clampInt(parseInt(el('slFPS').value,10), 10, 60);
@@ -904,6 +943,7 @@ function drawLegend(p){
     } else {
       p.circle(x + 24, y + offsetY, 16);
     }
+    drawEffects(p);
     p.noStroke();
     p.fill(215);
     p.text(`${sp.nameJP}（${sp.diet==='herbivore'?'草食':'肉食'}）`, x + 44, y + offsetY);
@@ -912,6 +952,42 @@ function drawLegend(p){
 }
 function speciesColor(sp){
   return `rgb(${sp.color.join(',')})`;
+}
+function drawTerrainPattern(p, x, y, t, pat){
+  const baseX = x * cellSize;
+  const baseY = y * cellSize;
+  const seed = pat >>> 0;
+  if(t === TERRAIN.RIVER){
+    p.stroke(140, 200, 255, 120);
+    p.strokeWeight(Math.max(1, cellSize * 0.08));
+    const offset = (seed % 12) * 0.06;
+    p.line(baseX, baseY + offset, baseX + cellSize, baseY + cellSize * 0.28 + offset * 0.02);
+    p.line(baseX, baseY + cellSize * 0.62 + offset * 0.03, baseX + cellSize, baseY + cellSize * 0.96);
+  } else if(t === TERRAIN.ROCK){
+    p.noStroke();
+    p.fill(200, 205, 214, 90);
+    const dots = 2 + (seed % 3);
+    for(let i=0;i<dots;i++){
+      const dx = ((seed >> (i*3)) & 7) / 8;
+      const dy = ((seed >> (i*3+2)) & 7) / 8;
+      p.rect(baseX + dx * cellSize, baseY + dy * cellSize, cellSize * 0.18, cellSize * 0.18, 3);
+    }
+  } else if(t === TERRAIN.FOREST){
+    p.stroke(46, 120, 82, 120);
+    p.strokeWeight(Math.max(1, cellSize * 0.06));
+    const stripe = (seed % 4) + 1;
+    const start = (seed % 6) / 12;
+    for(let i=0;i<stripe;i++){
+      const sx = baseX + (start + i * 0.28) * cellSize;
+      p.line(sx, baseY, sx, baseY + cellSize);
+    }
+  } else if(t === TERRAIN.GRASSLAND){
+    p.noStroke();
+    p.fill(120, 180, 120, 35);
+    const diag = (seed % 100) / 100 * cellSize * 0.3;
+    p.rect(baseX + diag, baseY + cellSize * 0.65, cellSize * 0.4, cellSize * 0.12, 3);
+  }
+  p.noStroke();
 }
 function updateGrassToneMap(seedStr){
   for(let i=0;i<N;i++){
@@ -922,6 +998,7 @@ function updateGrassToneMap(seedStr){
 function updateTerrainMap(seedStr){
   for(let i=0;i<N;i++){
     const h = hash32FromString(`${seedStr}:terrain:${i}`);
+    terrainPattern[i] = hash32FromString(`${seedStr}:terrain:${i}:pat`);
     const roll = (h % 1000) / 1000;
     const river = clampFloat(P.riverRatio, 0, 0.6);
     const rock = clampFloat(P.rockRatio, 0, 0.5);
@@ -938,6 +1015,55 @@ function updateTerrainMap(seedStr){
       terrain[i] = TERRAIN.GRASSLAND;
     }
   }
+}
+function spawnEffect(type, x, y){
+  if(!effectsEnabled) return;
+  visualEffects.push({type, x, y, life: type === 'predation' ? EFFECT_LIFETIME : DEATH_MARK_LIFETIME, max: type === 'predation' ? EFFECT_LIFETIME : DEATH_MARK_LIFETIME});
+}
+function drawEffects(p){
+  if(!effectsEnabled){
+    visualEffects = [];
+    return;
+  }
+  const next = [];
+  for(const eff of visualEffects){
+    const progress = eff.life / eff.max;
+    const cx = (eff.x + 0.5) * cellSize;
+    const cy = (eff.y + 0.5) * cellSize;
+    if(eff.type === 'predation'){
+      const radius = cellSize * (0.5 + (1 - progress) * 0.8);
+      p.noFill();
+      p.stroke(255, 180, 120, 120 * progress + 40);
+      p.strokeWeight(Math.max(1, 2.5 * progress));
+      p.circle(cx, cy, radius);
+    } else if(eff.type === 'death'){
+      const alpha = 160 * progress;
+      p.stroke(230, 110, 130, alpha);
+      p.strokeWeight(Math.max(1, cellSize * 0.12));
+      const delta = cellSize * 0.32;
+      p.line(cx - delta, cy - delta, cx + delta, cy + delta);
+      p.line(cx - delta, cy + delta, cx + delta, cy - delta);
+    }
+    eff.life -= 1;
+    if(eff.life > 0) next.push(eff);
+  }
+  visualEffects = next;
+}
+function scoreBreakdownText(){
+  return `生存${scoreState.base} / 多様性${scoreState.bioBonus} / 安定${scoreState.stability}`;
+}
+function buildScoreShareText(){
+  const counts = getCounts();
+  const lines = [
+    'Bio-Sphere Manager スコア共有',
+    `seed: ${currentSeed}`,
+    `ステップ: ${step}`,
+    `スコア: ${scoreState.total} (${scoreBreakdownText()})`,
+    `終了理由: ${endReason || '進行中'}`,
+    `個体数: 草${counts.grass} 草食${counts.herb} 肉食${counts.carn}`,
+    `種別: ${SPECIES_DEFS.map(sp=>`${sp.nameJP}:${counts.species[sp.id] ?? 0}`).join(' / ')}`
+  ];
+  return lines.join('\n');
 }
 function defaultSpeciesSettings(){
   const s = {};
@@ -1180,6 +1306,9 @@ function resetSim(){
   statusMessage = '停止中';
   hideEndModal();
   biomass.fill(0);
+  visualEffects = [];
+  stabilitySeries = [];
+  scoreState = {total:0, base:0, bioBonus:0, biodiversity:0, stability:0};
   animals = {};
   for(const sp of SPECIES_DEFS){
     animals[sp.id] = [];
@@ -1281,6 +1410,7 @@ function tick(){
         h.alive = false;
         herbAliveCount--;
         deathHerbAge++;
+        spawnEffect('death', h.x, h.y);
         continue;
       }
 
@@ -1300,6 +1430,7 @@ function tick(){
         h.alive = false;
         herbAliveCount--;
         deathHerbStarve++;
+        spawnEffect('death', h.x, h.y);
         continue;
       }
 
@@ -1339,6 +1470,7 @@ function tick(){
         c.alive = false;
         carnAliveCount--;
         deathCarnAge++;
+        spawnEffect('death', c.x, c.y);
         continue;
       }
 
@@ -1356,6 +1488,7 @@ function tick(){
             deathHerbEaten++;
             c.energy += traits.gain;
             herbAliveCount--;
+            spawnEffect('predation', c.x, c.y);
           }
         }
       }
@@ -1371,6 +1504,7 @@ function tick(){
         c.alive = false;
         carnAliveCount--;
         deathCarnStarve++;
+        spawnEffect('death', c.x, c.y);
         continue;
       }
 
@@ -1431,6 +1565,11 @@ function checkEndConditions(counts){
       applyEndCondition('肉食が絶滅');
       return;
     }
+  } else if(P.endCondition === 'totalExtinct'){
+    if(counts.grass === 0 && counts.herb === 0 && counts.carn === 0){
+      applyEndCondition('全生物が絶滅');
+      return;
+    }
   }
   if(step >= P.maxSteps){
     applyEndCondition('最大ステップ到達');
@@ -1449,10 +1588,13 @@ function applyEndCondition(reason){
 }
 
 function showEndModal(counts){
+  updateScore(counts, false);
   el('modalReason').textContent = endReason || '-';
   el('modalSteps').textContent = String(step);
   el('modalCounts').textContent = `草${counts.grass} / 草食${counts.herb} / 肉食${counts.carn}`;
   el('modalDeaths').textContent = `草食:飢餓${deathHerbStarve} 捕食${deathHerbEaten} 老衰${deathHerbAge} / 肉食:飢餓${deathCarnStarve} 老衰${deathCarnAge}`;
+  el('modalScore').textContent = `${scoreState.total}`;
+  el('modalScoreDetail').textContent = scoreBreakdownText();
   el('endModal').style.display = 'flex';
 }
 function hideEndModal(){
@@ -1494,6 +1636,7 @@ function getCounts(){
 
 function pushLog(){
   const counts = getCounts();
+  updateScore(counts, true);
   const herbRate = herbReproAttempts > 0 ? herbReproSuccess / herbReproAttempts : '';
   const carnRate = carnReproAttempts > 0 ? carnReproSuccess / carnReproAttempts : '';
   logs.push({
@@ -1525,9 +1668,27 @@ function pushLog(){
   carnReproAttempts = 0;
   carnReproSuccess = 0;
 }
+function updateScore(counts, recordSample){
+  if(recordSample){
+    const signal = counts.herb + counts.carn + counts.grass * 0.02;
+    stabilitySeries.push(signal);
+    if(stabilitySeries.length > MAX_STABILITY_SAMPLES) stabilitySeries.shift();
+  }
+  const biodiversity = Object.values(counts.species).filter(v=>v>0).length;
+  const base = step;
+  const bioBonus = biodiversity * SCORE_BIO_BONUS;
+  let stability = SCORE_STABILITY_BASE;
+  if(stabilitySeries.length > 1){
+    const mean = stabilitySeries.reduce((a,b)=>a+b,0) / stabilitySeries.length;
+    const variance = stabilitySeries.reduce((a,b)=>a+Math.pow(b-mean,2),0) / stabilitySeries.length;
+    stability = Math.max(0, SCORE_STABILITY_BASE - variance * 0.1);
+  }
+  scoreState = {total: Math.round(base + bioBonus + stability), base, bioBonus, biodiversity, stability: Math.round(stability)};
+}
 
 function refreshUI(){
   const counts = getCounts();
+  updateScore(counts, false);
   el('outStep').textContent = String(step);
   el('outSeed').textContent = currentSeed;
   el('outGrass').textContent = String(counts.grass);
@@ -1559,6 +1720,8 @@ function refreshUI(){
   el('outFinalCounts').textContent = `草${counts.grass} / 草食${counts.herb} / 肉食${counts.carn}`;
   el('outPeakCounts').textContent = `草${peakCounts.grass} / 草食${peakCounts.herb} / 肉食${peakCounts.carn}`;
   el('outDeaths').textContent = `草食:飢餓${deathHerbStarve} 捕食${deathHerbEaten} 老衰${deathHerbAge} / 肉食:飢餓${deathCarnStarve} 老衰${deathCarnAge}`;
+  el('outScore').textContent = String(scoreState.total);
+  el('outScoreDetail').textContent = scoreBreakdownText();
 }
 
 /* ========= Chart.js ========= */
@@ -1648,12 +1811,17 @@ function buildResultText(){
     `最終個体数: 草${counts.grass} / 草食${counts.herb} / 肉食${counts.carn}`,
     `最大個体数: 草${peakCounts.grass} / 草食${peakCounts.herb} / 肉食${peakCounts.carn}`,
     `死亡内訳: 草食(飢餓${deathHerbStarve} 捕食${deathHerbEaten} 老衰${deathHerbAge}) / 肉食(飢餓${deathCarnStarve} 老衰${deathCarnAge})`,
+    `スコア: ${scoreState.total} (${scoreBreakdownText()})`,
     `種別カウント: ${SPECIES_DEFS.map(sp=>`${sp.nameJP}:${counts.species[sp.id] ?? 0}`).join(' / ')}`
   ];
   return lines.join('\n');
 }
 function copyResult(){
   const txt = buildResultText();
+  navigator.clipboard?.writeText(txt);
+}
+function copyScoreShare(){
+  const txt = buildScoreShareText();
   navigator.clipboard?.writeText(txt);
 }
 
@@ -1686,6 +1854,7 @@ new p5((p)=>{
         const t = terrain[idx];
         const tone = grassTone[idx] * 0.4;
         const bio = biomass[idx];
+        const pat = terrainPattern[idx];
 
         if(overlayMode === 'terrain'){
           const colorMap = {
@@ -1697,10 +1866,7 @@ new p5((p)=>{
           const base = colorMap[t] || [44, 84, 62];
           p.fill(base[0], base[1], base[2]);
           p.rect(x*cellSize, y*cellSize, cellSize, cellSize);
-          if(t === TERRAIN.ROCK){
-            p.fill(170, 176, 188, 60);
-            p.rect(x*cellSize, y*cellSize, cellSize, cellSize);
-          }
+          drawTerrainPattern(p, x, y, t, pat);
         } else if(overlayMode === 'plant'){
           const ratio = clampFloat(bio / Math.max(1, P.plantK), 0, 1.2);
           const r = 30 + ratio * 50;
@@ -1729,10 +1895,7 @@ new p5((p)=>{
           else if(t === TERRAIN.FOREST) base = [26, 68, 44];
           p.fill(base[0] + tone*0.08, base[1] + tone*0.12, base[2] + tone*0.10);
           p.rect(x*cellSize, y*cellSize, cellSize, cellSize);
-          if(t === TERRAIN.ROCK){
-            p.fill(120,130,140, 60);
-            p.rect(x*cellSize, y*cellSize, cellSize, cellSize);
-          }
+          drawTerrainPattern(p, x, y, t, pat);
           if(bio > 0){
             const ratio = clampFloat(bio / P.plantK, 0, 1);
             const r = 40 + tone * 0.15;
@@ -1751,6 +1914,11 @@ new p5((p)=>{
 
     // 草食（エネルギーでサイズ変化）
     for(const sp of activeHerbSpecies){
+      p.push();
+      if(effectsEnabled){
+        p.drawingContext.shadowBlur = 12;
+        p.drawingContext.shadowColor = `rgba(${sp.color[0]},${sp.color[1]},${sp.color[2]},0.55)`;
+      }
       p.stroke(245);
       p.strokeWeight(2.2);
       p.fill(...sp.color);
@@ -1761,10 +1929,16 @@ new p5((p)=>{
         const size = getEnergySize(h.energy, cellSize*0.60, traits.reproduction);
         p.circle((h.x+0.5)*cellSize, (h.y+0.5)*cellSize, size);
       }
+      p.pop();
     }
 
     // 肉食（三角形）：輪郭つき
     for(const sp of activeCarnSpecies){
+      p.push();
+      if(effectsEnabled){
+        p.drawingContext.shadowBlur = 12;
+        p.drawingContext.shadowColor = `rgba(${sp.color[0]},${sp.color[1]},${sp.color[2]},0.55)`;
+      }
       p.stroke(245);
       p.strokeWeight(2.3);
       p.fill(...sp.color);
@@ -1775,6 +1949,7 @@ new p5((p)=>{
         const size = getEnergySize(c.energy, cellSize*0.70, traits.reproduction);
         drawTriangle(p, (c.x+0.5)*cellSize, (c.y+0.5)*cellSize, size);
       }
+      p.pop();
     }
 
     p.noStroke();
@@ -1821,11 +1996,19 @@ el('btnReset').addEventListener('click', ()=>{
 });
 el('btnCSV').addEventListener('click', downloadCSV);
 el('btnOpenDrawer').addEventListener('click', ()=>toggleDrawer(true));
+const inlineDrawerBtn = el('btnOpenDrawerInline');
+if(inlineDrawerBtn) inlineDrawerBtn.addEventListener('click', ()=>toggleDrawer(true));
+const forceEndBtn = el('btnForceEnd');
+if(forceEndBtn) forceEndBtn.addEventListener('click', ()=>{ if(!endReason) applyEndCondition('強制終了'); });
 el('btnCloseDrawer').addEventListener('click', ()=>toggleDrawer(false));
 el('btnCopyResult').addEventListener('click', copyResult);
+const btnCopyScore = el('btnCopyScore');
+if(btnCopyScore) btnCopyScore.addEventListener('click', copyScoreShare);
 el('btnModalReset').addEventListener('click', ()=>{ hideEndModal(); el('btnStart').textContent = '開始'; resetSim(); });
 el('btnModalCSV').addEventListener('click', downloadCSV);
 el('btnModalCopy').addEventListener('click', copyResult);
+const btnModalCopyScore = el('btnModalCopyScore');
+if(btnModalCopyScore) btnModalCopyScore.addEventListener('click', copyScoreShare);
 el('btnApplyScenario').addEventListener('click', ()=>{
   const key = el('selScenario').value;
   if(!key) return;
