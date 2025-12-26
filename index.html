@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Bio-Sphere Manager Demo</title>
+  <title>Bio-Sphere Manager デモ</title>
 
   <!-- CDN：p5.js（描画） / Chart.js（グラフ） -->
   <script src="https://cdn.jsdelivr.net/npm/p5@latest/lib/p5.min.js"></script>
@@ -65,66 +65,70 @@
 
 <body>
   <header>
-    <div class="title">Bio-Sphere Manager Demo</div>
-    <div class="sub">p5.js + Chart.js / GitHub Pages デモ（決定論 seed / CSVログ / 簡易UI）</div>
+    <div class="title">Bio-Sphere Manager デモ</div>
+    <div class="sub">p5.js + Chart.js / GitHub Pages 向け 単一HTML（決定論シード・CSVログ付き）</div>
   </header>
 
   <div class="layout">
     <!-- 左：シミュレーション -->
     <div class="card">
-      <h2>Simulation</h2>
+      <h2>シミュレーション</h2>
       <div class="pad" id="p5-container"></div>
       <div class="pad note">
-        描画：草（緑のセル）／草食（青）／肉食（赤）。<br>
-        ルール：ランダム移動→捕食/採食→代謝→繁殖。<br>
-        ※まずは「動く・ログが取れる」最小デモです（後で進化・環境変動・地図マスク等を追加します）。
+        描画：草（緑のセル）／草食（青）／肉食（赤）で表示しています。<br>
+        ルール：ランダム移動 → 捕食/採食 → 代謝 → 繁殖。<br>
+        同じseed・同じ初期パラメータなら挙動が再現されます（Math.randomは未使用）。
       </div>
     </div>
 
     <!-- 右：操作＆グラフ -->
     <div class="card">
-      <h2>Controls & Data</h2>
+      <h2>操作パネルとデータ</h2>
       <div class="pad">
         <div class="row">
-          <button id="btnStart" class="primary">Start</button>
-          <button id="btnStep">Step</button>
-          <button id="btnReset" class="danger">Reset</button>
-          <button id="btnCSV">Download CSV</button>
+          <button id="btnStart" class="primary">開始</button>
+          <button id="btnStep">1ステップ進める</button>
+          <button id="btnReset" class="danger">リセット</button>
+          <button id="btnCSV">CSVダウンロード</button>
+        </div>
+
+        <div class="note" style="margin-top:6px;">
+          CSV列: schema_version, seed, step, grass_count, herbivore_count, carnivore_count, death_herbivore_starve, death_herbivore_eaten, death_carnivore_starve
         </div>
 
         <div style="height:12px"></div>
 
         <div class="grid2">
           <div class="kv">
-            <div class="label">Step</div><div class="value mono" id="outStep">0</div>
+            <div class="label">ステップ</div><div class="value mono" id="outStep">0</div>
           </div>
           <div class="kv">
-            <div class="label">Seed</div><div class="value mono" id="outSeed">daily</div>
+            <div class="label">シード</div><div class="value mono" id="outSeed">daily</div>
           </div>
           <div class="kv">
-            <div class="label">Grass</div><div class="value mono" id="outGrass">0</div>
+            <div class="label">草</div><div class="value mono" id="outGrass">0</div>
           </div>
           <div class="kv">
-            <div class="label">Herbivore</div><div class="value mono" id="outHerb">0</div>
+            <div class="label">草食</div><div class="value mono" id="outHerb">0</div>
           </div>
           <div class="kv">
-            <div class="label">Carnivore</div><div class="value mono" id="outCarn">0</div>
+            <div class="label">肉食</div><div class="value mono" id="outCarn">0</div>
           </div>
           <div class="kv">
-            <div class="label">Status</div><div class="value mono" id="outStatus">stopped</div>
+            <div class="label">状態</div><div class="value mono" id="outStatus">停止中</div>
           </div>
         </div>
 
         <div style="height:14px"></div>
 
         <div class="row">
-          <label class="note">Seed（空=日替わり）</label>
-          <input id="inSeed" type="text" placeholder="e.g. exp-001" />
-          <label class="note"><input id="chkDaily" type="checkbox" checked /> daily</label>
+          <label class="note">任意seed文字列（空欄なら日替わりを使用）</label>
+          <input id="inSeed" type="text" placeholder="例: exp-001" />
+          <label class="note"><input id="chkDaily" type="checkbox" checked /> 日替わりseedを使う</label>
         </div>
 
         <div class="ctrl">
-          <label>FPS（描画速度）</label>
+          <label>描画速度（FPS）</label>
           <div class="row">
             <input id="slFPS" type="range" min="10" max="60" value="30" />
             <span class="mono" id="valFPS">30</span>
@@ -132,7 +136,7 @@
         </div>
 
         <div class="ctrl">
-          <label>Grass growth rate（0〜0.20）</label>
+          <label>草の成長率（0〜0.20）</label>
           <div class="row">
             <input id="slGrass" type="range" min="0" max="0.20" step="0.005" value="0.02" />
             <span class="mono" id="valGrass">0.02</span>
@@ -141,38 +145,38 @@
 
         <div class="grid2">
           <div class="ctrl">
-            <label>Init Grass</label>
+            <label>初期 草 数</label>
             <input id="inInitGrass" type="number" min="0" max="2500" value="800" />
           </div>
           <div class="ctrl">
-            <label>Init Herb</label>
+            <label>初期 草食 数</label>
             <input id="inInitHerb" type="number" min="0" max="500" value="80" />
           </div>
           <div class="ctrl">
-            <label>Init Carn</label>
+            <label>初期 肉食 数</label>
             <input id="inInitCarn" type="number" min="0" max="300" value="20" />
           </div>
           <div class="ctrl">
-            <label>Log interval</label>
+            <label>ログ間隔（ステップ）</label>
             <input id="inLogEvery" type="number" min="1" max="50" value="5" />
           </div>
         </div>
 
         <div class="grid2">
           <div class="ctrl">
-            <label>Herb gain</label>
+            <label>草食：採食エネルギー</label>
             <input id="inHerbGain" type="number" min="1" max="50" value="12" />
           </div>
           <div class="ctrl">
-            <label>Herb repro</label>
+            <label>草食：繁殖閾値</label>
             <input id="inHerbRepro" type="number" min="5" max="100" value="28" />
           </div>
           <div class="ctrl">
-            <label>Carn gain</label>
+            <label>肉食：捕食エネルギー</label>
             <input id="inCarnGain" type="number" min="1" max="80" value="22" />
           </div>
           <div class="ctrl">
-            <label>Carn repro</label>
+            <label>肉食：繁殖閾値</label>
             <input id="inCarnRepro" type="number" min="5" max="120" value="45" />
           </div>
         </div>
@@ -180,7 +184,7 @@
         <div style="height:14px"></div>
 
         <div class="card" style="border-color:#223247;">
-          <h2 style="padding:12px 12px 0">Population Chart</h2>
+          <h2 style="padding:12px 12px 0">個体数グラフ</h2>
           <div class="pad">
             <canvas id="chart" height="220"></canvas>
           </div>
@@ -229,6 +233,7 @@ let rng = mulberry32(1);
 let running = false;
 let step = 0;
 let tickPerFrame = 1;
+let statusMessage = '停止中';
 
 // 草：0/1
 let grass = new Uint8Array(N);
@@ -310,6 +315,7 @@ function resetSim(){
 
   step = 0;
   running = false;
+  statusMessage = '停止中';
   grass.fill(0);
   herbs = [];
   carns = [];
@@ -436,7 +442,9 @@ function tick(){
   const counts = getCounts();
   if(counts.herb === 0 || counts.carn === 0){
     running = false;
-    el('outStatus').textContent = 'stopped (extinction)';
+    statusMessage = '停止（絶滅）';
+    el('outStatus').textContent = statusMessage;
+    el('btnStart').textContent = '開始';
   }
 }
 
@@ -479,7 +487,12 @@ function refreshUI(){
   el('outGrass').textContent = String(counts.grass);
   el('outHerb').textContent  = String(counts.herb);
   el('outCarn').textContent  = String(counts.carn);
-  el('outStatus').textContent = running ? 'running' : 'stopped';
+  if(running){
+    statusMessage = '実行中';
+  } else if(statusMessage !== '停止（絶滅）'){
+    statusMessage = '停止中';
+  }
+  el('outStatus').textContent = statusMessage;
 }
 
 /* ========= Chart.js ========= */
@@ -492,9 +505,9 @@ function resetChart(){
     data: {
       labels: [],
       datasets: [
-        {label:'Grass', data:[], tension:0.2},
-        {label:'Herb',  data:[], tension:0.2},
-        {label:'Carn',  data:[], tension:0.2},
+        {label:'草', data:[], tension:0.2, borderColor:'#3daa65', backgroundColor:'rgba(61,170,101,0.20)'},
+        {label:'草食',  data:[], tension:0.2, borderColor:'#5aa2f7', backgroundColor:'rgba(90,162,247,0.20)'},
+        {label:'肉食',  data:[], tension:0.2, borderColor:'#e45a5a', backgroundColor:'rgba(228,90,90,0.20)'},
       ]
     },
     options: {
@@ -533,8 +546,8 @@ function downloadCSV(){
   const seedStr = getSeedString();
   const header = [
     "schema_version","seed","step",
-    "grass","herbivore","carnivore",
-    "death_herb_starve","death_herb_eaten","death_carn_starve"
+    "grass_count","herbivore_count","carnivore_count",
+    "death_herbivore_starve","death_herbivore_eaten","death_carnivore_starve"
   ].join(",");
 
   const rows = logs.map(r => [
@@ -618,7 +631,7 @@ new p5((p)=>{
 /* ========= ボタン配線 ========= */
 el('btnStart').addEventListener('click', ()=>{
   running = !running;
-  el('btnStart').textContent = running ? 'Stop' : 'Start';
+  el('btnStart').textContent = running ? '停止' : '開始';
   refreshUI();
 });
 el('btnStep').addEventListener('click', ()=>{
@@ -626,7 +639,7 @@ el('btnStep').addEventListener('click', ()=>{
   refreshUI();
 });
 el('btnReset').addEventListener('click', ()=>{
-  el('btnStart').textContent = 'Start';
+  el('btnStart').textContent = '開始';
   resetSim();
 });
 el('btnCSV').addEventListener('click', downloadCSV);
