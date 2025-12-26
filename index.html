@@ -93,7 +93,7 @@
         </div>
 
         <div class="note" style="margin-top:6px;">
-          CSV列: schema_version, seed, step, grass_count, herbivore_count, carnivore_count, death_herbivore_starve, death_herbivore_eaten, death_carnivore_starve
+          CSV列: schema_version, seed, step, grass_count, herbivore_count, carnivore_count, death_herbivore_starve, death_herbivore_eaten, death_carnivore_starve, death_herbivore_age, death_carnivore_age
           <br>パラメータ変更は次のフレームから即時反映（リセット不要）です。
         </div>
 
@@ -146,6 +146,17 @@
 
         <div class="grid2">
           <div class="ctrl">
+            <label>草食の寿命[step]</label>
+            <input id="inHerbMaxAge" type="number" min="10" max="2000" value="120" />
+          </div>
+          <div class="ctrl">
+            <label>肉食の寿命[step]</label>
+            <input id="inCarnMaxAge" type="number" min="10" max="2000" value="160" />
+          </div>
+        </div>
+
+        <div class="grid2">
+          <div class="ctrl">
             <label>初期 草 数</label>
             <input id="inInitGrass" type="number" min="0" max="2500" value="800" />
           </div>
@@ -179,6 +190,44 @@
           <div class="ctrl">
             <label>肉食：繁殖閾値</label>
             <input id="inCarnRepro" type="number" min="5" max="120" value="45" />
+          </div>
+        </div>
+
+        <div class="grid2">
+          <div class="ctrl">
+            <label>終了条件</label>
+            <select id="selEndCondition" style="width:180px; padding:8px; border-radius:10px; border:1px solid #243244; background:#0b1220; color:#e6edf3;">
+              <option value="anyExtinct">どれか1種が絶滅したら終了</option>
+              <option value="animalExtinct">草食か肉食が絶滅したら終了</option>
+            </select>
+          </div>
+          <div class="ctrl">
+            <label>最大ステップ</label>
+            <input id="inMaxSteps" type="number" min="10" max="20000" value="2000" />
+          </div>
+        </div>
+
+        <div class="card" style="border-color:#223247; margin-top:12px;">
+          <h2 style="padding:12px 12px 0">結果パネル</h2>
+          <div class="pad">
+            <div class="kv">
+              <div class="label">終了理由</div><div class="value mono" id="outEndReason">-</div>
+            </div>
+            <div class="kv">
+              <div class="label">総ステップ</div><div class="value mono" id="outTotalStep">0</div>
+            </div>
+            <div class="kv">
+              <div class="label">最終個体数</div><div class="value mono" id="outFinalCounts">草0 / 草食0 / 肉食0</div>
+            </div>
+            <div class="kv">
+              <div class="label">最大個体数</div><div class="value mono" id="outPeakCounts">草0 / 草食0 / 肉食0</div>
+            </div>
+            <div class="kv">
+              <div class="label">死亡内訳</div><div class="value mono" id="outDeaths">草食:飢餓0 捕食0 老衰0 / 肉食:飢餓0 老衰0</div>
+            </div>
+            <div class="row" style="margin-top:10px;">
+              <button id="btnCopyResult">結果をコピー</button>
+            </div>
           </div>
         </div>
 
@@ -229,7 +278,7 @@ const GRID = 50;
 const CANVAS = 600;
 const CELL = CANVAS / GRID; // 12
 const N = GRID * GRID;
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 let rng = mulberry32(1);
 let running = false;
@@ -263,12 +312,22 @@ let P = {
   carnGain: 22,
   carnRepro: 45,
   metabolism: 1,
+  herbMaxAge: 120,
+  carnMaxAge: 160,
+  endCondition: 'anyExtinct',
+  maxSteps: 2000,
 };
 
 // 死因ログ（最低限）
 let deathHerbStarve = 0;
 let deathCarnStarve = 0;
 let deathHerbEaten = 0;
+let deathHerbAge = 0;
+let deathCarnAge = 0;
+
+// 結果表示用
+let endReason = '';
+let peakCounts = {grass:0, herb:0, carn:0};
 
 /* ========= UI ========= */
 const el = (id)=>document.getElementById(id);
@@ -296,6 +355,10 @@ function readParamsFromUI(){
   P.herbRepro = clampInt(parseInt(el('inHerbRepro').value,10), 2, 500);
   P.carnGain  = clampInt(parseInt(el('inCarnGain').value,10), 1, 300);
   P.carnRepro = clampInt(parseInt(el('inCarnRepro').value,10), 2, 800);
+  P.herbMaxAge = clampInt(parseInt(el('inHerbMaxAge').value,10), 10, 2000);
+  P.carnMaxAge = clampInt(parseInt(el('inCarnMaxAge').value,10), 10, 2000);
+  P.endCondition = el('selEndCondition').value === 'animalExtinct' ? 'animalExtinct' : 'anyExtinct';
+  P.maxSteps = clampInt(parseInt(el('inMaxSteps').value,10), 10, 20000);
   logEvery = clampInt(parseInt(el('inLogEvery').value,10), 1, 50);
 
   const fps = clampInt(parseInt(el('slFPS').value,10), 10, 60);
@@ -326,6 +389,10 @@ function resetSim(){
   deathHerbStarve = 0;
   deathCarnStarve = 0;
   deathHerbEaten  = 0;
+  deathHerbAge = 0;
+  deathCarnAge = 0;
+  endReason = '';
+  peakCounts = {grass:0, herb:0, carn:0};
 
   // 草をランダム配置（重複を避けて指定数を確保）
   let gPlaced = 0;
@@ -339,14 +406,15 @@ function resetSim(){
 
   // 草食
   for(let i=0;i<P.initHerb;i++){
-    herbs.push({x: randInt(GRID), y: randInt(GRID), energy: 10 + randInt(10), alive:true});
+    herbs.push({x: randInt(GRID), y: randInt(GRID), energy: 10 + randInt(10), alive:true, age:0});
   }
 
   // 肉食
   for(let i=0;i<P.initCarn;i++){
-    carns.push({x: randInt(GRID), y: randInt(GRID), energy: 14 + randInt(12), alive:true});
+    carns.push({x: randInt(GRID), y: randInt(GRID), energy: 14 + randInt(12), alive:true, age:0});
   }
 
+  peakCounts = getCounts();
   resetChart();
   // ログ初回（チャート初期点を残す）
   pushLog();
@@ -356,7 +424,13 @@ function randInt(n){ return Math.floor(rng()*n); }
 
 /* ========= 1ステップ更新 ========= */
 function tick(){
+  if(endReason) return;
   step++;
+
+  if(step >= P.maxSteps){
+    applyEndCondition('最大ステップ到達');
+    return;
+  }
 
   // 1) 草の成長：空セルに確率で草が生える
   const g = P.grassGrowthRate;
@@ -369,6 +443,13 @@ function tick(){
   // 2) 草食の行動：移動→採食→代謝→繁殖
   for(const h of herbs){
     if(!h.alive) continue;
+
+    h.age += 1;
+    if(h.age >= P.herbMaxAge){
+      h.alive = false;
+      deathHerbAge++;
+      continue;
+    }
 
     moveRandom(h);
 
@@ -389,7 +470,7 @@ function tick(){
       // 簡易繁殖：エネルギーを半分に分けてコピー
       const childEnergy = Math.floor(h.energy / 2);
       h.energy = h.energy - childEnergy;
-      herbs.push({x:h.x, y:h.y, energy: childEnergy, alive:true});
+      herbs.push({x:h.x, y:h.y, energy: childEnergy, alive:true, age:0});
     }
   }
 
@@ -404,6 +485,13 @@ function tick(){
   // 4) 肉食の行動：移動→捕食→代謝→繁殖
   for(const c of carns){
     if(!c.alive) continue;
+
+    c.age += 1;
+    if(c.age >= P.carnMaxAge){
+      c.alive = false;
+      deathCarnAge++;
+      continue;
+    }
 
     moveRandom(c);
 
@@ -432,7 +520,7 @@ function tick(){
     if(c.energy >= P.carnRepro){
       const childEnergy = Math.floor(c.energy / 2);
       c.energy = c.energy - childEnergy;
-      carns.push({x:c.x, y:c.y, energy: childEnergy, alive:true});
+      carns.push({x:c.x, y:c.y, energy: childEnergy, alive:true, age:0});
     }
   }
 
@@ -445,14 +533,51 @@ function tick(){
   // 6) ログ
   if(step % logEvery === 0) pushLog();
 
-  // 7) 破綻チェック（どれかが0なら停止）
+  // 7) 終了チェック
   const counts = getCounts();
-  if(counts.herb === 0 || counts.carn === 0){
-    running = false;
-    statusMessage = '停止（絶滅）';
-    el('outStatus').textContent = statusMessage;
-    el('btnStart').textContent = '開始';
+  peakCounts.grass = Math.max(peakCounts.grass, counts.grass);
+  peakCounts.herb = Math.max(peakCounts.herb, counts.herb);
+  peakCounts.carn = Math.max(peakCounts.carn, counts.carn);
+  checkEndConditions(counts);
+}
+
+function checkEndConditions(counts){
+  if(endReason) return;
+  if(P.endCondition === 'anyExtinct'){
+    if(counts.grass === 0){
+      applyEndCondition('草が絶滅');
+      return;
+    }
+    if(counts.herb === 0){
+      applyEndCondition('草食が絶滅');
+      return;
+    }
+    if(counts.carn === 0){
+      applyEndCondition('肉食が絶滅');
+      return;
+    }
+  } else if(P.endCondition === 'animalExtinct'){
+    if(counts.herb === 0){
+      applyEndCondition('草食が絶滅');
+      return;
+    }
+    if(counts.carn === 0){
+      applyEndCondition('肉食が絶滅');
+      return;
+    }
   }
+  if(step >= P.maxSteps){
+    applyEndCondition('最大ステップ到達');
+  }
+}
+
+function applyEndCondition(reason){
+  endReason = reason;
+  running = false;
+  statusMessage = `終了：${reason}`;
+  el('btnStart').textContent = '開始';
+  pushLog();
+  refreshUI();
 }
 
 function moveRandom(a){
@@ -483,7 +608,9 @@ function pushLog(){
     carn: counts.carn,
     death_herb_starve: deathHerbStarve,
     death_herb_eaten: deathHerbEaten,
-    death_carn_starve: deathCarnStarve
+    death_carn_starve: deathCarnStarve,
+    death_herb_age: deathHerbAge,
+    death_carn_age: deathCarnAge
   });
   pushChartPoint(step, counts.grass, counts.herb, counts.carn);
 }
@@ -497,10 +624,15 @@ function refreshUI(){
   el('outCarn').textContent  = String(counts.carn);
   if(running){
     statusMessage = '実行中';
-  } else if(statusMessage !== '停止（絶滅）'){
+  } else if(!endReason) {
     statusMessage = '停止中';
   }
   el('outStatus').textContent = statusMessage;
+  el('outEndReason').textContent = endReason || '-';
+  el('outTotalStep').textContent = String(step);
+  el('outFinalCounts').textContent = `草${counts.grass} / 草食${counts.herb} / 肉食${counts.carn}`;
+  el('outPeakCounts').textContent = `草${peakCounts.grass} / 草食${peakCounts.herb} / 肉食${peakCounts.carn}`;
+  el('outDeaths').textContent = `草食:飢餓${deathHerbStarve} 捕食${deathHerbEaten} 老衰${deathHerbAge} / 肉食:飢餓${deathCarnStarve} 老衰${deathCarnAge}`;
 }
 
 /* ========= Chart.js ========= */
@@ -554,13 +686,13 @@ function downloadCSV(){
   const header = [
     "schema_version","seed","step",
     "grass_count","herbivore_count","carnivore_count",
-    "death_herbivore_starve","death_herbivore_eaten","death_carnivore_starve"
+    "death_herbivore_starve","death_herbivore_eaten","death_carnivore_starve","death_herbivore_age","death_carnivore_age"
   ].join(",");
 
   const rows = logs.map(r => [
     r.schema_version, JSON.stringify(r.seed), r.step,
     r.grass, r.herb, r.carn,
-    r.death_herb_starve, r.death_herb_eaten, r.death_carn_starve
+    r.death_herb_starve, r.death_herb_eaten, r.death_carn_starve, r.death_herb_age, r.death_carn_age
   ].join(","));
 
   const csv = [header, ...rows].join("\n");
@@ -574,6 +706,19 @@ function downloadCSV(){
   document.body.appendChild(a);
   a.click();
   a.remove();
+}
+
+function copyResult(){
+  const counts = getCounts();
+  const lines = [
+    `終了理由: ${endReason || '未終了'}`,
+    `総ステップ: ${step}`,
+    `最終個体数: 草${counts.grass} / 草食${counts.herb} / 肉食${counts.carn}`,
+    `最大個体数: 草${peakCounts.grass} / 草食${peakCounts.herb} / 肉食${peakCounts.carn}`,
+    `死亡内訳: 草食(飢餓${deathHerbStarve} 捕食${deathHerbEaten} 老衰${deathHerbAge}) / 肉食(飢餓${deathCarnStarve} 老衰${deathCarnAge})`
+  ];
+  const txt = lines.join('\n');
+  navigator.clipboard?.writeText(txt);
 }
 
 /* ========= p5.js 描画 ========= */
@@ -637,6 +782,9 @@ new p5((p)=>{
 
 /* ========= ボタン配線 ========= */
 el('btnStart').addEventListener('click', ()=>{
+  if(endReason){
+    resetSim();
+  }
   running = !running;
   el('btnStart').textContent = running ? '停止' : '開始';
   refreshUI();
@@ -650,6 +798,7 @@ el('btnReset').addEventListener('click', ()=>{
   resetSim();
 });
 el('btnCSV').addEventListener('click', downloadCSV);
+el('btnCopyResult').addEventListener('click', copyResult);
 
 // スライダー表示更新（初期）
 el('slFPS').addEventListener('input', ()=>{ readParamsFromUI(); });
