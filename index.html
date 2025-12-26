@@ -4,24 +4,642 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Bio-Sphere Manager Demo</title>
+
+  <!-- CDN：p5.js（描画） / Chart.js（グラフ） -->
+  <script src="https://cdn.jsdelivr.net/npm/p5@latest/lib/p5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@latest/dist/chart.umd.min.js"></script>
+
   <style>
     :root { color-scheme: dark; }
-    body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background:#0b0f14; color:#e6edf3; }
-    .wrap { max-width: 980px; margin: 48px auto; padding: 0 20px; }
-    .card { border: 1px solid #1f2a37; border-radius: 14px; padding: 20px; background: #0f1620; }
-    h1 { margin: 0 0 10px; font-size: 28px; }
-    p { margin: 8px 0; line-height: 1.6; }
-    .muted { color: #9fb0c3; }
-    code { background:#111a24; padding:2px 6px; border-radius:6px; }
+    body{
+      margin:0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background:#0b0f14; color:#e6edf3;
+    }
+    header{
+      padding:16px 18px; border-bottom:1px solid #17202b;
+      background: linear-gradient(180deg, #0f1620, #0b0f14);
+      position: sticky; top:0; z-index:10;
+    }
+    header .title{font-size:18px; font-weight:700;}
+    header .sub{font-size:12px; color:#9fb0c3; margin-top:4px;}
+    .layout{
+      display:grid; grid-template-columns: 640px 1fr; gap:16px;
+      padding:16px; max-width: 1200px; margin:0 auto;
+    }
+    .card{
+      border:1px solid #1f2a37; border-radius:14px; background:#0f1620;
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    .card h2{margin:0; font-size:14px; color:#9fb0c3; font-weight:700; padding:12px 12px 0;}
+    .pad{padding:12px;}
+    .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+    button{
+      background:#132235; color:#e6edf3; border:1px solid #243244;
+      border-radius:10px; padding:8px 10px; cursor:pointer;
+    }
+    button:hover{background:#162a42;}
+    button.primary{background:#1b3554; border-color:#2a466b;}
+    button.danger{background:#3a1620; border-color:#5a2430;}
+    input[type="number"], input[type="text"]{
+      width: 140px; padding:8px; border-radius:10px;
+      border:1px solid #243244; background:#0b1220; color:#e6edf3;
+    }
+    .kv{display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center;}
+    .kv .label{color:#9fb0c3; font-size:12px;}
+    .kv .value{font-variant-numeric: tabular-nums;}
+    .grid2{display:grid; grid-template-columns: 1fr 1fr; gap:10px;}
+    .ctrl{
+      display:grid; grid-template-columns: 1fr auto; gap:10px;
+      align-items:center; margin-top:10px;
+    }
+    .ctrl label{font-size:12px; color:#9fb0c3;}
+    .ctrl input[type="range"]{width: 260px;}
+    canvas{display:block; border-radius:12px;}
+    .note{font-size:12px; color:#9fb0c3; line-height:1.6;}
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;}
+    @media (max-width: 1100px){
+      .layout{grid-template-columns: 1fr; }
+    }
   </style>
 </head>
+
 <body>
-  <div class="wrap">
+  <header>
+    <div class="title">Bio-Sphere Manager Demo</div>
+    <div class="sub">p5.js + Chart.js / GitHub Pages デモ（決定論 seed / CSVログ / 簡易UI）</div>
+  </header>
+
+  <div class="layout">
+    <!-- 左：シミュレーション -->
     <div class="card">
-      <h1>Bio-Sphere Manager Demo</h1>
-      <p class="muted">GitHub Pages 動作確認ページ（MVP準備中）</p>
-      <p>次：<code>p5.js</code> + <code>Chart.js</code> を組み込み、シミュレーション本体を実装します。</p>
+      <h2>Simulation</h2>
+      <div class="pad" id="p5-container"></div>
+      <div class="pad note">
+        描画：草（緑のセル）／草食（青）／肉食（赤）。<br>
+        ルール：ランダム移動→捕食/採食→代謝→繁殖。<br>
+        ※まずは「動く・ログが取れる」最小デモです（後で進化・環境変動・地図マスク等を追加します）。
+      </div>
+    </div>
+
+    <!-- 右：操作＆グラフ -->
+    <div class="card">
+      <h2>Controls & Data</h2>
+      <div class="pad">
+        <div class="row">
+          <button id="btnStart" class="primary">Start</button>
+          <button id="btnStep">Step</button>
+          <button id="btnReset" class="danger">Reset</button>
+          <button id="btnCSV">Download CSV</button>
+        </div>
+
+        <div style="height:12px"></div>
+
+        <div class="grid2">
+          <div class="kv">
+            <div class="label">Step</div><div class="value mono" id="outStep">0</div>
+          </div>
+          <div class="kv">
+            <div class="label">Seed</div><div class="value mono" id="outSeed">daily</div>
+          </div>
+          <div class="kv">
+            <div class="label">Grass</div><div class="value mono" id="outGrass">0</div>
+          </div>
+          <div class="kv">
+            <div class="label">Herbivore</div><div class="value mono" id="outHerb">0</div>
+          </div>
+          <div class="kv">
+            <div class="label">Carnivore</div><div class="value mono" id="outCarn">0</div>
+          </div>
+          <div class="kv">
+            <div class="label">Status</div><div class="value mono" id="outStatus">stopped</div>
+          </div>
+        </div>
+
+        <div style="height:14px"></div>
+
+        <div class="row">
+          <label class="note">Seed（空=日替わり）</label>
+          <input id="inSeed" type="text" placeholder="e.g. exp-001" />
+          <label class="note"><input id="chkDaily" type="checkbox" checked /> daily</label>
+        </div>
+
+        <div class="ctrl">
+          <label>FPS（描画速度）</label>
+          <div class="row">
+            <input id="slFPS" type="range" min="10" max="60" value="30" />
+            <span class="mono" id="valFPS">30</span>
+          </div>
+        </div>
+
+        <div class="ctrl">
+          <label>Grass growth rate（0〜0.20）</label>
+          <div class="row">
+            <input id="slGrass" type="range" min="0" max="0.20" step="0.005" value="0.02" />
+            <span class="mono" id="valGrass">0.02</span>
+          </div>
+        </div>
+
+        <div class="grid2">
+          <div class="ctrl">
+            <label>Init Grass</label>
+            <input id="inInitGrass" type="number" min="0" max="2500" value="800" />
+          </div>
+          <div class="ctrl">
+            <label>Init Herb</label>
+            <input id="inInitHerb" type="number" min="0" max="500" value="80" />
+          </div>
+          <div class="ctrl">
+            <label>Init Carn</label>
+            <input id="inInitCarn" type="number" min="0" max="300" value="20" />
+          </div>
+          <div class="ctrl">
+            <label>Log interval</label>
+            <input id="inLogEvery" type="number" min="1" max="50" value="5" />
+          </div>
+        </div>
+
+        <div class="grid2">
+          <div class="ctrl">
+            <label>Herb gain</label>
+            <input id="inHerbGain" type="number" min="1" max="50" value="12" />
+          </div>
+          <div class="ctrl">
+            <label>Herb repro</label>
+            <input id="inHerbRepro" type="number" min="5" max="100" value="28" />
+          </div>
+          <div class="ctrl">
+            <label>Carn gain</label>
+            <input id="inCarnGain" type="number" min="1" max="80" value="22" />
+          </div>
+          <div class="ctrl">
+            <label>Carn repro</label>
+            <input id="inCarnRepro" type="number" min="5" max="120" value="45" />
+          </div>
+        </div>
+
+        <div style="height:14px"></div>
+
+        <div class="card" style="border-color:#223247;">
+          <h2 style="padding:12px 12px 0">Population Chart</h2>
+          <div class="pad">
+            <canvas id="chart" height="220"></canvas>
+          </div>
+        </div>
+
+      </div>
     </div>
   </div>
+
+<script>
+/**
+ * Bio-Sphere Manager Demo
+ * - 単一HTML（GitHub Pages向け）
+ * - p5.jsで描画、Chart.jsで個体数推移
+ * - 決定論のため seed RNG（Math.randomは使わない）
+ * - CSVログ出力（研究・検証用の最低限）
+ */
+
+/* ========= 決定論RNG（Mulberry32） ========= */
+function hash32FromString(str){
+  // 文字列を32bitに潰す（簡易ハッシュ）
+  let h = 2166136261 >>> 0;
+  for(let i=0;i<str.length;i++){
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+function mulberry32(seed){
+  let a = seed >>> 0;
+  return function(){
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* ========= シミュレーション設定 ========= */
+const GRID = 50;
+const CANVAS = 600;
+const CELL = CANVAS / GRID; // 12
+const N = GRID * GRID;
+
+let rng = mulberry32(1);
+let running = false;
+let step = 0;
+let tickPerFrame = 1;
+
+// 草：0/1
+let grass = new Uint8Array(N);
+
+// 動物
+let herbs = []; // {x,y,energy,alive}
+let carns = []; // {x,y,energy,alive}
+
+// 作業用：セルごとの草食インデックス（再利用してGCを抑える）
+let herbsAt = Array.from({length:N}, ()=>[]);
+
+// ログ（CSV出力用）
+let logs = [];
+let logEvery = 5;
+
+// パラメータ（UIから読み込み）
+let P = {
+  initGrass: 800,
+  initHerb: 80,
+  initCarn: 20,
+  grassGrowthRate: 0.02,
+  herbGain: 12,
+  herbRepro: 28,
+  carnGain: 22,
+  carnRepro: 45,
+  metabolism: 1,
+};
+
+// 死因ログ（最低限）
+let deathHerbStarve = 0;
+let deathCarnStarve = 0;
+let deathHerbEaten = 0;
+
+/* ========= UI ========= */
+const el = (id)=>document.getElementById(id);
+
+function todayKey(){
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+
+function getSeedString(){
+  if(el('chkDaily').checked) return `daily:${todayKey()}`;
+  const s = el('inSeed').value.trim();
+  return s ? s : `manual:${todayKey()}`;
+}
+
+function readParamsFromUI(){
+  P.initGrass = clampInt(parseInt(el('inInitGrass').value,10), 0, N);
+  P.initHerb  = clampInt(parseInt(el('inInitHerb').value,10), 0, 5000);
+  P.initCarn  = clampInt(parseInt(el('inInitCarn').value,10), 0, 5000);
+  P.grassGrowthRate = clampFloat(parseFloat(el('slGrass').value), 0, 0.2);
+  P.herbGain  = clampInt(parseInt(el('inHerbGain').value,10), 1, 200);
+  P.herbRepro = clampInt(parseInt(el('inHerbRepro').value,10), 2, 500);
+  P.carnGain  = clampInt(parseInt(el('inCarnGain').value,10), 1, 300);
+  P.carnRepro = clampInt(parseInt(el('inCarnRepro').value,10), 2, 800);
+  logEvery = clampInt(parseInt(el('inLogEvery').value,10), 1, 50);
+
+  const fps = clampInt(parseInt(el('slFPS').value,10), 10, 60);
+  el('valFPS').textContent = fps;
+  tickPerFrame = Math.max(1, Math.round(fps / 30)); // ざっくり（後で精密化可）
+
+  el('valGrass').textContent = P.grassGrowthRate.toFixed(3);
+  el('valFPS').textContent = String(fps);
+}
+function clampInt(v,min,max){ if(Number.isNaN(v)) v=min; return Math.min(max, Math.max(min, v)); }
+function clampFloat(v,min,max){ if(Number.isNaN(v)) v=min; return Math.min(max, Math.max(min, v)); }
+
+/* ========= 初期化 ========= */
+function resetSim(){
+  readParamsFromUI();
+
+  const seedStr = getSeedString();
+  const seed32 = hash32FromString(seedStr);
+  rng = mulberry32(seed32);
+
+  step = 0;
+  running = false;
+  grass.fill(0);
+  herbs = [];
+  carns = [];
+  logs = [];
+  deathHerbStarve = 0;
+  deathCarnStarve = 0;
+  deathHerbEaten  = 0;
+
+  // 草をランダム配置
+  for(let i=0;i<P.initGrass;i++){
+    const idx = Math.floor(rng()*N);
+    grass[idx] = 1;
+  }
+
+  // 草食
+  for(let i=0;i<P.initHerb;i++){
+    herbs.push({x: randInt(GRID), y: randInt(GRID), energy: 10 + randInt(10), alive:true});
+  }
+
+  // 肉食
+  for(let i=0;i<P.initCarn;i++){
+    carns.push({x: randInt(GRID), y: randInt(GRID), energy: 14 + randInt(12), alive:true});
+  }
+
+  // ログ初回
+  pushLog();
+  refreshUI();
+  resetChart();
+}
+function randInt(n){ return Math.floor(rng()*n); }
+
+/* ========= 1ステップ更新 ========= */
+function tick(){
+  step++;
+
+  // 1) 草の成長：空セルに確率で草が生える
+  const g = P.grassGrowthRate;
+  if(g > 0){
+    for(let i=0;i<N;i++){
+      if(grass[i]===0 && rng() < g) grass[i] = 1;
+    }
+  }
+
+  // 2) 草食の行動：移動→採食→代謝→繁殖
+  for(const h of herbs){
+    if(!h.alive) continue;
+
+    moveRandom(h);
+
+    const idx = h.y * GRID + h.x;
+    if(grass[idx] === 1){
+      grass[idx] = 0;
+      h.energy += P.herbGain;
+    }
+
+    h.energy -= P.metabolism;
+    if(h.energy <= 0){
+      h.alive = false;
+      deathHerbStarve++;
+      continue;
+    }
+
+    if(h.energy >= P.herbRepro){
+      // 簡易繁殖：エネルギーを半分に分けてコピー
+      const childEnergy = Math.floor(h.energy / 2);
+      h.energy = h.energy - childEnergy;
+      herbs.push({x:h.x, y:h.y, energy: childEnergy, alive:true});
+    }
+  }
+
+  // 3) 草食のセル配置（肉食が捕食するため）
+  for(let i=0;i<N;i++) herbsAt[i].length = 0;
+  for(let i=0;i<herbs.length;i++){
+    const h = herbs[i];
+    if(!h.alive) continue;
+    herbsAt[h.y * GRID + h.x].push(i);
+  }
+
+  // 4) 肉食の行動：移動→捕食→代謝→繁殖
+  for(const c of carns){
+    if(!c.alive) continue;
+
+    moveRandom(c);
+
+    const idx = c.y * GRID + c.x;
+    const list = herbsAt[idx];
+    if(list.length > 0){
+      // そのセルの草食を1個体捕食（最後の要素）
+      const hi = list.pop();
+      if(hi !== undefined){
+        const prey = herbs[hi];
+        if(prey && prey.alive){
+          prey.alive = false;
+          deathHerbEaten++;
+          c.energy += P.carnGain;
+        }
+      }
+    } else {
+      c.energy -= P.metabolism;
+      if(c.energy <= 0){
+        c.alive = false;
+        deathCarnStarve++;
+        continue;
+      }
+    }
+
+    if(c.energy >= P.carnRepro){
+      const childEnergy = Math.floor(c.energy / 2);
+      c.energy = c.energy - childEnergy;
+      carns.push({x:c.x, y:c.y, energy: childEnergy, alive:true});
+    }
+  }
+
+  // 5) 死体除去（配列を軽く保つ）
+  if(step % 10 === 0){
+    herbs = herbs.filter(h=>h.alive);
+    carns = carns.filter(c=>c.alive);
+  }
+
+  // 6) ログ
+  if(step % logEvery === 0) pushLog();
+
+  // 7) 破綻チェック（どれかが0なら停止）
+  const counts = getCounts();
+  if(counts.herb === 0 || counts.carn === 0){
+    running = false;
+    el('outStatus').textContent = 'stopped (extinction)';
+  }
+}
+
+function moveRandom(a){
+  // トーラス（端で折り返し）にして境界の癖を減らす
+  const r = rng();
+  if(r < 0.25) a.x = (a.x + 1) % GRID;
+  else if(r < 0.50) a.x = (a.x - 1 + GRID) % GRID;
+  else if(r < 0.75) a.y = (a.y + 1) % GRID;
+  else a.y = (a.y - 1 + GRID) % GRID;
+}
+
+function getCounts(){
+  let gCount = 0;
+  for(let i=0;i<N;i++) if(grass[i]===1) gCount++;
+  let hCount = 0; for(const h of herbs) if(h.alive) hCount++;
+  let cCount = 0; for(const c of carns) if(c.alive) cCount++;
+  return {grass:gCount, herb:hCount, carn:cCount};
+}
+
+function pushLog(){
+  const counts = getCounts();
+  logs.push({
+    step,
+    grass: counts.grass,
+    herb: counts.herb,
+    carn: counts.carn,
+    death_herb_starve: deathHerbStarve,
+    death_herb_eaten: deathHerbEaten,
+    death_carn_starve: deathCarnStarve
+  });
+  pushChartPoint(step, counts.grass, counts.herb, counts.carn);
+}
+
+function refreshUI(){
+  const seedStr = getSeedString();
+  const counts = getCounts();
+  el('outStep').textContent = String(step);
+  el('outSeed').textContent = seedStr;
+  el('outGrass').textContent = String(counts.grass);
+  el('outHerb').textContent  = String(counts.herb);
+  el('outCarn').textContent  = String(counts.carn);
+  el('outStatus').textContent = running ? 'running' : 'stopped';
+}
+
+/* ========= Chart.js ========= */
+let chart = null;
+function resetChart(){
+  const ctx = el('chart').getContext('2d');
+  if(chart) chart.destroy();
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        {label:'Grass', data:[], tension:0.2},
+        {label:'Herb',  data:[], tension:0.2},
+        {label:'Carn',  data:[], tension:0.2},
+      ]
+    },
+    options: {
+      responsive:true,
+      animation:false,
+      scales: {
+        x: { ticks:{maxTicksLimit:10} },
+        y: { beginAtZero:true }
+      },
+      plugins: {
+        legend: { labels:{ color:'#c9d6e2' } }
+      }
+    }
+  });
+}
+function pushChartPoint(step, g, h, c){
+  if(!chart) return;
+  // グラフは重くしないため、ログ間隔でのみ更新（logsと同じタイミング）
+  chart.data.labels.push(step);
+  chart.data.datasets[0].data.push(g);
+  chart.data.datasets[1].data.push(h);
+  chart.data.datasets[2].data.push(c);
+
+  const maxPoints = 300;
+  if(chart.data.labels.length > maxPoints){
+    chart.data.labels.shift();
+    for(const ds of chart.data.datasets) ds.data.shift();
+  }
+  chart.update('none');
+}
+
+/* ========= CSV出力 ========= */
+function downloadCSV(){
+  if(logs.length === 0) return;
+
+  const seedStr = getSeedString();
+  const header = [
+    "schema_version","seed","step",
+    "grass","herbivore","carnivore",
+    "death_herb_starve","death_herb_eaten","death_carn_starve"
+  ].join(",");
+
+  const rows = logs.map(r => [
+    1, JSON.stringify(seedStr), r.step,
+    r.grass, r.herb, r.carn,
+    r.death_herb_starve, r.death_herb_eaten, r.death_carn_starve
+  ].join(","));
+
+  const csv = [header, ...rows].join("\n");
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
+  const ts = new Date().toISOString().replace(/[:.]/g,'-');
+  const name = `simulation_log_${ts}.csv`;
+
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+/* ========= p5.js 描画 ========= */
+new p5((p)=>{
+  p.setup = () => {
+    const cnv = p.createCanvas(CANVAS, CANVAS);
+    cnv.parent("p5-container");
+    p.frameRate(30);
+  };
+
+  p.draw = () => {
+    // 速度反映
+    readParamsFromUI();
+
+    // 進行
+    if(running){
+      for(let t=0;t<tickPerFrame;t++) tick();
+    }
+
+    // 背景
+    p.background(10, 16, 24);
+
+    // 草（セル塗り）
+    p.noStroke();
+    for(let y=0;y<GRID;y++){
+      for(let x=0;x<GRID;x++){
+        const idx = y*GRID + x;
+        if(grass[idx]===1){
+          // 緑系
+          p.fill(30, 140, 80);
+          p.rect(x*CELL, y*CELL, CELL, CELL);
+        }
+      }
+    }
+
+    // 草食（青）
+    p.fill(60, 140, 240);
+    for(const h of herbs){
+      if(!h.alive) continue;
+      p.circle((h.x+0.5)*CELL, (h.y+0.5)*CELL, CELL*0.70);
+    }
+
+    // 肉食（赤）
+    p.fill(230, 80, 80);
+    for(const c of carns){
+      if(!c.alive) continue;
+      p.circle((c.x+0.5)*CELL, (c.y+0.5)*CELL, CELL*0.78);
+    }
+
+    // 格子（薄く）
+    p.stroke(22, 32, 46);
+    p.strokeWeight(1);
+    for(let i=0;i<=GRID;i++){
+      p.line(i*CELL, 0, i*CELL, CANVAS);
+      p.line(0, i*CELL, CANVAS, i*CELL);
+    }
+
+    refreshUI();
+  };
+});
+
+/* ========= ボタン配線 ========= */
+el('btnStart').addEventListener('click', ()=>{
+  running = !running;
+  el('btnStart').textContent = running ? 'Stop' : 'Start';
+  refreshUI();
+});
+el('btnStep').addEventListener('click', ()=>{
+  if(!running) tick();
+  refreshUI();
+});
+el('btnReset').addEventListener('click', ()=>{
+  el('btnStart').textContent = 'Start';
+  resetSim();
+});
+el('btnCSV').addEventListener('click', downloadCSV);
+
+// スライダー表示更新（初期）
+el('slFPS').addEventListener('input', ()=>{ readParamsFromUI(); });
+el('slGrass').addEventListener('input', ()=>{ readParamsFromUI(); });
+el('chkDaily').addEventListener('change', ()=>{ resetSim(); });
+el('inSeed').addEventListener('change', ()=>{ resetSim(); });
+
+// 初期化
+readParamsFromUI();
+resetSim();
+</script>
 </body>
 </html>
