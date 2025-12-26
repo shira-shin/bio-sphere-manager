@@ -24,10 +24,7 @@
     }
     header .title{font-size:22px; font-weight:800;}
     header .sub{font-size:13px; color:#9fb0c3; margin-top:6px;}
-    .layout{
-      display:grid; grid-template-columns: minmax(0, 2.2fr) minmax(340px, 1fr); gap:20px;
-      padding:18px; max-width: 1440px; margin:0 auto;
-    }
+    .layout{display:none;}
     .card{
       border:1px solid #1f2a37; border-radius:16px; background:#0f1620;
       box-shadow: 0 10px 30px rgba(0,0,0,.35);
@@ -58,7 +55,7 @@
     .ctrl label{font-size:13px; color:#c3d5eb;}
     .ctrl input[type="range"]{width: 260px;}
     #p5-container{position:relative; min-height:620px;}
-    canvas{display:block; border-radius:12px; width:100%; height:auto;}
+    canvas{display:block; border-radius:16px; width:100%; height:auto; box-shadow:0 14px 38px rgba(0,0,0,0.45);}
     .note{font-size:12px; color:#9fb0c3; line-height:1.6;}
     .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;}
     .section{
@@ -74,9 +71,12 @@
     .help{font-size:11px; color:#7ea0c4;}
     .preset-row{display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;}
     .badge-warning{color:#f5d97a; background:#4a3810; border:1px solid #8f6d1f; padding:2px 6px; border-radius:8px; font-size:11px;}
-    .canvas-wrap{position:relative; border:1px solid #1f2a37; border-radius:16px; padding:12px; background:#0b1220; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.02);}
-    .canvas-hud{position:absolute; inset:14px auto auto 14px; z-index:5; min-width:260px; max-width:380px; background:rgba(8,12,18,0.68); backdrop-filter: blur(6px); border:1px solid #223247; border-radius:14px; padding:12px 14px; box-shadow:0 12px 34px rgba(0,0,0,0.45); display:grid; gap:10px;}
-    .hud-top{display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;}
+    .canvas-wrap{position:relative; border-radius:18px; padding:12px; background:radial-gradient(circle at 30% 20%, rgba(70,120,200,0.08), transparent 42%), linear-gradient(180deg, rgba(16,24,36,0.9), rgba(8,12,18,0.96)); box-shadow:inset 0 0 0 1px rgba(255,255,255,0.02), 0 16px 46px rgba(0,0,0,0.55);}
+    .canvas-hud{position:absolute; inset:12px auto auto 12px; z-index:8; min-width:240px; max-width:360px; background:rgba(8,12,18,0.78); backdrop-filter: blur(8px); border:1px solid #223247; border-radius:14px; padding:10px 12px; box-shadow:0 12px 34px rgba(0,0,0,0.45); display:grid; gap:8px; cursor:grab;}
+    .canvas-hud.dragging{cursor:grabbing;}
+    .canvas-hud.collapsed .hud-grid,.canvas-hud.collapsed .hud-top{display:none;}
+    .canvas-hud.collapsed{min-width:180px;}
+    .hud-top{display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:space-between;}
     .hud-status{display:grid; gap:4px;}
     .hud-status .label{font-size:12px; color:#9fb0c3;}
     .hud-pill{padding:8px 12px; border-radius:999px; border:1px solid #2a3a52; font-weight:800; background:#132235; min-width:120px; text-align:center; letter-spacing:0.05em;}
@@ -123,8 +123,40 @@
     .drawer-title{font-size:18px; font-weight:800;}
     .drawer-body{padding:16px; overflow-y:auto; height:100%;}
     .chip{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid #2a3a52; background:#132235; font-size:12px; color:#9fb0c3;}
+    .stage{max-width:1500px; margin:0 auto; padding:18px; display:grid; gap:14px;}
+    .map-area{display:grid; gap:12px;}
+    .map-head{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;}
+    .overlay-switch{display:flex; gap:6px; align-items:center; flex-wrap:wrap;}
+    .overlay-switch .label{font-size:13px; color:#9fb0c3;}
+    .overlay-btn{padding:8px 10px; border-radius:12px; border:1px solid #1f2a37; background:#0f1a2a; color:#c9d6e2; cursor:pointer; font-size:13px;}
+    .overlay-btn.active{background:#1b3554; border-color:#2a466b; color:#e6edf3; box-shadow:0 0 0 1px rgba(90,162,247,0.4);}
+    .legend-card{position:absolute; inset:auto 12px 12px auto; z-index:7; background:rgba(10,16,24,0.82); border:1px solid #223247; border-radius:12px; padding:10px 12px; display:grid; gap:6px; min-width:210px; box-shadow:0 10px 28px rgba(0,0,0,0.5); font-size:13px;}
+    .legend-title{font-weight:700; color:#dce6f3;}
+    .legend-row{display:flex; align-items:center; gap:8px; color:#c9d6e2;}
+    .legend-swatch{width:16px; height:16px; border-radius:4px; border:1px solid #d9e2f3;}
+    .legend-swatch.circle{border-radius:50%;}
+    .legend-swatch.tri{width:0; height:0; border-left:9px solid transparent; border-right:9px solid transparent; border-top:16px solid #d9e2f3; border-radius:0; border:0;}
+    .floating-toolbar{position:fixed; right:18px; top:86px; display:flex; flex-direction:column; gap:8px; z-index:20; align-items:flex-end;}
+    .toolbar-row{display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;}
+    .toolbar-card{background:rgba(12,18,26,0.92); border:1px solid #1f2a37; border-radius:14px; padding:10px; box-shadow:0 12px 34px rgba(0,0,0,0.45);}
+    .floating-settings{position:fixed; right:18px; bottom:20px; z-index:25;}
+    .fab{border-radius:999px; padding:12px 18px; font-weight:700; box-shadow:0 12px 32px rgba(0,0,0,0.45);}
+    .hud-grid{grid-template-columns: repeat(auto-fit, minmax(120px,1fr));}
+    .hud-item .value{font-size:20px;}
+    .hud-item{padding:8px 10px;}
+    .hud-meta{font-size:12px;}
+    .hud-pill{padding:6px 10px;}
+    .hud-header{display:flex; justify-content:space-between; gap:8px; align-items:center;}
+    .hud-actions{display:flex; gap:6px;}
+    .badge{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; background:#12263a; border:1px solid #20354e; color:#9fb0c3; font-size:12px;}
+    .compact-note{font-size:13px; color:#8ea7c4;}
+    .map-status{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+    .quick-strip{display:flex; gap:6px; align-items:center; flex-wrap:wrap;}
+    .tiny{font-size:12px; color:#8ea7c4;}
+    .drawer-body .grid3{display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap:12px;}
     @media (max-width: 1100px){
-      .layout{grid-template-columns: 1fr; }
+      .floating-toolbar{position:static; padding:12px; align-items:flex-start;}
+      .floating-settings{position:fixed; right:14px; bottom:14px;}
       .canvas-hud{position:relative; inset:auto; margin-top:10px;}
       .canvas-wrap{padding:10px;}
       #p5-container{min-height:540px;}
@@ -138,93 +170,104 @@
     <div class="sub">p5.js + Chart.js / GitHub Pages 向け 単一HTML（決定論シード・CSVログ付き）</div>
   </header>
 
-  <div class="layout">
-    <!-- 左：シミュレーション -->
-    <div class="card">
-      <h2>シミュレーション</h2>
-      <div class="pad">
-        <div class="canvas-wrap">
-          <div id="p5-container"></div>
-          <div class="canvas-hud" aria-live="polite">
-            <div class="hud-top">
-              <div class="hud-status">
-                <div class="label">状態（実行中/停止/終了）</div>
-                <div class="hud-pill" id="outStatus">停止中</div>
-              </div>
-              <div class="hud-meta">ステップ <span id="outStep">0</span></div>
+  <div class="stage">
+    <div class="map-area">
+      <div class="map-head">
+        <div class="map-status">
+          <span class="badge">マップ優先ビュー</span>
+          <span class="compact-note">HUDはドラッグで動かせます。設定は右下「設定」から。</span>
+        </div>
+        <div class="overlay-switch" role="group" aria-label="表示モード">
+          <span class="label">表示モード</span>
+          <button class="overlay-btn active" data-mode="life">生物</button>
+          <button class="overlay-btn" data-mode="terrain">地形</button>
+          <button class="overlay-btn" data-mode="plant">植物量</button>
+          <button class="overlay-btn" data-mode="temp">気温</button>
+          <button class="overlay-btn" data-mode="rain">雨量/水分</button>
+        </div>
+      </div>
+      <div class="canvas-wrap">
+        <div id="p5-container"></div>
+        <div class="canvas-hud" aria-live="polite" id="hud">
+          <div class="hud-header">
+            <div class="hud-status">
+              <div class="label">状態</div>
+              <div class="hud-pill" id="outStatus">停止中</div>
             </div>
-            <div class="hud-meta mono">シード: <span id="outSeed">daily</span></div>
-            <div class="hud-grid">
-              <div class="hud-item">
-                <div class="label">草</div>
-                <div class="value" id="outGrass">0</div>
-              </div>
-              <div class="hud-item">
-                <div class="label">草食</div>
-                <div class="value" id="outHerb">0</div>
-              </div>
-              <div class="hud-item">
-                <div class="label">肉食</div>
-                <div class="value" id="outCarn">0</div>
-              </div>
-              <div class="hud-item">
-                <div class="label">季節</div>
-                <div class="value" id="outSeason">－</div>
-              </div>
-              <div class="hud-item">
-                <div class="label">気温</div>
-                <div class="value" id="outTemp">－</div>
-              </div>
-              <div class="hud-item">
-                <div class="label">雨量</div>
-                <div class="value" id="outRain">－</div>
-              </div>
+            <div class="hud-actions">
+              <button class="ghost" id="btnHudToggle">⤢</button>
+            </div>
+          </div>
+          <div class="hud-top">
+            <div class="hud-meta">ステップ <span id="outStep">0</span></div>
+            <div class="hud-meta mono">seed: <span id="outSeed">daily</span></div>
+          </div>
+          <div class="hud-grid">
+            <div class="hud-item">
+              <div class="label">草</div>
+              <div class="value" id="outGrass">0</div>
+            </div>
+            <div class="hud-item">
+              <div class="label">草食</div>
+              <div class="value" id="outHerb">0</div>
+            </div>
+            <div class="hud-item">
+              <div class="label">肉食</div>
+              <div class="value" id="outCarn">0</div>
+            </div>
+            <div class="hud-item">
+              <div class="label">季節</div>
+              <div class="value" id="outSeason">－</div>
+            </div>
+            <div class="hud-item">
+              <div class="label">気温</div>
+              <div class="value" id="outTemp">－</div>
+            </div>
+            <div class="hud-item">
+              <div class="label">雨量</div>
+              <div class="value" id="outRain">－</div>
             </div>
           </div>
         </div>
+        <div class="legend-card" id="legendCard">
+          <div class="legend-title">凡例</div>
+          <div class="legend-row"><span class="legend-swatch" style="background:linear-gradient(90deg,#244d31,#4f9f6d);"></span><span>草（バイオマス濃淡）</span></div>
+          <div class="legend-row"><span class="legend-swatch circle" style="background:rgb(70,180,255);"></span><span>草食</span></div>
+          <div class="legend-row"><span class="legend-swatch tri" style="border-top-color:rgb(240,160,80);"></span><span>肉食</span></div>
+          <div class="legend-row tiny">地形・天候は「表示モード」で切替</div>
+        </div>
       </div>
-      <div class="pad note">
-        描画：草（バイオマスの濃淡）／草食・肉食は種ごとに色と形状が異なります（凡例参照）。<br>
-        ルール：天候・季節で草が増減 → ランダム移動（地形コスト）→ 捕食/採食 → 代謝 → 繁殖。<br>
-        同じseed・同じ初期パラメータなら挙動が再現されます（Math.randomは未使用）。
-      </div>
+      <div class="note">同じseed・同じ初期パラメータなら挙動が再現されます（Math.randomは未使用）。</div>
     </div>
+  </div>
 
-    <div class="card">
-      <h2>操作パネル</h2>
-      <div class="pad">
-        <div class="controls-top">
-          <div class="row">
-            <button id="btnStart" class="primary">開始/停止</button>
-            <button id="btnStep">1ステップ</button>
-            <button id="btnReset" class="danger">リセット</button>
-            <button id="btnCSV">CSVダウンロード</button>
-          </div>
-          <div class="settings-toggle">
-            <div class="note">詳細パラメータは設定ドロワーに移動しました。</div>
-            <button id="btnOpenDrawer" class="ghost">⚙ 設定</button>
-          </div>
-        </div>
-        <div class="card-section" style="margin-top:14px;">
-          <div class="preset-row">
-            <div>
-              <label class="note">デフォルトモード（シナリオ）</label><br>
-              <select id="selScenario">
-                <option value="">選択してください</option>
-                <option value="temperate">温帯草原（シカ-オオカミ）</option>
-                <option value="river">河川敷（ウサギ-キツネ）</option>
-                <option value="arid">乾燥地</option>
-                <option value="grassland">旧：草原（安定）</option>
-                <option value="dryCollapse">旧：乾燥（崩壊）</option>
-              </select>
-            </div>
-            <button id="btnApplyScenario" class="primary">適用してリセット</button>
-            <span class="badge-warning">決定論：seed依存</span>
-          </div>
-          <div class="note">開始/停止やシナリオ選択はここから行えます。細かなパラメータは右上の「設定」から。</div>
+  <div class="floating-toolbar">
+    <div class="toolbar-card">
+      <div class="toolbar-row">
+        <button id="btnStart" class="primary">開始/停止</button>
+        <button id="btnStep">1ステップ</button>
+        <button id="btnReset" class="danger">リセット</button>
+        <button id="btnCSV">CSVダウンロード</button>
+      </div>
+      <div class="toolbar-row" style="margin-top:6px;">
+        <div class="quick-strip">
+          <label class="tiny">デフォルトシナリオ</label>
+          <select id="selScenario">
+            <option value="">選択してください</option>
+            <option value="temperate">温帯草原（シカ-オオカミ）</option>
+            <option value="river">河川敷（ウサギ-キツネ）</option>
+            <option value="arid">乾燥地</option>
+            <option value="grassland">旧：草原（安定）</option>
+            <option value="dryCollapse">旧：乾燥（崩壊）</option>
+          </select>
+          <button id="btnApplyScenario" class="primary">適用してリセット</button>
+          <span class="badge-warning">決定論：seed依存</span>
         </div>
       </div>
     </div>
+  </div>
+  <div class="floating-settings">
+    <button id="btnOpenDrawer" class="fab primary">⚙ 設定</button>
   </div>
 
   <div class="drawer-backdrop" id="drawerBackdrop"></div>
@@ -347,7 +390,7 @@
 
       <div id="tab-map" class="tab-panel">
         <details class="section" open>
-          <summary>基本</summary>
+          <summary>表示と終了条件</summary>
           <div class="section-body stack">
             <div class="ctrl">
               <label>終了条件<div class="help">指定の種が絶滅したら停止</div></label>
@@ -361,26 +404,77 @@
               <input id="inMaxSteps" type="number" min="10" max="20000" value="2000" />
             </div>
             <div class="ctrl">
-              <label>気候強度<div class="help">季節の振幅と平均気温・降水をまとめてスケールします</div></label>
+              <label>拡大率<div class="help">1.0〜2.0の間でマップ描画を拡大縮小します</div></label>
               <div class="row">
-                <input id="slClimate" type="range" min="0.6" max="1.5" step="0.05" value="1" />
-                <span class="mono" id="valClimate">1.00</span>
+                <input id="slZoom" type="range" min="1.0" max="2.0" step="0.05" value="1.25" />
+                <span class="mono" id="valZoom">1.25</span>
               </div>
             </div>
-            <div class="ctrl">
-              <label>地形ミックス<div class="help">値が大きいほど岩場/河川/森林が増えます</div></label>
-              <div class="row">
-                <input id="slTerrainMix" type="range" min="0" max="1" step="0.05" value="0.35" />
-                <span class="mono" id="valTerrainMix">0.35</span>
-              </div>
-            </div>
-            <div class="note">終了条件や気候・地形はシナリオ適用時にも上書きされます。</div>
           </div>
         </details>
         <details class="section" open>
-          <summary>高度</summary>
+          <summary>環境プリセット</summary>
           <div class="section-body stack">
-            <div class="note">マップの描画は地形をベースに、草のバイオマスを濃淡で示し、HUDの凡例と同じ形状で個体を描いています。</div>
+            <div class="ctrl">
+              <label>環境モード<div class="help">地形比率と年間の気温・雨量カーブ、植物成長係数をまとめて設定</div></label>
+              <div class="row">
+                <select id="selEnvPreset">
+                  <option value="temperateEnv">温帯草原（標準）</option>
+                  <option value="riverEnv">河川敷（川多め）</option>
+                  <option value="aridEnv">乾燥地（雨量少）</option>
+                  <option value="monsoonEnv">雨季・乾季（季節変動強）</option>
+                </select>
+                <button id="btnApplyEnvironment" class="primary">環境を適用してリセット</button>
+              </div>
+            </div>
+            <div class="note">シナリオとは独立して環境のみを切り替えます。</div>
+          </div>
+        </details>
+        <details class="section" open>
+          <summary>環境パラメータ</summary>
+          <div class="section-body stack">
+            <div class="grid3">
+              <div class="ctrl">
+                <label>川割合<div class="help">0〜0.40くらいを推奨</div></label>
+                <input id="inRiverRatio" type="number" min="0" max="0.6" step="0.01" value="0.12" />
+              </div>
+              <div class="ctrl">
+                <label>岩割合<div class="help">0〜0.30くらいを推奨</div></label>
+                <input id="inRockRatio" type="number" min="0" max="0.5" step="0.01" value="0.10" />
+              </div>
+              <div class="ctrl">
+                <label>森林割合<div class="help">残りから自動配分されます</div></label>
+                <input id="inForestRatio" type="number" min="0" max="0.6" step="0.01" value="0.18" />
+              </div>
+            </div>
+            <div class="grid3">
+              <div class="ctrl">
+                <label>平均気温（℃）</label>
+                <input id="inAvgTemp" type="number" min="-10" max="40" step="0.5" value="18" />
+              </div>
+              <div class="ctrl">
+                <label>年較差（季節振幅）</label>
+                <input id="inTempAmp" type="number" min="0" max="20" step="0.5" value="12" />
+              </div>
+              <div class="ctrl">
+                <label>平均雨量</label>
+                <input id="inAvgRain" type="number" min="0" max="200" step="1" value="80" />
+              </div>
+            </div>
+            <div class="grid3">
+              <div class="ctrl">
+                <label>雨季振幅</label>
+                <input id="inRainAmp" type="number" min="0" max="120" step="1" value="45" />
+              </div>
+              <div class="ctrl">
+                <label>植物成長係数</label>
+                <input id="inPlantScale" type="number" min="0.2" max="2" step="0.05" value="1" />
+              </div>
+              <div class="ctrl">
+                <label>メモ<div class="help">調整後に「環境を適用してリセット」を押すと反映されます</div></label>
+                <div class="badge">地形・季節パラメータ</div>
+              </div>
+            </div>
           </div>
         </details>
       </div>
@@ -478,8 +572,10 @@ function mulberry32(seed){
 
 /* ========= シミュレーション設定 ========= */
 const GRID = 50;
-const CANVAS = 720;
-const CELL = CANVAS / GRID; // 12
+const BASE_CANVAS = 900;
+let mapScale = 1.25;
+let canvasSize = Math.round(BASE_CANVAS * mapScale);
+let cellSize = canvasSize / GRID;
 const N = GRID * GRID;
 const SCHEMA_VERSION = 4;
 
@@ -576,6 +672,10 @@ let herbReproAttempts = 0;
 let herbReproSuccess = 0;
 let carnReproAttempts = 0;
 let carnReproSuccess = 0;
+let overlayMode = 'life';
+let hudCollapsed = false;
+let hudOffset = {x:12,y:12};
+let p5Instance = null;
 
 // プリセット（シナリオ）
 const PRESETS = {
@@ -636,6 +736,25 @@ const PRESETS = {
   }
 };
 
+const ENV_PRESETS = {
+  temperateEnv: {
+    label: '温帯草原（標準）',
+    env: {river:0.12, rock:0.1, forest:0.18, avgTemp:18, tempAmp:12, avgRain:80, rainAmp:45, plantScale:1}
+  },
+  riverEnv: {
+    label: '河川敷（川多め）',
+    env: {river:0.20, rock:0.08, forest:0.20, avgTemp:17, tempAmp:11, avgRain:92, rainAmp:50, plantScale:1.05}
+  },
+  aridEnv: {
+    label: '乾燥地（雨量少）',
+    env: {river:0.08, rock:0.16, forest:0.14, avgTemp:22, tempAmp:10, avgRain:42, rainAmp:24, plantScale:0.85}
+  },
+  monsoonEnv: {
+    label: '雨季・乾季（季節変動強）',
+    env: {river:0.16, rock:0.1, forest:0.22, avgTemp:20, tempAmp:14, avgRain:86, rainAmp:70, plantScale:1.1}
+  }
+};
+
 // パラメータ（UIから読み込み）
 let P = {
   initGrass: 800,
@@ -648,8 +767,14 @@ let P = {
   metabolism: 1,
   herbMaxAge: 120,
   carnMaxAge: 160,
-  climateIntensity: 1,
-  terrainMix: 0.35,
+  avgTemp: 18,
+  tempAmp: 12,
+  avgRain: 80,
+  rainAmp: 45,
+  riverRatio: 0.12,
+  rockRatio: 0.10,
+  forestRatio: 0.18,
+  plantGrowthScale: 1,
   endCondition: 'anyExtinct',
   maxSteps: 2000,
   competition: false,
@@ -698,8 +823,14 @@ function readParamsFromUI(){
   P.carnRepro = clampInt(parseInt(el('inCarnRepro').value,10), 2, 800);
   P.herbMaxAge = clampInt(parseInt(el('inHerbMaxAge').value,10), 10, 2000);
   P.carnMaxAge = clampInt(parseInt(el('inCarnMaxAge').value,10), 10, 2000);
-  P.climateIntensity = clampFloat(parseFloat(el('slClimate').value), 0.6, 1.5);
-  P.terrainMix = clampFloat(parseFloat(el('slTerrainMix').value), 0, 1);
+  P.avgTemp = clampFloat(parseFloat(el('inAvgTemp').value), -10, 40);
+  P.tempAmp = clampFloat(parseFloat(el('inTempAmp').value), 0, 20);
+  P.avgRain = clampFloat(parseFloat(el('inAvgRain').value), 0, 200);
+  P.rainAmp = clampFloat(parseFloat(el('inRainAmp').value), 0, 120);
+  P.riverRatio = clampFloat(parseFloat(el('inRiverRatio').value), 0, 0.6);
+  P.rockRatio = clampFloat(parseFloat(el('inRockRatio').value), 0, 0.5);
+  P.forestRatio = clampFloat(parseFloat(el('inForestRatio').value), 0, 0.6);
+  P.plantGrowthScale = clampFloat(parseFloat(el('inPlantScale').value), 0.2, 2);
   P.endCondition = el('selEndCondition').value === 'animalExtinct' ? 'animalExtinct' : 'anyExtinct';
   P.maxSteps = clampInt(parseInt(el('inMaxSteps').value,10), 10, 20000);
   P.competition = el('chkCompetition').checked;
@@ -713,15 +844,31 @@ function readParamsFromUI(){
   tickPerFrame = Math.max(1, Math.round(fps / 30)); // ざっくり（後で精密化可）
 
   el('valGrass').textContent = P.grassGrowthRate.toFixed(3);
-  el('valClimate').textContent = P.climateIntensity.toFixed(2);
-  el('valTerrainMix').textContent = P.terrainMix.toFixed(2);
+  el('valZoom').textContent = mapScale.toFixed(2);
   el('valFPS').textContent = String(fps);
+  updateZoomFromUI();
   updateSpeciesSettingsFromUI();
   updateActiveSpeciesLists();
   refreshSpeciesTraitLabels();
 }
 function clampInt(v,min,max){ if(Number.isNaN(v)) v=min; return Math.min(max, Math.max(min, v)); }
 function clampFloat(v,min,max){ if(Number.isNaN(v)) v=min; return Math.min(max, Math.max(min, v)); }
+function updateZoomFromUI(){
+  const z = clampFloat(parseFloat(el('slZoom').value), 1, 2);
+  mapScale = z;
+  canvasSize = Math.round(BASE_CANVAS * mapScale);
+  cellSize = canvasSize / GRID;
+  el('valZoom').textContent = mapScale.toFixed(2);
+  if(p5Instance){
+    p5Instance.resizeCanvas(canvasSize, canvasSize);
+  }
+}
+function placeHud(){
+  const hud = el('hud');
+  if(!hud) return;
+  hud.style.left = `${hudOffset.x}px`;
+  hud.style.top = `${hudOffset.y}px`;
+}
 function getEnergySize(energy, baseSize, threshold){
   const ratio = clampFloat(energy / Math.max(1, threshold), 0, 1.2);
   return baseSize * (0.75 + ratio * 0.35);
@@ -776,12 +923,16 @@ function updateTerrainMap(seedStr){
   for(let i=0;i<N;i++){
     const h = hash32FromString(`${seedStr}:terrain:${i}`);
     const roll = (h % 1000) / 1000;
-    const mix = P.terrainMix;
-    if(roll < 0.08 * mix){
+    const river = clampFloat(P.riverRatio, 0, 0.6);
+    const rock = clampFloat(P.rockRatio, 0, 0.5);
+    const forestBase = clampFloat(P.forestRatio, 0, 0.6);
+    const remainder = Math.max(0, 1 - (river + rock + forestBase));
+    const forest = clampFloat(forestBase + remainder * 0.25, 0, 0.8);
+    if(roll < river){
       terrain[i] = TERRAIN.RIVER;
-    } else if(roll < 0.20 * mix){
+    } else if(roll < river + rock){
       terrain[i] = TERRAIN.ROCK;
-    } else if(roll < 0.38 * mix){
+    } else if(roll < river + rock + forest){
       terrain[i] = TERRAIN.FOREST;
     } else {
       terrain[i] = TERRAIN.GRASSLAND;
@@ -907,14 +1058,24 @@ function applyPresetToUI(key){
   const v = p.values;
   el('inInitGrass').value = v.initGrass;
   el('slGrass').value     = v.grassGrowthRate;
-  el('slClimate').value  = v.climateIntensity ?? P.climateIntensity;
-  el('slTerrainMix').value = v.terrainMix ?? P.terrainMix;
   el('inHerbGain').value  = v.herbGain;
   el('inCarnGain').value  = v.carnGain;
   el('inHerbRepro').value = v.herbRepro;
   el('inCarnRepro').value = v.carnRepro;
   el('inHerbMaxAge').value = v.herbMaxAge;
   el('inCarnMaxAge').value = v.carnMaxAge;
+  const climateScale = v.climateIntensity ?? 1;
+  const mix = v.terrainMix ?? 0.35;
+  const river = clampFloat(0.08 + mix * 0.24, 0, 0.6);
+  const rock = clampFloat(0.08 + mix * 0.18, 0, 0.5);
+  const forest = clampFloat(0.16 + mix * 0.16, 0, 0.6);
+  el('inAvgTemp').value = (18 * climateScale).toFixed(1);
+  el('inTempAmp').value = (12 * climateScale).toFixed(1);
+  el('inAvgRain').value = Math.round(80 * climateScale);
+  el('inRainAmp').value = Math.round(45 * climateScale);
+  el('inRiverRatio').value = river.toFixed(2);
+  el('inRockRatio').value = rock.toFixed(2);
+  el('inForestRatio').value = forest.toFixed(2);
   if(v.plantK) P.plantK = v.plantK;
   const speciesPreset = v.species || {};
   const nextSpeciesSettings = {};
@@ -931,6 +1092,22 @@ function applyPresetToUI(key){
   if(v.logEvery) el('inLogEvery').value = v.logEvery;
   readParamsFromUI();
   statusMessage = `シナリオ: ${p.label} を適用しました`;
+  refreshUI();
+}
+function applyEnvironmentPreset(key){
+  const preset = ENV_PRESETS[key];
+  if(!preset) return;
+  const v = preset.env;
+  el('inRiverRatio').value = v.river;
+  el('inRockRatio').value = v.rock;
+  el('inForestRatio').value = v.forest;
+  el('inAvgTemp').value = v.avgTemp;
+  el('inTempAmp').value = v.tempAmp;
+  el('inAvgRain').value = v.avgRain;
+  el('inRainAmp').value = v.rainAmp;
+  el('inPlantScale').value = v.plantScale;
+  readParamsFromUI();
+  statusMessage = `環境プリセット: ${preset.label} を適用しました`;
   refreshUI();
 }
 function competitionReproPass(count, k){
@@ -958,13 +1135,14 @@ function getSeasonName(day){
 
 function getWeatherForStep(step){
   const day = step % 365;
-  const baseTemp = 14 * Math.sin((2*Math.PI*day)/365 - 0.8) + 14;
-  const baseRain = 55 + 35 * Math.sin((2*Math.PI*day)/365 + 1.4);
-  const noiseLevel = 0.15 * P.climateIntensity;
+  const seasonalPhase = (2*Math.PI*day)/365;
+  const baseTemp = P.avgTemp + P.tempAmp * Math.sin(seasonalPhase - 0.8);
+  const baseRain = P.avgRain + P.rainAmp * Math.sin(seasonalPhase + 1.4);
+  const noiseLevel = 0.12;
   const tempNoise = (deterministicNoise(step, 'temp') - 0.5) * 6 * noiseLevel;
-  const rainNoise = (deterministicNoise(step, 'rain') - 0.5) * 40 * noiseLevel;
-  const temperature = (baseTemp * P.climateIntensity) + tempNoise;
-  const rainfall = Math.max(0, (baseRain * P.climateIntensity) + rainNoise);
+  const rainNoise = (deterministicNoise(step, 'rain') - 0.5) * 36 * noiseLevel;
+  const temperature = baseTemp + tempNoise;
+  const rainfall = Math.max(0, baseRain + rainNoise);
   const season = getSeasonName(day);
   return {season, temperature, rainfall};
 }
@@ -1071,12 +1249,13 @@ function tick(){
   }
 
   // 1) 草の成長：季節と降水・地形で成長率変動（ロジスティック増殖）
-  const tempSuit = clampFloat(1 - Math.abs(weatherState.temperature - 18) / 22, 0, 1.6);
-  const rainSuit = clampFloat(weatherState.rainfall / 80, 0, 1.8);
+  const tempComfort = Math.max(8, P.tempAmp * 1.2 + 10);
+  const tempSuit = clampFloat(1 - Math.abs(weatherState.temperature - P.avgTemp) / tempComfort, 0, 1.6);
+  const rainSuit = clampFloat(weatherState.rainfall / Math.max(30, P.avgRain), 0, 1.8);
   const growthClimate = clampFloat((tempSuit * 0.55) + (rainSuit * 0.45), 0, 1.8);
   for(let i=0;i<N;i++){
     const terrainMult = terrainGrowthMultiplier(terrain[i]);
-    const g = P.grassGrowthRate * terrainMult * growthClimate;
+    const g = P.grassGrowthRate * terrainMult * growthClimate * P.plantGrowthScale;
     if(g > 0){
       const carrying = P.plantK;
       const growth = g * (1 - (biomass[i] / carrying)) * carrying;
@@ -1115,7 +1294,7 @@ function tick(){
       }
 
       const herbExtraCost = competitionExtraCost(herbAliveCount, P.herbK);
-      const weatherCost = Math.max(0, Math.abs(weatherState.temperature - 18) * 0.05);
+      const weatherCost = Math.max(0, Math.abs(weatherState.temperature - P.avgTemp) * 0.05);
       h.energy -= (traits.metabolism + herbExtraCost + moveCost + weatherCost);
       if(h.energy <= 0){
         h.alive = false;
@@ -1182,7 +1361,7 @@ function tick(){
       }
 
       const carnExtraCost = competitionExtraCost(carnAliveCount, P.carnK);
-      const weatherCost = Math.max(0, Math.abs(weatherState.temperature - 18) * 0.04);
+      const weatherCost = Math.max(0, Math.abs(weatherState.temperature - P.avgTemp) * 0.04);
       if(cellList.length === 0){
         c.energy -= (traits.metabolism + carnExtraCost + moveCost + weatherCost);
       } else {
@@ -1481,9 +1660,10 @@ function copyResult(){
 /* ========= p5.js 描画 ========= */
 new p5((p)=>{
   p.setup = () => {
-    const cnv = p.createCanvas(CANVAS, CANVAS);
+    const cnv = p.createCanvas(canvasSize, canvasSize);
     cnv.parent("p5-container");
     p.frameRate(30);
+    p5Instance = p;
   };
 
   p.draw = () => {
@@ -1504,28 +1684,66 @@ new p5((p)=>{
       for(let x=0;x<GRID;x++){
         const idx = y*GRID + x;
         const t = terrain[idx];
-        let base = [32, 70, 50];
-        if(t === TERRAIN.ROCK) base = [72, 78, 84];
-        else if(t === TERRAIN.RIVER) base = [38, 90, 140];
-        else if(t === TERRAIN.FOREST) base = [26, 68, 44];
         const tone = grassTone[idx] * 0.4;
-        p.fill(base[0] + tone*0.08, base[1] + tone*0.12, base[2] + tone*0.10);
-        p.rect(x*CELL, y*CELL, CELL, CELL);
-        if(t === TERRAIN.ROCK){
-          p.fill(120,130,140, 60);
-          p.rect(x*CELL, y*CELL, CELL, CELL);
-        }
         const bio = biomass[idx];
-        if(bio > 0){
-          const ratio = clampFloat(bio / P.plantK, 0, 1);
-          const r = 40 + tone * 0.15;
-          const g = 120 + tone * 0.9;
-          const b = 66 + tone * 0.32;
-          p.fill(r, g, b, 180);
-          p.rect(x*CELL, y*CELL, CELL, CELL);
-          if(ratio > 0.5){
-            p.fill(r + 16, g + 10, b + 8, 200);
-            p.rect(x*CELL, y*CELL, CELL, CELL * (0.35 + ratio*0.4));
+
+        if(overlayMode === 'terrain'){
+          const colorMap = {
+            [TERRAIN.GRASSLAND]: [40, 92, 58],
+            [TERRAIN.ROCK]: [110, 116, 124],
+            [TERRAIN.RIVER]: [40, 122, 180],
+            [TERRAIN.FOREST]: [30, 96, 66],
+          };
+          const base = colorMap[t] || [44, 84, 62];
+          p.fill(base[0], base[1], base[2]);
+          p.rect(x*cellSize, y*cellSize, cellSize, cellSize);
+          if(t === TERRAIN.ROCK){
+            p.fill(170, 176, 188, 60);
+            p.rect(x*cellSize, y*cellSize, cellSize, cellSize);
+          }
+        } else if(overlayMode === 'plant'){
+          const ratio = clampFloat(bio / Math.max(1, P.plantK), 0, 1.2);
+          const r = 30 + ratio * 50;
+          const g = 70 + ratio * 150;
+          const b = 40 + ratio * 60;
+          p.fill(r, g, b, 220);
+          p.rect(x*cellSize, y*cellSize, cellSize, cellSize);
+        } else if(overlayMode === 'temp'){
+          const tNorm = clampFloat((weatherState.temperature + 5) / 40, 0, 1);
+          const r = 40 + 200 * tNorm;
+          const g = 80 + 80 * Math.cos(Math.PI * tNorm);
+          const b = 200 - 180 * tNorm;
+          p.fill(r, g, b, 210);
+          p.rect(x*cellSize, y*cellSize, cellSize, cellSize);
+        } else if(overlayMode === 'rain'){
+          const rNorm = clampFloat(weatherState.rainfall / 140, 0, 1.2);
+          const r = 40 + 40 * (1 - rNorm);
+          const g = 100 + 80 * rNorm;
+          const b = 140 + 80 * rNorm;
+          p.fill(r, g, b, 210);
+          p.rect(x*cellSize, y*cellSize, cellSize, cellSize);
+        } else {
+          let base = [32, 70, 50];
+          if(t === TERRAIN.ROCK) base = [72, 78, 84];
+          else if(t === TERRAIN.RIVER) base = [38, 90, 140];
+          else if(t === TERRAIN.FOREST) base = [26, 68, 44];
+          p.fill(base[0] + tone*0.08, base[1] + tone*0.12, base[2] + tone*0.10);
+          p.rect(x*cellSize, y*cellSize, cellSize, cellSize);
+          if(t === TERRAIN.ROCK){
+            p.fill(120,130,140, 60);
+            p.rect(x*cellSize, y*cellSize, cellSize, cellSize);
+          }
+          if(bio > 0){
+            const ratio = clampFloat(bio / P.plantK, 0, 1);
+            const r = 40 + tone * 0.15;
+            const g = 120 + tone * 0.9;
+            const b = 66 + tone * 0.32;
+            p.fill(r, g, b, 180);
+            p.rect(x*cellSize, y*cellSize, cellSize, cellSize);
+            if(ratio > 0.5){
+              p.fill(r + 16, g + 10, b + 8, 200);
+              p.rect(x*cellSize, y*cellSize, cellSize, cellSize * (0.35 + ratio*0.4));
+            }
           }
         }
       }
@@ -1540,8 +1758,8 @@ new p5((p)=>{
       const traits = getSpeciesTraits(sp);
       for(const h of list){
         if(!h.alive) continue;
-        const size = getEnergySize(h.energy, CELL*0.60, traits.reproduction);
-        p.circle((h.x+0.5)*CELL, (h.y+0.5)*CELL, size);
+        const size = getEnergySize(h.energy, cellSize*0.60, traits.reproduction);
+        p.circle((h.x+0.5)*cellSize, (h.y+0.5)*cellSize, size);
       }
     }
 
@@ -1554,8 +1772,8 @@ new p5((p)=>{
       const traits = getSpeciesTraits(sp);
       for(const c of list){
         if(!c.alive) continue;
-        const size = getEnergySize(c.energy, CELL*0.70, traits.reproduction);
-        drawTriangle(p, (c.x+0.5)*CELL, (c.y+0.5)*CELL, size);
+        const size = getEnergySize(c.energy, cellSize*0.70, traits.reproduction);
+        drawTriangle(p, (c.x+0.5)*cellSize, (c.y+0.5)*cellSize, size);
       }
     }
 
@@ -1565,11 +1783,9 @@ new p5((p)=>{
     p.stroke(22, 32, 46);
     p.strokeWeight(1);
     for(let i=0;i<=GRID;i++){
-      p.line(i*CELL, 0, i*CELL, CANVAS);
-      p.line(0, i*CELL, CANVAS, i*CELL);
+      p.line(i*cellSize, 0, i*cellSize, canvasSize);
+      p.line(0, i*cellSize, canvasSize, i*cellSize);
     }
-
-    drawLegend(p);
 
     refreshUI();
   };
@@ -1635,8 +1851,52 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 // スライダー表示更新（初期）
 el('slFPS').addEventListener('input', ()=>{ readParamsFromUI(); });
 el('slGrass').addEventListener('input', ()=>{ readParamsFromUI(); });
+el('slZoom').addEventListener('input', ()=>{ updateZoomFromUI(); });
 el('chkDaily').addEventListener('change', ()=>{ resetSim(); });
 el('inSeed').addEventListener('change', ()=>{ resetSim(); });
+document.querySelectorAll('.overlay-btn').forEach(btn => {
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.overlay-btn').forEach(b=>b.classList.remove('active'));
+    overlayMode = btn.dataset.mode || 'life';
+    btn.classList.add('active');
+  });
+});
+el('btnApplyEnvironment').addEventListener('click', ()=>{
+  const key = el('selEnvPreset').value;
+  applyEnvironmentPreset(key);
+  resetSim();
+});
+const hudEl = el('hud');
+placeHud();
+let dragState = null;
+hudEl.addEventListener('pointerdown', (e)=>{
+  if(e.target.id === 'btnHudToggle') return;
+  dragState = {dx: e.clientX - hudOffset.x, dy: e.clientY - hudOffset.y, id: e.pointerId};
+  hudEl.classList.add('dragging');
+  hudEl.setPointerCapture(e.pointerId);
+});
+hudEl.addEventListener('pointermove', (e)=>{
+  if(!dragState || dragState.id !== e.pointerId) return;
+  hudOffset.x = Math.max(6, e.clientX - dragState.dx);
+  hudOffset.y = Math.max(6, e.clientY - dragState.dy);
+  placeHud();
+});
+['pointerup','pointercancel'].forEach(ev=>{
+  hudEl.addEventListener(ev, (e)=>{
+    if(dragState && dragState.id === e.pointerId){
+      dragState = null;
+      hudEl.classList.remove('dragging');
+    }
+  });
+});
+el('btnHudToggle').addEventListener('click', ()=>{
+  hudCollapsed = !hudCollapsed;
+  hudEl.classList.toggle('collapsed', hudCollapsed);
+});
+el('selEnvPreset').addEventListener('change', ()=>{
+  const key = el('selEnvPreset').value;
+  applyEnvironmentPreset(key);
+});
 
 // 初期化
 buildSpeciesControls();
