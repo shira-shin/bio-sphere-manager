@@ -93,7 +93,7 @@
         </div>
 
         <div class="note" style="margin-top:6px;">
-          CSV列: schema_version, seed, step, grass_count, herbivore_count, carnivore_count, death_herbivore_starve, death_herbivore_eaten, death_carnivore_starve, death_herbivore_age, death_carnivore_age
+          CSV列: schema_version, seed, step, grass_count, herbivore_count, carnivore_count, death_herbivore_starve, death_herbivore_eaten, death_carnivore_starve, death_herbivore_age, death_carnivore_age, herb_K, carn_K, competition_enabled, herb_repro_success_rate, carn_repro_success_rate
           <br>パラメータ変更は次のフレームから即時反映（リセット不要）です。
         </div>
 
@@ -193,6 +193,30 @@
           </div>
         </div>
 
+        <div class="card" style="border-color:#223247; margin-top:12px;">
+          <h2 style="padding:12px 12px 0">競合（密度依存）</h2>
+          <div class="pad">
+            <div class="row" style="margin-bottom:8px;">
+              <label class="note"><input id="chkCompetition" type="checkbox" /> 競合（密度依存）を有効化</label>
+            </div>
+            <div class="grid2">
+              <div class="ctrl">
+                <label>草食の環境収容力K</label>
+                <input id="inHerbK" type="number" min="1" max="5000" value="400" />
+              </div>
+              <div class="ctrl">
+                <label>肉食の環境収容力K</label>
+                <input id="inCarnK" type="number" min="1" max="5000" value="200" />
+              </div>
+            </div>
+            <div class="ctrl">
+              <label>密度コスト係数（代謝追加）</label>
+              <input id="inDensityCost" type="number" min="0" max="50" value="0" />
+            </div>
+            <div class="note" style="margin-top:8px;">個体数が多いほど繁殖しにくい/生存しにくい（シードにより再現可能）</div>
+          </div>
+        </div>
+
         <div class="grid2">
           <div class="ctrl">
             <label>終了条件</label>
@@ -278,7 +302,7 @@ const GRID = 50;
 const CANVAS = 600;
 const CELL = CANVAS / GRID; // 12
 const N = GRID * GRID;
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 let rng = mulberry32(1);
 let running = false;
@@ -300,6 +324,10 @@ let herbsAt = Array.from({length:N}, ()=>[]);
 // ログ（CSV出力用）
 let logs = [];
 let logEvery = 5;
+let herbReproAttempts = 0;
+let herbReproSuccess = 0;
+let carnReproAttempts = 0;
+let carnReproSuccess = 0;
 
 // パラメータ（UIから読み込み）
 let P = {
@@ -316,6 +344,10 @@ let P = {
   carnMaxAge: 160,
   endCondition: 'anyExtinct',
   maxSteps: 2000,
+  competition: false,
+  herbK: 400,
+  carnK: 200,
+  densityCostScale: 0,
 };
 
 // 死因ログ（最低限）
@@ -359,6 +391,10 @@ function readParamsFromUI(){
   P.carnMaxAge = clampInt(parseInt(el('inCarnMaxAge').value,10), 10, 2000);
   P.endCondition = el('selEndCondition').value === 'animalExtinct' ? 'animalExtinct' : 'anyExtinct';
   P.maxSteps = clampInt(parseInt(el('inMaxSteps').value,10), 10, 20000);
+  P.competition = el('chkCompetition').checked;
+  P.herbK = clampInt(parseInt(el('inHerbK').value,10), 1, 10000);
+  P.carnK = clampInt(parseInt(el('inCarnK').value,10), 1, 10000);
+  P.densityCostScale = clampInt(parseInt(el('inDensityCost').value,10), 0, 1000);
   logEvery = clampInt(parseInt(el('inLogEvery').value,10), 1, 50);
 
   const fps = clampInt(parseInt(el('slFPS').value,10), 10, 60);
@@ -370,6 +406,15 @@ function readParamsFromUI(){
 }
 function clampInt(v,min,max){ if(Number.isNaN(v)) v=min; return Math.min(max, Math.max(min, v)); }
 function clampFloat(v,min,max){ if(Number.isNaN(v)) v=min; return Math.min(max, Math.max(min, v)); }
+function competitionReproPass(count, k){
+  if(!P.competition) return true;
+  const prob = clampFloat(1 - (count / Math.max(1, k)), 0, 1);
+  return rng() < prob;
+}
+function competitionExtraCost(count, k){
+  if(!P.competition || P.densityCostScale <= 0) return 0;
+  return Math.floor((count / Math.max(1, k)) * P.densityCostScale);
+}
 
 /* ========= 初期化 ========= */
 function resetSim(){
@@ -391,6 +436,10 @@ function resetSim(){
   deathHerbEaten  = 0;
   deathHerbAge = 0;
   deathCarnAge = 0;
+  herbReproAttempts = 0;
+  herbReproSuccess = 0;
+  carnReproAttempts = 0;
+  carnReproSuccess = 0;
   endReason = '';
   peakCounts = {grass:0, herb:0, carn:0};
 
@@ -440,6 +489,11 @@ function tick(){
     }
   }
 
+  let herbAliveCount = 0;
+  for(const h of herbs) if(h.alive) herbAliveCount++;
+  let carnAliveCount = 0;
+  for(const c of carns) if(c.alive) carnAliveCount++;
+
   // 2) 草食の行動：移動→採食→代謝→繁殖
   for(const h of herbs){
     if(!h.alive) continue;
@@ -459,18 +513,25 @@ function tick(){
       h.energy += P.herbGain;
     }
 
-    h.energy -= P.metabolism;
+    const herbExtraCost = competitionExtraCost(herbAliveCount, P.herbK);
+    h.energy -= (P.metabolism + herbExtraCost);
     if(h.energy <= 0){
       h.alive = false;
+      herbAliveCount--;
       deathHerbStarve++;
       continue;
     }
 
     if(h.energy >= P.herbRepro){
-      // 簡易繁殖：エネルギーを半分に分けてコピー
-      const childEnergy = Math.floor(h.energy / 2);
-      h.energy = h.energy - childEnergy;
-      herbs.push({x:h.x, y:h.y, energy: childEnergy, alive:true, age:0});
+      herbReproAttempts++;
+      if(competitionReproPass(herbAliveCount, P.herbK)){
+        herbReproSuccess++;
+        // 簡易繁殖：エネルギーを半分に分けてコピー
+        const childEnergy = Math.floor(h.energy / 2);
+        h.energy = h.energy - childEnergy;
+        herbs.push({x:h.x, y:h.y, energy: childEnergy, alive:true, age:0});
+        herbAliveCount++;
+      }
     }
   }
 
@@ -506,21 +567,33 @@ function tick(){
           prey.alive = false;
           deathHerbEaten++;
           c.energy += P.carnGain;
+          herbAliveCount--;
         }
-      }
-    } else {
-      c.energy -= P.metabolism;
-      if(c.energy <= 0){
-        c.alive = false;
-        deathCarnStarve++;
-        continue;
       }
     }
 
+    const carnExtraCost = competitionExtraCost(carnAliveCount, P.carnK);
+    if(list.length === 0){
+      c.energy -= (P.metabolism + carnExtraCost);
+    } else if(carnExtraCost > 0){
+      c.energy -= carnExtraCost;
+    }
+    if(c.energy <= 0){
+      c.alive = false;
+      carnAliveCount--;
+      deathCarnStarve++;
+      continue;
+    }
+
     if(c.energy >= P.carnRepro){
-      const childEnergy = Math.floor(c.energy / 2);
-      c.energy = c.energy - childEnergy;
-      carns.push({x:c.x, y:c.y, energy: childEnergy, alive:true, age:0});
+      carnReproAttempts++;
+      if(competitionReproPass(carnAliveCount, P.carnK)){
+        carnReproSuccess++;
+        const childEnergy = Math.floor(c.energy / 2);
+        c.energy = c.energy - childEnergy;
+        carns.push({x:c.x, y:c.y, energy: childEnergy, alive:true, age:0});
+        carnAliveCount++;
+      }
     }
   }
 
@@ -599,6 +672,8 @@ function getCounts(){
 
 function pushLog(){
   const counts = getCounts();
+  const herbRate = herbReproAttempts > 0 ? herbReproSuccess / herbReproAttempts : '';
+  const carnRate = carnReproAttempts > 0 ? carnReproSuccess / carnReproAttempts : '';
   logs.push({
     schema_version: SCHEMA_VERSION,
     seed: currentSeed,
@@ -610,9 +685,18 @@ function pushLog(){
     death_herb_eaten: deathHerbEaten,
     death_carn_starve: deathCarnStarve,
     death_herb_age: deathHerbAge,
-    death_carn_age: deathCarnAge
+    death_carn_age: deathCarnAge,
+    herb_K: P.herbK,
+    carn_K: P.carnK,
+    competition_enabled: P.competition ? 1 : 0,
+    herb_repro_success_rate: herbRate,
+    carn_repro_success_rate: carnRate,
   });
   pushChartPoint(step, counts.grass, counts.herb, counts.carn);
+  herbReproAttempts = 0;
+  herbReproSuccess = 0;
+  carnReproAttempts = 0;
+  carnReproSuccess = 0;
 }
 
 function refreshUI(){
@@ -686,13 +770,15 @@ function downloadCSV(){
   const header = [
     "schema_version","seed","step",
     "grass_count","herbivore_count","carnivore_count",
-    "death_herbivore_starve","death_herbivore_eaten","death_carnivore_starve","death_herbivore_age","death_carnivore_age"
+    "death_herbivore_starve","death_herbivore_eaten","death_carnivore_starve","death_herbivore_age","death_carnivore_age",
+    "herb_K","carn_K","competition_enabled","herb_repro_success_rate","carn_repro_success_rate"
   ].join(",");
 
   const rows = logs.map(r => [
     r.schema_version, JSON.stringify(r.seed), r.step,
     r.grass, r.herb, r.carn,
-    r.death_herb_starve, r.death_herb_eaten, r.death_carn_starve, r.death_herb_age, r.death_carn_age
+    r.death_herb_starve, r.death_herb_eaten, r.death_carn_starve, r.death_herb_age, r.death_carn_age,
+    r.herb_K, r.carn_K, r.competition_enabled, r.herb_repro_success_rate, r.carn_repro_success_rate
   ].join(","));
 
   const csv = [header, ...rows].join("\n");
