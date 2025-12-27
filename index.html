@@ -105,6 +105,7 @@
     .modal-backdrop{
       position:fixed; inset:0; background:rgba(8,12,18,0.72); display:none; align-items:center; justify-content:center; z-index:30;
     }
+    .modal-backdrop.active{display:flex;}
     .modal{
       background:#0f1620; border:1px solid #2a3a52; border-radius:14px; padding:16px; width:420px; box-shadow:0 20px 60px rgba(0,0,0,0.55);
     }
@@ -268,15 +269,25 @@
                 <div class="label">気温</div>
                 <div class="value" id="outTemp">－</div>
               </div>
-              <div class="hud-item">
-                <div class="label">雨量</div>
-                <div class="value" id="outRain">－</div>
-              </div>
-              <div class="hud-item">
-                <div class="label">スコア</div>
-                <div class="value" id="outScore">0</div>
-                <div class="tiny" id="outScoreDetail">生存・多様性・安定度</div>
-              </div>
+          <div class="hud-item">
+            <div class="label">雨量</div>
+            <div class="value" id="outRain">－</div>
+          </div>
+          <div class="hud-item">
+            <div class="label">草食の性比 / 群</div>
+            <div class="value" id="outHerbSex">－</div>
+            <div class="tiny" id="outHerbGroup">-</div>
+          </div>
+          <div class="hud-item">
+            <div class="label">肉食の性比 / 縄張り</div>
+            <div class="value" id="outCarnSex">－</div>
+            <div class="tiny" id="outCarnTerritory">-</div>
+          </div>
+          <div class="hud-item">
+            <div class="label">スコア</div>
+            <div class="value" id="outScore">0</div>
+            <div class="tiny" id="outScoreDetail">生存・多様性・安定度</div>
+          </div>
             </div>
           </div>
         </div>
@@ -586,7 +597,7 @@
                 <button id="btnCopyResult">結果をコピー</button>
                 <button id="btnCopyScore" class="primary">スコアをコピー</button>
               </div>
-              <div class="note">CSV列: schema_version, seed, step, grass_count, herbivore_count, carnivore_count, death_herbivore_starve, death_herbivore_eaten, death_carnivore_starve, death_herbivore_age, death_carnivore_age, herb_K, carn_K, competition_enabled, herb_repro_success_rate, carn_repro_success_rate, biomass_total, temperature, rainfall, season_name, 以降に各species_count列</div>
+              <div class="note">CSV列: schema_version, seed, step, grass_count, herbivore_count, carnivore_count, death_herbivore_starve, death_herbivore_eaten, death_carnivore_starve, death_herbivore_age, death_carnivore_age, death_herbivore_conflict, death_carnivore_conflict, herb_K, carn_K, competition_enabled, herb_repro_success_rate, carn_repro_success_rate, biomass_total, temperature, rainfall, season_name, 以降に各species_count列</div>
               <div class="card" style="border-color:#223247;">
                 <h2 style="padding:12px 12px 0">個体数グラフ</h2>
                 <div class="pad">
@@ -757,6 +768,7 @@ let diseasePressure = new Float32Array(N);
 
 // 動物
 let animals = {};
+let carnivoreAt = Array.from({length:N}, ()=>[]);
 
 // 作業用：セルごとの草食インデックス（再利用してGCを抑える）
 let herbivoreAt = Array.from({length:N}, ()=>[]);
@@ -772,6 +784,10 @@ let herbReproAttempts = 0;
 let herbReproSuccess = 0;
 let carnReproAttempts = 0;
 let carnReproSuccess = 0;
+let deathHerbConflict = 0;
+let deathCarnConflict = 0;
+let nextFamilyId = 1;
+let nextPackId = 1;
 let overlayMode = 'fauna';
 let p5Instance = null;
 let effectsEnabled = true;
@@ -1635,6 +1651,57 @@ function reproductionSeasonMultiplier(){
   return 1;
 }
 
+function torusDistance(ax, ay, bx, by){
+  const dx = Math.abs(ax - bx);
+  const dy = Math.abs(ay - by);
+  return Math.max(Math.min(dx, GRID - dx), Math.min(dy, GRID - dy));
+}
+
+function cohesionScore(targetX, targetY, origin, peers){
+  if(!peers) return 0;
+  let score = 0;
+  for(const peer of peers){
+    if(!peer || !peer.alive || peer === origin) continue;
+    const d = torusDistance(targetX, targetY, peer.x, peer.y);
+    if(d > 4) continue;
+    const kinBonus = (peer.familyId && origin.familyId && peer.familyId === origin.familyId) ? 0.8 : 0.35;
+    const packBonus = (peer.packId && origin.packId && peer.packId === origin.packId) ? 0.4 : 0;
+    score += (kinBonus + packBonus) / (1 + d);
+  }
+  return score;
+}
+
+function homeBiasScore(x, y, origin){
+  if(origin.homeX == null || origin.homeY == null) return 0;
+  const d = torusDistance(x, y, origin.homeX, origin.homeY);
+  return clampFloat((5 - d) * 0.08, -0.35, 0.6);
+}
+
+function moveTerrainAware(a, peers, opts={}){
+  const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+  let best = {dir:null, score:-Infinity, cost: terrainMoveCost(terrain[a.y * GRID + a.x])};
+  for(const d of dirs){
+    const nx = (a.x + d[0] + GRID) % GRID;
+    const ny = (a.y + d[1] + GRID) % GRID;
+    const t = terrain[ny * GRID + nx];
+    if(!terrainPassable(t)) continue;
+    const base = -terrainMoveCost(t) * 0.1;
+    const social = opts.social ? cohesionScore(nx, ny, a, peers) : 0;
+    const home = opts.territorial ? homeBiasScore(nx, ny, a) : 0;
+    const spice = rng() * 0.12;
+    const score = base + social + home + spice;
+    if(score > best.score){
+      best = {dir:d, score, cost: terrainMoveCost(t), nx, ny};
+    }
+  }
+  if(best.dir){
+    a.x = best.nx;
+    a.y = best.ny;
+    return best.cost;
+  }
+  return best.cost;
+}
+
 function findMateNear(list, origin, radius){
   for(const cand of list){
     if(!cand.alive || cand.sex !== 'M') continue;
@@ -1665,6 +1732,24 @@ function chooseBirthCell(mother, preferShelter){
   return {x: best.x, y: best.y};
 }
 
+function resolveIntraspeciesConflict(a, b, carnivore){
+  const aggression = carnivore ? 0.55 : 0.35;
+  const packEdge = (a.packId && b.packId && a.packId !== b.packId) ? 0.12 : 0;
+  const familyEdge = (a.familyId && b.familyId && a.familyId === b.familyId) ? -0.1 : 0;
+  const aScore = a.energy * 0.6 + (a.sex === 'M' ? 6 : 4) + rng()*6;
+  const bScore = b.energy * 0.6 + (b.sex === 'M' ? 6 : 4) + rng()*6 + familyEdge - packEdge;
+  const winner = (aScore + aggression) >= (bScore) ? a : b;
+  const loser = winner === a ? b : a;
+  loser.alive = false;
+  if(carnivore){
+    deathCarnConflict++;
+  } else {
+    deathHerbConflict++;
+  }
+  spawnEffect('death', loser.x, loser.y);
+  return winner;
+}
+
 /* ========= 初期化 ========= */
 function resetSim(){
   readParamsFromUI();
@@ -1687,16 +1772,21 @@ function resetSim(){
   for(const sp of SPECIES_DEFS){
     animals[sp.id] = [];
   }
+  carnivoreAt = Array.from({length:N}, ()=>[]);
   logs = [];
   deathHerbStarve = 0;
   deathCarnStarve = 0;
   deathHerbEaten  = 0;
   deathHerbAge = 0;
   deathCarnAge = 0;
+  deathHerbConflict = 0;
+  deathCarnConflict = 0;
   herbReproAttempts = 0;
   herbReproSuccess = 0;
   carnReproAttempts = 0;
   carnReproSuccess = 0;
+  nextFamilyId = 1;
+  nextPackId = 1;
   endReason = '';
   peakCounts = {grass:0, herb:0, carn:0};
   weatherState = getWeatherForStep(step);
@@ -1718,7 +1808,11 @@ function resetSim(){
     const traits = getSpeciesTraits(sp);
     for(let i=0;i<setting.init;i++){
       const baseEnergy = Math.max(6, Math.floor(traits.reproduction * 0.5));
-      animals[sp.id].push({x: randInt(GRID), y: randInt(GRID), energy: baseEnergy + randInt(8), alive:true, age:0, speciesId: sp.id, sex: rng() < 0.55 ? 'F' : 'M', generation:1});
+      const famId = nextFamilyId++;
+      const packId = famId;
+      const spawnX = randInt(GRID);
+      const spawnY = randInt(GRID);
+      animals[sp.id].push({x: spawnX, y: spawnY, energy: baseEnergy + randInt(8), alive:true, age:0, speciesId: sp.id, sex: rng() < 0.55 ? 'F' : 'M', generation:1, familyId: famId, packId, homeX: spawnX, homeY: spawnY});
     }
   }
 
@@ -1728,7 +1822,11 @@ function resetSim(){
     const traits = getSpeciesTraits(sp);
     for(let i=0;i<setting.init;i++){
       const baseEnergy = Math.max(8, Math.floor(traits.reproduction * 0.4));
-      animals[sp.id].push({x: randInt(GRID), y: randInt(GRID), energy: baseEnergy + randInt(10), alive:true, age:0, speciesId: sp.id, sex: rng() < 0.55 ? 'F' : 'M', generation:1});
+      const famId = nextFamilyId++;
+      const packId = nextPackId++;
+      const spawnX = randInt(GRID);
+      const spawnY = randInt(GRID);
+      animals[sp.id].push({x: spawnX, y: spawnY, energy: baseEnergy + randInt(10), alive:true, age:0, speciesId: sp.id, sex: rng() < 0.55 ? 'F' : 'M', generation:1, familyId: famId, packId, homeX: spawnX, homeY: spawnY});
     }
   }
 
@@ -1798,7 +1896,7 @@ function tick(){
         continue;
       }
 
-      const moveCost = moveTerrainAware(h);
+      const moveCost = moveTerrainAware(h, list, {social:true, territorial:false});
 
       const idx = h.y * GRID + h.x;
       const affinity = terrainAffinityMultiplier(spSetting, idx);
@@ -1832,7 +1930,7 @@ function tick(){
           const preferShelter = weatherState.rainfall > P.avgRain || terrain[idx] === TERRAIN.FOREST;
           for(let b=0;b<brood;b++){
             const nest = chooseBirthCell(h, preferShelter);
-            list.push({x:nest.x, y:nest.y, energy: childEnergy, alive:true, age:0, speciesId: sp.id, sex: rng() < 0.55 ? 'F' : 'M', generation: (h.generation || 1) + 1});
+            list.push({x:nest.x, y:nest.y, energy: childEnergy, alive:true, age:0, speciesId: sp.id, sex: rng() < 0.55 ? 'F' : 'M', generation: (h.generation || 1) + 1, familyId: h.familyId ?? nextFamilyId++, packId: h.packId ?? h.familyId ?? nextFamilyId++, homeX: h.homeX ?? h.x, homeY: h.homeY ?? h.y});
             herbAliveCount++;
           }
         }
@@ -1847,11 +1945,33 @@ function tick(){
     for(let i=0;i<list.length;i++){
       const h = list[i];
       if(!h.alive) continue;
-      herbivoreAt[h.y * GRID + h.x].push({sid: sp.id, idx: i});
+      const idx = h.y * GRID + h.x;
+      const slot = herbivoreAt[idx];
+      if(slot.length > 0){
+        const rivalRef = slot[0];
+        const rivalList = animals[rivalRef.sid];
+        const rival = rivalList && rivalList[rivalRef.idx];
+        if(rival && rival.alive){
+          const conflictChance = clampFloat(0.02 + (biomass[idx] < P.plantK * 0.25 ? 0.12 : 0) + (herbAliveCount > P.herbK ? 0.08 : 0) + (rival.familyId === h.familyId ? -0.04 : 0), 0.01, 0.35);
+          if(rng() < conflictChance){
+            const winner = resolveIntraspeciesConflict(h, rival, false);
+            herbAliveCount--;
+            if(winner === h){
+              slot[0] = {sid: sp.id, idx: i};
+            } else {
+              slot.length = 0;
+              slot.push(rivalRef);
+              continue;
+            }
+          }
+        }
+      }
+      slot.push({sid: sp.id, idx: i});
     }
   }
 
   // 4) 肉食の行動：移動→捕食→代謝→繁殖
+  for(let i=0;i<N;i++) carnivoreAt[i].length = 0;
   for(const sp of activeCarnSpecies){
     const traits = getSpeciesTraits(sp);
     const spSetting = speciesSettings[sp.id] || {};
@@ -1868,9 +1988,24 @@ function tick(){
         continue;
       }
 
-      const moveCost = moveTerrainAware(c);
+      const moveCost = moveTerrainAware(c, list, {social:true, territorial:true});
 
       const idx = c.y * GRID + c.x;
+      const rivals = carnivoreAt[idx];
+      if(rivals.length > 0){
+        const rival = rivals[0];
+        if(rival && rival.alive){
+          const win = resolveIntraspeciesConflict(c, rival, true);
+          carnAliveCount--;
+          if(win === c){
+            rivals[0] = c;
+          } else {
+            continue;
+          }
+        }
+      } else {
+        rivals.push(c);
+      }
       const affinity = terrainAffinityMultiplier(spSetting, idx);
       const cellList = herbivoreAt[idx];
       if(cellList.length > 0){
@@ -1916,7 +2051,7 @@ function tick(){
           const preferShelter = terrain[idx] === TERRAIN.FOREST || weatherState.season.includes('雨');
           for(let b=0;b<brood;b++){
             const den = chooseBirthCell(c, preferShelter);
-            list.push({x:den.x, y:den.y, energy: childEnergy, alive:true, age:0, speciesId: sp.id, sex: rng() < 0.52 ? 'F' : 'M', generation: (c.generation || 1) + 1});
+            list.push({x:den.x, y:den.y, energy: childEnergy, alive:true, age:0, speciesId: sp.id, sex: rng() < 0.52 ? 'F' : 'M', generation: (c.generation || 1) + 1, familyId: c.familyId ?? nextFamilyId++, packId: c.packId ?? nextPackId++, homeX: c.homeX ?? den.x, homeY: c.homeY ?? den.y});
             carnAliveCount++;
           }
         }
@@ -1996,30 +2131,13 @@ function showEndModal(counts){
   el('modalReason').textContent = endReason || '-';
   el('modalSteps').textContent = String(step);
   el('modalCounts').textContent = `草${counts.grass} / 草食${counts.herb} / 肉食${counts.carn}`;
-  el('modalDeaths').textContent = `草食:飢餓${deathHerbStarve} 捕食${deathHerbEaten} 老衰${deathHerbAge} / 肉食:飢餓${deathCarnStarve} 老衰${deathCarnAge}`;
+  el('modalDeaths').textContent = `草食:飢餓${deathHerbStarve} 捕食${deathHerbEaten} 老衰${deathHerbAge} 衝突${deathHerbConflict} / 肉食:飢餓${deathCarnStarve} 老衰${deathCarnAge} 衝突${deathCarnConflict}`;
   el('modalScore').textContent = `${scoreState.total}`;
   el('modalScoreDetail').textContent = scoreBreakdownText();
   el('endModal').style.display = 'flex';
 }
 function hideEndModal(){
   el('endModal').style.display = 'none';
-}
-
-function moveTerrainAware(a){
-  // トーラス（端で折り返し）にして境界の癖を減らす
-  const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
-  const start = Math.floor(rng()*4);
-  let appliedCost = terrainMoveCost(terrain[a.y * GRID + a.x]);
-  for(let i=0;i<4;i++){
-    const d = dirs[(start + i) % 4];
-    const nx = (a.x + d[0] + GRID) % GRID;
-    const ny = (a.y + d[1] + GRID) % GRID;
-    const t = terrain[ny * GRID + nx];
-    if(terrainPassable(t)){
-      a.x = nx; a.y = ny; appliedCost = terrainMoveCost(t); break;
-    }
-  }
-  return appliedCost;
 }
 
 function getCounts(){
@@ -2036,6 +2154,32 @@ function getCounts(){
     if(sp.diet === 'herbivore') hCount += sCount; else cCount += sCount;
   }
   return {grass: Math.round(totalBiomass), biomassTotal: totalBiomass, herb:hCount, carn:cCount, species};
+}
+
+function getDemography(){
+  let herbM = 0, herbF = 0, carnM = 0, carnF = 0;
+  const herbFamilies = new Set();
+  const carnFamilies = new Set();
+  const herbPacks = new Set();
+  const carnPacks = new Set();
+  for(const sp of SPECIES_DEFS){
+    const list = animals[sp.id] || [];
+    for(const a of list){
+      if(!a.alive) continue;
+      if(a.sex === 'M'){
+        if(sp.diet === 'herbivore') herbM++; else carnM++;
+      } else if(a.sex === 'F') {
+        if(sp.diet === 'herbivore') herbF++; else carnF++;
+      }
+      if(a.familyId){
+        if(sp.diet === 'herbivore') herbFamilies.add(a.familyId); else carnFamilies.add(a.familyId);
+      }
+      if(a.packId){
+        if(sp.diet === 'herbivore') herbPacks.add(a.packId); else carnPacks.add(a.packId);
+      }
+    }
+  }
+  return {herbM, herbF, carnM, carnF, herbFamilies: herbFamilies.size, carnFamilies: carnFamilies.size, herbPacks: herbPacks.size, carnPacks: carnPacks.size};
 }
 
 function pushLog(){
@@ -2055,6 +2199,8 @@ function pushLog(){
     death_carn_starve: deathCarnStarve,
     death_herb_age: deathHerbAge,
     death_carn_age: deathCarnAge,
+    death_herb_conflict: deathHerbConflict,
+    death_carn_conflict: deathCarnConflict,
     herb_K: P.herbK,
     carn_K: P.carnK,
     competition_enabled: P.competition ? 1 : 0,
@@ -2125,9 +2271,14 @@ function refreshUI(){
   el('outTotalStep').textContent = String(step);
   el('outFinalCounts').textContent = `草${counts.grass} / 草食${counts.herb} / 肉食${counts.carn}`;
   el('outPeakCounts').textContent = `草${peakCounts.grass} / 草食${peakCounts.herb} / 肉食${peakCounts.carn}`;
-  el('outDeaths').textContent = `草食:飢餓${deathHerbStarve} 捕食${deathHerbEaten} 老衰${deathHerbAge} / 肉食:飢餓${deathCarnStarve} 老衰${deathCarnAge}`;
+  el('outDeaths').textContent = `草食:飢餓${deathHerbStarve} 捕食${deathHerbEaten} 老衰${deathHerbAge} 衝突${deathHerbConflict} / 肉食:飢餓${deathCarnStarve} 老衰${deathCarnAge} 衝突${deathCarnConflict}`;
   el('outScore').textContent = String(scoreState.total);
   el('outScoreDetail').textContent = scoreBreakdownText();
+  const demo = getDemography();
+  el('outHerbSex').textContent = `${demo.herbM}:${demo.herbF}`;
+  el('outCarnSex').textContent = `${demo.carnM}:${demo.carnF}`;
+  el('outHerbGroup').textContent = `${demo.herbFamilies}家系 / 群${demo.herbPacks}`;
+  el('outCarnTerritory').textContent = `群${demo.carnPacks} / 衝突${deathCarnConflict}`;
 }
 
 /* ========= Chart.js ========= */
@@ -2216,7 +2367,7 @@ function buildResultText(){
     `総ステップ: ${step}`,
     `最終個体数: 草${counts.grass} / 草食${counts.herb} / 肉食${counts.carn}`,
     `最大個体数: 草${peakCounts.grass} / 草食${peakCounts.herb} / 肉食${peakCounts.carn}`,
-    `死亡内訳: 草食(飢餓${deathHerbStarve} 捕食${deathHerbEaten} 老衰${deathHerbAge}) / 肉食(飢餓${deathCarnStarve} 老衰${deathCarnAge})`,
+    `死亡内訳: 草食(飢餓${deathHerbStarve} 捕食${deathHerbEaten} 老衰${deathHerbAge} 衝突${deathHerbConflict}) / 肉食(飢餓${deathCarnStarve} 老衰${deathCarnAge} 衝突${deathCarnConflict})`,
     `スコア: ${scoreState.total} (${scoreBreakdownText()})`,
     `種別カウント: ${SPECIES_DEFS.map(sp=>`${sp.nameJP}:${counts.species[sp.id] ?? 0}`).join(' / ')}`
   ];
@@ -2379,10 +2530,12 @@ const settingsModal = el('settingsModal');
 let modalMaximized = false;
 let modalSavedRect = null;
 function openSettingsModal(){
+  settingsBackdrop.classList.add('active');
   settingsBackdrop.style.display = 'flex';
   settingsModal.setAttribute('aria-hidden', 'false');
 }
 function closeSettingsModal(){
+  settingsBackdrop.classList.remove('active');
   settingsBackdrop.style.display = 'none';
   settingsModal.setAttribute('aria-hidden', 'true');
   if(modalMaximized) toggleModalMaximize();
