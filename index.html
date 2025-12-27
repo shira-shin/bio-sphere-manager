@@ -518,7 +518,7 @@
                 <input id="inMaxSteps" type="number" min="10" max="20000" value="2000" />
               </div>
               <div class="ctrl">
-                <label>演出<div class="help">捕食リング・死亡マーカーなど視認性のみ</div></label>
+                <label>演出<div class="help">捕食リング・死亡マーカー・♡など視認性のみ</div></label>
                 <label class="note"><input id="chkEffects" type="checkbox" checked /> 演出ON</label>
               </div>
             </div>
@@ -650,7 +650,7 @@
                 <button id="btnCopyResult">結果をコピー</button>
                 <button id="btnCopyScore" class="primary">スコアをコピー</button>
               </div>
-              <div class="note">CSV列: schema_version, seed, step, grass_count, herbivore_count, carnivore_count, death_herbivore_starve, death_herbivore_eaten, death_carnivore_starve, death_herbivore_age, death_carnivore_age, death_herbivore_conflict, death_carnivore_conflict, herb_K, carn_K, competition_enabled, herb_repro_success_rate, carn_repro_success_rate, biomass_total, temperature, rainfall, season_name, 以降に各species_count列</div>
+              <div class="note">CSV列: schema_version, seed, step, grass_count, herbivore_count, carnivore_count, death_herbivore_starve, death_herbivore_eaten, death_carnivore_starve, death_herbivore_age, death_carnivore_age, births_herbivore, births_carnivore, death_herbivore_conflict, death_carnivore_conflict, herb_K, carn_K, competition_enabled, herb_repro_success_rate, carn_repro_success_rate, biomass_total, temperature, rainfall, season_name, 以降に各species_count列</div>
               <div class="card" style="border-color:#223247;">
                 <h2 style="padding:12px 12px 0">個体数グラフ</h2>
                 <div class="pad">
@@ -946,12 +946,14 @@ let mapScale = 1.25;
 let canvasSize = Math.round(BASE_CANVAS * mapScale);
 let cellSize = canvasSize / GRID;
 const N = GRID * GRID;
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 const SCORE_BIO_BONUS = 150;
 const SCORE_STABILITY_BASE = 220;
 const MAX_STABILITY_SAMPLES = 160;
 const EFFECT_LIFETIME = 22;
 const DEATH_MARK_LIFETIME = 26;
+const HEART_LIFETIME_MIN = 20;
+const HEART_LIFETIME_MAX = 40;
 const HUNT_RADIUS = 4;
 const CARN_METABOLISM_SCALE = 0.9;
 
@@ -1064,6 +1066,9 @@ let overlayMode = 'fauna';
 let p5Instance = null;
 let effectsEnabled = true;
 let visualEffects = [];
+let occupancy = new Uint16Array(N);
+let birthsHerbivore = 0;
+let birthsCarnivore = 0;
 let stabilitySeries = [];
 let scoreState = {total:0, base:0, bioBonus:0, biodiversity:0, stability:0};
 
@@ -1533,6 +1538,11 @@ function spawnEffect(type, x, y){
   if(!effectsEnabled) return;
   visualEffects.push({type, x, y, life: type === 'predation' ? EFFECT_LIFETIME : DEATH_MARK_LIFETIME, max: type === 'predation' ? EFFECT_LIFETIME : DEATH_MARK_LIFETIME});
 }
+function spawnHeartEffect(x, y){
+  if(!effectsEnabled) return;
+  const life = HEART_LIFETIME_MIN + randInt(HEART_LIFETIME_MAX - HEART_LIFETIME_MIN + 1);
+  visualEffects.push({type:'heart', x, y, life, max: life, float:0});
+}
 function drawEffects(p){
   if(!effectsEnabled){
     visualEffects = [];
@@ -1556,10 +1566,19 @@ function drawEffects(p){
       const delta = cellSize * 0.32;
       p.line(cx - delta, cy - delta, cx + delta, cy + delta);
       p.line(cx - delta, cy + delta, cx + delta, cy - delta);
+    } else if(eff.type === 'heart'){
+      const alpha = 200 * progress;
+      const floatY = cy - (1 - progress) * cellSize * 0.8;
+      p.noStroke();
+      p.fill(255, 140, 200, alpha);
+      p.textAlign(p.CENTER, p.CENTER);
+      p.textSize(Math.max(14, cellSize * 0.8));
+      p.text('♡', cx, floatY);
     }
     eff.life -= 1;
     if(eff.life > 0) next.push(eff);
   }
+  p.textAlign(p.LEFT, p.BASELINE);
   visualEffects = next;
 }
 function scoreBreakdownText(){
@@ -2000,10 +2019,30 @@ function findNearestHerbivoreTarget(x, y, radius){
 
 function findMateNear(list, origin, radius){
   for(const cand of list){
-    if(!cand.alive || cand.sex !== 'M') continue;
-    const dx = Math.abs(cand.x - origin.x);
-    const dy = Math.abs(cand.y - origin.y);
+    if(!cand.alive || cand.sex === origin.sex) continue;
+    const dx = Math.min(Math.abs(cand.x - origin.x), GRID - Math.abs(cand.x - origin.x));
+    const dy = Math.min(Math.abs(cand.y - origin.y), GRID - Math.abs(cand.y - origin.y));
     if(dx <= radius && dy <= radius) return cand;
+  }
+  return null;
+}
+
+function findEmptyNeighborCell(x, y){
+  const dirs = [
+    [-1,-1],[0,-1],[1,-1],
+    [-1,0],[1,0],
+    [-1,1],[0,1],[1,1],
+  ];
+  for(let i=dirs.length-1;i>0;i--){
+    const j = Math.floor(rng() * (i + 1));
+    [dirs[i], dirs[j]] = [dirs[j], dirs[i]];
+  }
+  for(const [dx, dy] of dirs){
+    const nx = (x + dx + GRID) % GRID;
+    const ny = (y + dy + GRID) % GRID;
+    const idx = ny * GRID + nx;
+    if(terrain[idx] === TERRAIN.RIVER) continue;
+    if(occupancy[idx] === 0) return {x:nx, y:ny, idx};
   }
   return null;
 }
@@ -2085,10 +2124,13 @@ function resetSim(){
   carnReproSuccess = 0;
   nextFamilyId = 1;
   nextPackId = 1;
+  birthsHerbivore = 0;
+  birthsCarnivore = 0;
   endReason = '';
   peakCounts = {grass:0, herb:0, carn:0};
   weatherState = getWeatherForStep(step);
   updateClimateLayer();
+  occupancy.fill(0);
 
   // 草をランダム配置（重複を避けて指定数を確保）
   let gPlaced = 0;
@@ -2110,7 +2152,8 @@ function resetSim(){
       const packId = famId;
       const spawnX = randInt(GRID);
       const spawnY = randInt(GRID);
-      animals[sp.id].push({x: spawnX, y: spawnY, energy: baseEnergy + randInt(8), alive:true, age:0, speciesId: sp.id, sex: rng() < 0.55 ? 'F' : 'M', generation:1, familyId: famId, packId, homeX: spawnX, homeY: spawnY});
+      animals[sp.id].push({x: spawnX, y: spawnY, energy: baseEnergy + randInt(8), alive:true, age:0, speciesId: sp.id, sex: rng() < 0.5 ? 'F' : 'M', generation:1, familyId: famId, packId, homeX: spawnX, homeY: spawnY});
+      occupancy[spawnY * GRID + spawnX]++;
     }
   }
 
@@ -2124,7 +2167,8 @@ function resetSim(){
       const packId = nextPackId++;
       const spawnX = randInt(GRID);
       const spawnY = randInt(GRID);
-      animals[sp.id].push({x: spawnX, y: spawnY, energy: baseEnergy + randInt(10), alive:true, age:0, speciesId: sp.id, sex: rng() < 0.55 ? 'F' : 'M', generation:1, familyId: famId, packId, homeX: spawnX, homeY: spawnY});
+      animals[sp.id].push({x: spawnX, y: spawnY, energy: baseEnergy + randInt(10), alive:true, age:0, speciesId: sp.id, sex: rng() < 0.5 ? 'F' : 'M', generation:1, familyId: famId, packId, homeX: spawnX, homeY: spawnY});
+      occupancy[spawnY * GRID + spawnX]++;
     }
   }
 
@@ -2178,6 +2222,16 @@ function tick(){
   let herbAliveCount = countAliveFor(activeHerbSpecies);
   let carnAliveCount = countAliveFor(activeCarnSpecies);
 
+  occupancy.fill(0);
+  for(const sp of SPECIES_DEFS){
+    const list = animals[sp.id] || [];
+    for(const a of list){
+      if(a.alive){
+        occupancy[a.y * GRID + a.x]++;
+      }
+    }
+  }
+
   // 2) 草食の行動：移動→採食→代謝→繁殖
   for(const sp of activeHerbSpecies){
     const traits = getSpeciesTraits(sp);
@@ -2186,22 +2240,30 @@ function tick(){
     for(const h of list){
       if(!h.alive) continue;
 
+      const prevIdx = h.y * GRID + h.x;
+
       h.age += 1;
       if(h.age >= traits.maxAge){
         h.alive = false;
         herbAliveCount--;
         deathHerbAge++;
         spawnEffect('death', h.x, h.y);
+        occupancy[prevIdx] = Math.max(0, occupancy[prevIdx]-1);
         continue;
       }
 
       const moveCost = moveTerrainAware(h, list, {social:true, territorial:false});
 
-      const idx = h.y * GRID + h.x;
-      const affinity = terrainAffinityMultiplier(spSetting, idx);
-      if(biomass[idx] > 0){
-        const eat = Math.min(biomass[idx], traits.gain);
-        biomass[idx] -= eat;
+      const currentIdx = h.y * GRID + h.x;
+      if(currentIdx !== prevIdx){
+        occupancy[prevIdx] = Math.max(0, occupancy[prevIdx]-1);
+        occupancy[currentIdx]++;
+      }
+
+      const affinity = terrainAffinityMultiplier(spSetting, currentIdx);
+      if(biomass[currentIdx] > 0){
+        const eat = Math.min(biomass[currentIdx], traits.gain);
+        biomass[currentIdx] -= eat;
         h.energy += eat * affinity.gain;
       }
 
@@ -2213,25 +2275,27 @@ function tick(){
         herbAliveCount--;
         deathHerbStarve++;
         spawnEffect('death', h.x, h.y);
+        occupancy[currentIdx] = Math.max(0, occupancy[currentIdx]-1);
         continue;
       }
 
       const seasonFactor = reproductionSeasonMultiplier();
       if(h.sex === 'F' && h.energy >= traits.reproduction * affinity.reproduction * Math.max(0.7, 1 / seasonFactor)){
-        const mate = findMateNear(list, h, 2);
         herbReproAttempts++;
-        if(mate && competitionReproPass(herbAliveCount, P.herbK)){
+        const mate = findMateNear(list, h, 1);
+        const birthSpot = mate ? findEmptyNeighborCell(h.x, h.y) : null;
+        if(mate && birthSpot && competitionReproPass(herbAliveCount, P.herbK)){
           herbReproSuccess++;
-          const brood = Math.max(1, Math.round(seasonFactor + (terrain[idx] === TERRAIN.FOREST ? 0.3 : 0)));
-          const energyForKids = Math.floor(h.energy * 0.55);
-          const childEnergy = Math.max(4, Math.floor(energyForKids / brood));
-          h.energy = Math.max(2, h.energy - childEnergy * brood);
-          const preferShelter = weatherState.rainfall > P.avgRain || terrain[idx] === TERRAIN.FOREST;
-          for(let b=0;b<brood;b++){
-            const nest = chooseBirthCell(h, preferShelter);
-            list.push({x:nest.x, y:nest.y, energy: childEnergy, alive:true, age:0, speciesId: sp.id, sex: rng() < 0.55 ? 'F' : 'M', generation: (h.generation || 1) + 1, familyId: h.familyId ?? nextFamilyId++, packId: h.packId ?? h.familyId ?? nextFamilyId++, homeX: h.homeX ?? h.x, homeY: h.homeY ?? h.y});
-            herbAliveCount++;
-          }
+          const reproCost = Math.max(2, Math.floor(traits.reproduction * 0.35));
+          h.energy = Math.max(1, h.energy - reproCost);
+          mate.energy = Math.max(1, mate.energy - reproCost);
+          const childEnergy = Math.max(4, Math.floor(traits.reproduction * 0.5));
+          const sex = rng() < 0.5 ? 'F' : 'M';
+          list.push({x:birthSpot.x, y:birthSpot.y, energy: childEnergy, alive:true, age:0, speciesId: sp.id, sex, generation: (h.generation || 1) + 1, familyId: h.familyId ?? nextFamilyId++, packId: h.packId ?? h.familyId ?? nextFamilyId++, homeX: h.homeX ?? h.x, homeY: h.homeY ?? h.y});
+          herbAliveCount++;
+          birthsHerbivore++;
+          occupancy[birthSpot.idx]++;
+          spawnHeartEffect(birthSpot.x, birthSpot.y);
         }
       }
     }
@@ -2255,6 +2319,7 @@ function tick(){
           if(rng() < conflictChance){
             const winner = resolveIntraspeciesConflict(h, rival, false);
             herbAliveCount--;
+            occupancy[idx] = Math.max(0, occupancy[idx]-1);
             if(winner === h){
               slot[0] = {sid: sp.id, idx: i};
             } else {
@@ -2278,6 +2343,8 @@ function tick(){
     for(const c of list){
       if(!c.alive) continue;
 
+      const prevIdx = c.y * GRID + c.x;
+
       c.age += 1;
       if(c.age >= traits.maxAge){
         c.alive = false;
@@ -2285,6 +2352,7 @@ function tick(){
         deathCarnAge++;
         stepCarnStats.age++;
         spawnEffect('death', c.x, c.y);
+        occupancy[prevIdx] = Math.max(0, occupancy[prevIdx]-1);
         continue;
       }
 
@@ -2292,12 +2360,18 @@ function tick(){
       const moveCost = moveTerrainAware(c, list, {social:true, territorial:true, target: huntTarget});
 
       const idx = c.y * GRID + c.x;
+      if(idx !== prevIdx){
+        occupancy[prevIdx] = Math.max(0, occupancy[prevIdx]-1);
+        occupancy[idx]++;
+      }
+
       const rivals = carnivoreAt[idx];
       if(rivals.length > 0){
         const rival = rivals[0];
         if(rival && rival.alive){
           const win = resolveIntraspeciesConflict(c, rival, true);
           carnAliveCount--;
+          occupancy[idx] = Math.max(0, occupancy[idx]-1);
           if(win === c){
             rivals[0] = c;
           } else {
@@ -2321,6 +2395,7 @@ function tick(){
             stepCarnStats.predation++;
             herbAliveCount--;
             spawnEffect('predation', c.x, c.y);
+            occupancy[idx] = Math.max(0, occupancy[idx]-1);
           }
         }
       }
@@ -2340,25 +2415,27 @@ function tick(){
         deathCarnStarve++;
         stepCarnStats.starve++;
         spawnEffect('death', c.x, c.y);
+        occupancy[idx] = Math.max(0, occupancy[idx]-1);
         continue;
       }
 
       const seasonFactor = reproductionSeasonMultiplier();
       if(c.sex === 'F' && c.energy >= traits.reproduction * affinity.reproduction * Math.max(0.75, 1 / seasonFactor)){
-        const mate = findMateNear(list, c, 3);
         carnReproAttempts++;
-        if(mate && competitionReproPass(carnAliveCount, P.carnK)){
+        const mate = findMateNear(list, c, 1);
+        const birthSpot = mate ? findEmptyNeighborCell(c.x, c.y) : null;
+        if(mate && birthSpot && competitionReproPass(carnAliveCount, P.carnK)){
           carnReproSuccess++;
-          const brood = (seasonFactor > 1.05 && rng() < 0.35) ? 2 : 1;
-          const energyForKids = Math.floor(c.energy * 0.46);
-          const childEnergy = Math.max(6, Math.floor(energyForKids / brood));
-          c.energy = Math.max(3, c.energy - childEnergy * brood);
-          const preferShelter = terrain[idx] === TERRAIN.FOREST || weatherState.season.includes('雨');
-          for(let b=0;b<brood;b++){
-            const den = chooseBirthCell(c, preferShelter);
-            list.push({x:den.x, y:den.y, energy: childEnergy, alive:true, age:0, speciesId: sp.id, sex: rng() < 0.52 ? 'F' : 'M', generation: (c.generation || 1) + 1, familyId: c.familyId ?? nextFamilyId++, packId: c.packId ?? nextPackId++, homeX: c.homeX ?? den.x, homeY: c.homeY ?? den.y});
-            carnAliveCount++;
-          }
+          const reproCost = Math.max(3, Math.floor(traits.reproduction * 0.4));
+          c.energy = Math.max(2, c.energy - reproCost);
+          mate.energy = Math.max(2, mate.energy - reproCost);
+          const childEnergy = Math.max(6, Math.floor(traits.reproduction * 0.55));
+          const sex = rng() < 0.5 ? 'F' : 'M';
+          list.push({x:birthSpot.x, y:birthSpot.y, energy: childEnergy, alive:true, age:0, speciesId: sp.id, sex, generation: (c.generation || 1) + 1, familyId: c.familyId ?? nextFamilyId++, packId: c.packId ?? nextPackId++, homeX: c.homeX ?? birthSpot.x, homeY: c.homeY ?? birthSpot.y});
+          carnAliveCount++;
+          birthsCarnivore++;
+          occupancy[birthSpot.idx]++;
+          spawnHeartEffect(birthSpot.x, birthSpot.y);
         }
       }
     }
@@ -2515,6 +2592,8 @@ function pushLog(){
     competition_enabled: P.competition ? 1 : 0,
     herb_repro_success_rate: herbRate,
     carn_repro_success_rate: carnRate,
+    births_herbivore: birthsHerbivore,
+    births_carnivore: birthsCarnivore,
     biomass_total: counts.biomassTotal.toFixed(2),
     temperature: weatherState.temperature.toFixed(2),
     rainfall: weatherState.rainfall.toFixed(2),
@@ -2526,6 +2605,8 @@ function pushLog(){
   herbReproSuccess = 0;
   carnReproAttempts = 0;
   carnReproSuccess = 0;
+  birthsHerbivore = 0;
+  birthsCarnivore = 0;
 }
 function updateScore(counts, recordSample){
   if(recordSample){
@@ -2650,6 +2731,7 @@ function downloadCSV(){
     "schema_version","seed","step",
     "grass_count","herbivore_count","carnivore_count",
     "death_herbivore_starve","death_herbivore_eaten","death_carnivore_starve","death_herbivore_age","death_carnivore_age",
+    "births_herbivore","births_carnivore",
     "herb_K","carn_K","competition_enabled","herb_repro_success_rate","carn_repro_success_rate",
     "biomass_total","temperature","rainfall","season_name",
     ...SPECIES_DEFS.map(sp=>`${sp.id}_count`)
@@ -2659,6 +2741,7 @@ function downloadCSV(){
     r.schema_version, JSON.stringify(r.seed), r.step,
     r.grass, r.herb, r.carn,
     r.death_herb_starve, r.death_herb_eaten, r.death_carn_starve, r.death_herb_age, r.death_carn_age,
+    r.births_herbivore, r.births_carnivore,
     r.herb_K, r.carn_K, r.competition_enabled, r.herb_repro_success_rate, r.carn_repro_success_rate,
     r.biomass_total, r.temperature, r.rainfall, r.season_name,
     ...SPECIES_DEFS.map(sp=> r.species_counts ? r.species_counts[sp.id] : '')
