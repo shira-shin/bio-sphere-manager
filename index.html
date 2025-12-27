@@ -627,10 +627,10 @@
       return false;
     }
 
-    function createCanvasSafely(p, onSuccess=null){
+    function createCanvasSafely(sk, onSuccess=null){
       const rect = measureStage();
       if(rect.width && rect.height){
-        const cnv = p.createCanvas(Math.max(1, rect.width), Math.max(1, rect.height));
+        const cnv = sk.createCanvas(Math.max(1, rect.width), Math.max(1, rect.height));
         cnv.parent(canvasHost);
         cnv.canvas.id = 'mapCanvas';
         setCanvasStatus('');
@@ -849,15 +849,15 @@
     }
 
     /* Simulation */
-    let sketch = (p) => {
-      pInstance = p;
+    let sketch = (sk) => {
+      pInstance = sk;
       let pan = { active:false, startX:0, startY:0, originX:0, originY:0 };
 
-      p.setup = () => {
+      sk.setup = () => {
         canvasHost.innerHTML = '';
         const finishSetup = () => {
-          p.pixelDensity(window.devicePixelRatio || 1);
-          p.noLoop();
+          sk.pixelDensity(window.devicePixelRatio || 1);
+          sk.noLoop();
           applyPreset('temperate');
           if(!resizeObserver){
             resizeObserver = new ResizeObserver(()=>{ ensureCanvasSize(); renderOnce('resize'); });
@@ -866,28 +866,31 @@
           const rect = measureStage();
           console.log(`[BioSphere] p5 ready / map dims ${rect.width}x${rect.height}`);
         };
-        createCanvasSafely(p, finishSetup);
+        createCanvasSafely(sk, finishSetup);
       };
 
-      p.windowResized = () => {
+      sk.windowResized = () => {
         ensureCanvasSize();
         renderOnce('resize');
       };
 
-      p.draw = () => {
+      sk.draw = () => {
         if(drawErrored) return;
         try {
-          p.background('#05080f');
-          drawTerrain(p);
-          drawPlants(p);
-          drawDens(p);
-          drawTrails(p);
-          drawAnimals(p);
-          drawEvents(p);
+          sk.background('#05080f');
+          drawTerrain(sk);
+          drawPlants(sk);
+          drawDens(sk);
+          drawTrails(sk);
+          drawAnimals(sk);
+          drawEvents(sk);
         } catch(err){
-          drawErrored = true;
-          stopSimLoop();
-          p.noLoop();
+          const debugMode = window.__BIO_DEBUG__ === true;
+          if(!debugMode){
+            drawErrored = true;
+            stopSimLoop();
+            sk.noLoop();
+          }
           console.error('[BioSphere] draw error', err);
           showErrorModal(`描画中にエラーが発生しました: ${err.message}`);
         }
@@ -901,7 +904,8 @@
         };
       }
 
-      function drawTerrain(p){
+      function drawTerrain(sk){
+        ensureValidP5(sk);
         for(let y=0;y<state.gridH;y++){
           for(let x=0;x<state.gridW;x++){
             const idx = y*state.gridW+x;
@@ -909,100 +913,100 @@
             const cellType = terrainTypes.find(t=>t.key===tKey) || terrainTypes[0];
             const pos = worldToScreen(x,y);
             const size = state.tile*state.view.scale;
-            p.noStroke();
-            const c = p.color(cellType.color);
+            sk.noStroke();
+            const c = sk.color(cellType.color);
             c.setAlpha(190);
-            p.fill(c);
-            p.rect(pos.x, pos.y, size, size);
-            p.stroke(cellType.texture);
-            p.strokeWeight(1);
+            sk.fill(c);
+            sk.rect(pos.x, pos.y, size, size);
+            sk.stroke(cellType.texture);
+            sk.strokeWeight(1);
             if(tKey==='forest'){
-              p.line(pos.x+size*0.3, pos.y, pos.x+size*0.7, pos.y+size);
-              p.line(pos.x, pos.y+size*0.4, pos.x+size, pos.y+size*0.6);
+              sk.line(pos.x+size*0.3, pos.y, pos.x+size*0.7, pos.y+size);
+              sk.line(pos.x, pos.y+size*0.4, pos.x+size, pos.y+size*0.6);
             } else if(tKey==='water'){
-              p.noFill();
-              p.beginShape();
-              p.curveVertex(pos.x, pos.y+size*0.25);
-              p.curveVertex(pos.x+size*0.15, pos.y+size*0.35);
-              p.curveVertex(pos.x+size*0.45, pos.y+size*0.55);
-              p.curveVertex(pos.x+size*0.75, pos.y+size*0.7);
-              p.curveVertex(pos.x+size, pos.y+size*0.82);
-              p.endShape();
+              sk.noFill();
+              sk.beginShape();
+              curveVertexSafe(sk, pos.x, pos.y+size*0.25);
+              curveVertexSafe(sk, pos.x+size*0.15, pos.y+size*0.35);
+              curveVertexSafe(sk, pos.x+size*0.45, pos.y+size*0.55);
+              curveVertexSafe(sk, pos.x+size*0.75, pos.y+size*0.7);
+              curveVertexSafe(sk, pos.x+size, pos.y+size*0.82);
+              sk.endShape();
             } else if(tKey==='rock'){
-              p.fill(cellType.texture); p.noStroke();
-              p.triangle(pos.x+size*0.2,pos.y+size*0.8,pos.x+size*0.5,pos.y+size*0.2,pos.x+size*0.8,pos.y+size*0.9);
+              sk.fill(cellType.texture); sk.noStroke();
+              sk.triangle(pos.x+size*0.2,pos.y+size*0.8,pos.x+size*0.5,pos.y+size*0.2,pos.x+size*0.8,pos.y+size*0.9);
             } else if(tKey==='wetland'){
-              p.noFill(); p.stroke(cellType.texture);
-              p.ellipse(pos.x+size*0.4,pos.y+size*0.6,size*0.4,size*0.25);
+              sk.noFill(); sk.stroke(cellType.texture);
+              sk.ellipse(pos.x+size*0.4,pos.y+size*0.6,size*0.4,size*0.25);
             } else if(tKey==='sand'){
-              p.noFill(); p.stroke(cellType.texture);
-              p.line(pos.x+size*0.2,pos.y+size*0.7,pos.x+size*0.8,pos.y+size*0.65);
+              sk.noFill(); sk.stroke(cellType.texture);
+              sk.line(pos.x+size*0.2,pos.y+size*0.7,pos.x+size*0.8,pos.y+size*0.65);
             } else if(tKey==='shrub'){
-              p.noStroke(); p.fill(cellType.texture);
-              p.circle(pos.x+size*0.3,pos.y+size*0.4,size*0.2);
-              p.circle(pos.x+size*0.6,pos.y+size*0.5,size*0.25);
+              sk.noStroke(); sk.fill(cellType.texture);
+              sk.circle(pos.x+size*0.3,pos.y+size*0.4,size*0.2);
+              sk.circle(pos.x+size*0.6,pos.y+size*0.5,size*0.25);
             }
           }
         }
       }
 
-      function drawPlants(p){
-        p.noStroke();
+      function drawPlants(sk){
+        sk.noStroke();
         state.plants.forEach((v,idx)=>{
           if(v<=0.01) return;
           const x = idx % state.gridW;
           const y = Math.floor(idx / state.gridW);
           const pos = worldToScreen(x,y);
           const size = state.tile*state.view.scale;
-          p.fill(100,200,120, clamp01(v)*180 + 40);
-          p.circle(pos.x+size/2, pos.y+size/2, Math.max(4, size*0.4*v));
+          sk.fill(100,200,120, clamp01(v)*180 + 40);
+          sk.circle(pos.x+size/2, pos.y+size/2, Math.max(4, size*0.4*v));
         });
       }
 
-      function drawDens(p){
-        p.noStroke();
+      function drawDens(sk){
+        sk.noStroke();
         state.dens.forEach(idx => {
           const x = idx % state.gridW; const y = Math.floor(idx/state.gridW);
           const pos = worldToScreen(x,y);
           const size = state.tile*state.view.scale;
-          p.fill('#f5d97a');
-          p.rect(pos.x+size*0.28,pos.y+size*0.28,size*0.44,size*0.44,4);
+          sk.fill('#f5d97a');
+          sk.rect(pos.x+size*0.28,pos.y+size*0.28,size*0.44,size*0.44,4);
         });
       }
 
-      function drawTrails(p){
+      function drawTrails(sk){
         if(!toggleTrails.checked) return;
         state.animals.forEach(a=>{
           if(!a.trail || a.trail.length < 2) return;
-          p.noFill();
-          p.stroke('rgba(160,210,255,0.45)');
-          p.strokeWeight(Math.max(1, state.tile*state.view.scale*0.06));
-          p.beginShape();
+          sk.noFill();
+          sk.stroke('rgba(160,210,255,0.45)');
+          sk.strokeWeight(Math.max(1, state.tile*state.view.scale*0.06));
+          sk.beginShape();
           a.trail.forEach(pt => {
             const pos = worldToScreen(pt.x, pt.y);
-            p.vertex(pos.x, pos.y);
+            sk.vertex(pos.x, pos.y);
           });
           const head = worldToScreen(a.x, a.y);
-          p.vertex(head.x, head.y);
-          p.endShape();
+          sk.vertex(head.x, head.y);
+          sk.endShape();
         });
       }
 
-      function drawAnimals(p){
+      function drawAnimals(sk){
         state.animals.forEach(a=>{
           const pos = worldToScreen(a.x,a.y);
           const size = state.tile*state.view.scale;
           const sp = speciesLibrary[a.species];
           if(!sp) return;
-          p.stroke(sp.outline); p.strokeWeight(1.6); p.fill(sp.color);
+          sk.stroke(sp.outline); sk.strokeWeight(1.6); sk.fill(sp.color);
           if(sp.diet==='herb'){
-            p.circle(pos.x, pos.y, size*0.72);
-            p.fill(sp.inner); p.noStroke();
-            p.circle(pos.x, pos.y, size*0.3);
+            sk.circle(pos.x, pos.y, size*0.72);
+            sk.fill(sp.inner); sk.noStroke();
+            sk.circle(pos.x, pos.y, size*0.3);
           } else {
-            p.triangle(pos.x-size*0.4,pos.y+size*0.4,pos.x+size*0.4,pos.y+size*0.4,pos.x,pos.y-size*0.5);
-            p.fill(sp.inner); p.noStroke();
-            p.triangle(pos.x-size*0.18,pos.y+size*0.18,pos.x+size*0.18,pos.y+size*0.18,pos.x,pos.y-size*0.24);
+            sk.triangle(pos.x-size*0.4,pos.y+size*0.4,pos.x+size*0.4,pos.y+size*0.4,pos.x,pos.y-size*0.5);
+            sk.fill(sp.inner); sk.noStroke();
+            sk.triangle(pos.x-size*0.18,pos.y+size*0.18,pos.x+size*0.18,pos.y+size*0.18,pos.x,pos.y-size*0.24);
           }
           if(toggleVectors.checked){
             const mag = Math.hypot(a.vx, a.vy) || 0;
@@ -1010,18 +1014,18 @@
               const dirX = a.vx / mag;
               const dirY = a.vy / mag;
               const len = size * 0.9;
-              p.stroke('rgba(240,255,255,0.85)');
-              p.strokeWeight(Math.max(1, size*0.08));
-              p.line(pos.x, pos.y, pos.x + dirX*len, pos.y + dirY*len);
-              p.strokeWeight(Math.max(1, size*0.05));
-              p.line(pos.x + dirX*len, pos.y + dirY*len, pos.x + dirX*len - dirY*len*0.25, pos.y + dirY*len + dirX*len*0.25);
-              p.line(pos.x + dirX*len, pos.y + dirY*len, pos.x + dirX*len + dirY*len*0.25, pos.y + dirY*len - dirX*len*0.25);
+              sk.stroke('rgba(240,255,255,0.85)');
+              sk.strokeWeight(Math.max(1, size*0.08));
+              sk.line(pos.x, pos.y, pos.x + dirX*len, pos.y + dirY*len);
+              sk.strokeWeight(Math.max(1, size*0.05));
+              sk.line(pos.x + dirX*len, pos.y + dirY*len, pos.x + dirX*len - dirY*len*0.25, pos.y + dirY*len + dirX*len*0.25);
+              sk.line(pos.x + dirX*len, pos.y + dirY*len, pos.x + dirX*len + dirY*len*0.25, pos.y + dirY*len - dirX*len*0.25);
             }
           }
         });
       }
 
-      function drawEvents(p){
+      function drawEvents(sk){
         const now = performance.now();
         state.reproductionEvents = state.reproductionEvents.filter(ev => now-ev.time < 900);
         state.huntEvents = state.huntEvents.filter(ev => now-ev.time < 480);
@@ -1030,41 +1034,57 @@
           state.reproductionEvents.forEach(ev => {
             const t = (now-ev.time)/900;
             const pos = worldToScreen(ev.x, ev.y);
-            p.noStroke(); p.fill(`rgba(255,120,200,${1-t})`);
-            p.textSize(state.tile*state.view.scale*0.8);
-            p.text('♡', pos.x, pos.y);
+            sk.noStroke(); sk.fill(`rgba(255,120,200,${1-t})`);
+            sk.textSize(state.tile*state.view.scale*0.8);
+            sk.text('♡', pos.x, pos.y);
           });
         }
         if(toggleFlashes.checked){
           state.huntEvents.forEach(ev => {
             const t = (now-ev.time)/480;
             const pos = worldToScreen(ev.x, ev.y);
-            p.noFill(); p.stroke(`rgba(255,180,80,${1-t})`); p.strokeWeight(3);
+            sk.noFill(); sk.stroke(`rgba(255,180,80,${1-t})`); sk.strokeWeight(3);
             const r = state.tile*state.view.scale*(0.6 + t*0.6);
-            p.circle(pos.x, pos.y, r);
+            sk.circle(pos.x, pos.y, r);
           });
         }
       }
 
-      p.mouseWheel = (event) => {
+      const ensureValidP5 = (sk) => {
+        if(!sk || typeof sk.rect !== 'function' || typeof sk.beginShape !== 'function'){
+          throw new Error('drawTerrain: invalid p5 instance (sk) passed');
+        }
+      };
+
+      const curveVertexSafe = (sk, x, y) => {
+        if(sk && typeof sk.curveVertex === 'function') return sk.curveVertex(x, y);
+        if(sk && typeof sk.vertex === 'function') return sk.vertex(x, y);
+      };
+
+      const curveSafe = (sk, x1,y1,x2,y2,x3,y3,x4,y4) => {
+        if(sk && typeof sk.curve === 'function') return sk.curve(x1,y1,x2,y2,x3,y3,x4,y4);
+        if(sk && typeof sk.bezier === 'function') return sk.bezier(x1,y1,x2,y2,x3,y3,x4,y4);
+      };
+
+      sk.mouseWheel = (event) => {
         const factor = event.delta > 0 ? 0.92 : 1.08;
-        updateScale(state.view.scale * factor, p.mouseX, p.mouseY);
+        updateScale(state.view.scale * factor, sk.mouseX, sk.mouseY);
         renderOnce('zoom');
       };
 
-      p.mousePressed = () => {
-        if(p.mouseButton === p.CENTER || (p.mouseButton === p.LEFT && p.keyIsDown(32))){
-          pan.active = true; pan.startX = p.mouseX; pan.startY = p.mouseY; pan.originX = state.view.offsetX; pan.originY = state.view.offsetY;
+      sk.mousePressed = () => {
+        if(sk.mouseButton === sk.CENTER || (sk.mouseButton === sk.LEFT && sk.keyIsDown(32))){
+          pan.active = true; pan.startX = sk.mouseX; pan.startY = sk.mouseY; pan.originX = state.view.offsetX; pan.originY = state.view.offsetY;
         }
       };
-      p.mouseDragged = () => {
+      sk.mouseDragged = () => {
         if(pan.active){
-          state.view.offsetX = pan.originX + (p.mouseX - pan.startX);
-          state.view.offsetY = pan.originY + (p.mouseY - pan.startY);
+          state.view.offsetX = pan.originX + (sk.mouseX - pan.startX);
+          state.view.offsetY = pan.originY + (sk.mouseY - pan.startY);
           renderOnce('pan');
         }
       };
-      p.mouseReleased = () => { if(pan.active) renderOnce('pan'); pan.active=false; };
+      sk.mouseReleased = () => { if(pan.active) renderOnce('pan'); pan.active=false; };
 
       const resetViewBtn = document.getElementById('resetView');
       if(resetViewBtn){
