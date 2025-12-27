@@ -17,21 +17,29 @@
       letter-spacing:0.02em;
       overflow:hidden;
     }
+    #mapStage{
+      position:fixed; inset:0; z-index:0; overflow:hidden;
+      background:radial-gradient(circle at 10% 20%, rgba(60,120,200,0.06), transparent 38%), #05080f;
+    }
+    #mapStage canvas{display:block; width:100%; height:100%; border-radius:18px; box-shadow:0 18px 46px rgba(0,0,0,0.55);}
+    .canvas-debug{position:absolute; left:12px; top:12px; padding:8px 10px; border-radius:12px; border:1px solid #30445c; background:rgba(6,10,15,0.72); color:#cfd8e3; font-size:12px; display:flex; gap:8px; align-items:center; z-index:5;}
+    .canvas-debug.off{opacity:0.4;}
+    .canvas-debug .stat{text-shadow:0 2px 8px rgba(0,0,0,0.6);}
+    .canvas-debug .stat.is-error{color:#ff8a8a; font-weight:800;}
+    .canvas-debug button{border:1px solid #30445c; background:#0e1622; color:#cfd8e3; border-radius:8px; padding:4px 8px; cursor:pointer; font-size:11px;}
     header{
       padding:16px 18px; border-bottom:1px solid #101826;
       background: linear-gradient(180deg, #0f1620, #0b0f14);
-      position: sticky; top:0; z-index:8;
+      position: sticky; top:0; z-index:12;
       box-shadow:0 12px 34px rgba(0,0,0,0.35);
     }
     header .title{font-size:22px; font-weight:800;}
     header .sub{font-size:13px; color:#9fb0c3; margin-top:6px;}
 
-    #appRoot{position:relative; height:calc(100vh - 90px); overflow:hidden;}
-    #p5-container{position:relative; height:100%;}
-    canvas{display:block; border-radius:18px; width:100% !important; height:100% !important; box-shadow:0 18px 46px rgba(0,0,0,0.55);}    
+    canvas{display:block;}
 
     /* Widget system */
-    .widget{position:fixed; z-index:12; border-radius:14px; border:1px solid #223247; background:rgba(12,18,26,0.94); box-shadow:0 12px 34px rgba(0,0,0,0.45); min-width:240px; pointer-events:auto; color:#dce6f3;}
+    .widget{position:fixed; z-index:10; border-radius:14px; border:1px solid #223247; background:rgba(12,18,26,0.94); box-shadow:0 12px 34px rgba(0,0,0,0.45); min-width:240px; pointer-events:auto; color:#dce6f3;}
     .widget-header{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; background:linear-gradient(180deg, rgba(26,42,60,0.95), rgba(15,24,36,0.95)); border-bottom:1px solid #1f2a37; cursor:grab; user-select:none;}
     .widget.dragging .widget-header{cursor:grabbing;}
     .widget-title{font-weight:800; font-size:14px; letter-spacing:0.04em;}
@@ -40,14 +48,14 @@
     .widget-controls button:hover{background:#1c2e48;}
     .widget-body{padding:10px 12px; max-height:70vh; overflow:auto;}
     .widget.is-minimized .widget-body{display:none;}
-    .widget.is-minimized{min-height:48px; width:260px;}
-    .widget.is-maximized{width:90vw; height:90vh; max-width:92vw; max-height:92vh; box-shadow:0 16px 42px rgba(0,0,0,0.55); inset:5vh auto auto 5vw;}
-    .widget.is-maximized .widget-body{max-height:calc(90vh - 70px); overflow:auto;}
+    .widget.is-minimized{height:auto;}
+    .widget.is-maximized{position:fixed; inset:6vh 6vw; width:auto; height:auto; z-index:50; box-shadow:0 16px 42px rgba(0,0,0,0.55);}
+    .widget.is-maximized .widget-body{max-height:calc(88vh - 70px); overflow:auto;}
     .widget.is-maximized .widget-header{cursor:default;}
 
     .widget-dock{position:fixed; left:12px; bottom:12px; right:12px; display:flex; justify-content:space-between; gap:12px; z-index:11; pointer-events:none;}
     .dock-col{display:flex; gap:8px; flex-wrap:wrap; pointer-events:auto;}
-    .dock-chip{border-radius:12px; padding:8px 12px; border:1px solid #2a3a52; background:#0d1420; color:#c9d6e2; cursor:pointer; box-shadow:0 8px 24px rgba(0,0,0,0.35);}    
+    .dock-chip{border-radius:12px; padding:8px 12px; border:1px solid #2a3a52; background:#0d1420; color:#c9d6e2; cursor:pointer; box-shadow:0 8px 24px rgba(0,0,0,0.35);}
 
     .chip{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid #2a3a52; background:#132235; font-size:12px; color:#9fb0c3;}
     .btn{background:#132235; border:1px solid #243244; border-radius:10px; padding:10px 12px; color:#e6edf3; cursor:pointer;}
@@ -73,23 +81,31 @@
     .floating-settings{position:fixed; right:18px; bottom:20px; z-index:25;}
     .fab{border-radius:999px; padding:12px 18px; font-weight:700; box-shadow:0 12px 32px rgba(0,0,0,0.45);}
 
-    .backdrop{position:fixed; inset:0; background:rgba(8,12,18,0.72); display:none; align-items:center; justify-content:center; z-index:22; pointer-events:none;}
+    .backdrop{position:fixed; inset:0; background:rgba(8,12,18,0.72); display:none; align-items:center; justify-content:center; z-index:100; pointer-events:none;}
     .backdrop.active{display:flex; pointer-events:auto;}
+    #dragShield{position:fixed; inset:0; background:transparent; z-index:9; pointer-events:auto;}
     .hidden{display:none!important;}
   </style>
 </head>
 <body>
+  <div id="mapStage">
+    <canvas id="mapCanvas" aria-label="シミュレーションマップ"></canvas>
+    <div class="canvas-debug" id="canvasDebug">
+      <span class="stat" id="canvasSizeStat">キャンバス: --</span>
+      <span class="stat" id="canvasDprStat">DPR: --</span>
+      <span class="stat" id="canvasRenderStat">最終描画: -- ms</span>
+      <span class="stat" id="canvasTilesStat">タイル数: --</span>
+      <button id="canvasDebugToggle" aria-pressed="true">非表示</button>
+    </div>
+  </div>
   <header>
     <div class="title">Bio-Sphere Manager</div>
-    <div class="sub">Window Manager refresh + ecology sandbox</div>
+    <div class="sub">ウィンドウ管理リフレッシュ＋生態系サンドボックス</div>
   </header>
-  <div id="appRoot">
-    <div id="p5-container"></div>
-  </div>
 
-  <div class="widget" id="hudWidget" style="left:16px; top:96px; width:360px;">
+  <div class="widget" id="hudWidget" data-widget-id="hudWidget" style="left:16px; top:96px; width:360px;">
     <div class="widget-header" data-widget-id="hudWidget">
-      <div class="widget-title">HUD</div>
+      <div class="widget-title">状態表示</div>
       <div class="widget-controls">
         <button data-ui-action="minimize" data-widget-id="hudWidget">—</button>
         <button data-ui-action="maximize" data-widget-id="hudWidget">▢</button>
@@ -97,32 +113,32 @@
     </div>
     <div class="widget-body">
       <div class="hud-grid">
-        <div class="hud-item"><div class="label">Population</div><div class="value" id="hudPop">0</div></div>
-        <div class="hud-item"><div class="label">Season</div><div class="value" id="hudSeason">Spring</div></div>
-        <div class="hud-item"><div class="label">Temperature</div><div class="value" id="hudTemp">0℃</div></div>
-        <div class="hud-item"><div class="label">Rain</div><div class="value" id="hudRain">0</div></div>
-        <div class="hud-item"><div class="label">Score</div><div class="value" id="hudScore">0</div></div>
+        <div class="hud-item"><div class="label">個体数</div><div class="value" id="hudPop">0</div></div>
+        <div class="hud-item"><div class="label">季節</div><div class="value" id="hudSeason">春</div></div>
+        <div class="hud-item"><div class="label">気温</div><div class="value" id="hudTemp">0℃</div></div>
+        <div class="hud-item"><div class="label">降雨</div><div class="value" id="hudRain">0</div></div>
+        <div class="hud-item"><div class="label">スコア</div><div class="value" id="hudScore">0</div></div>
       </div>
     </div>
   </div>
 
-  <div class="widget" id="summaryWidget" style="left:400px; top:96px; width:320px;">
+  <div class="widget" id="summaryWidget" data-widget-id="summaryWidget" style="left:400px; top:96px; width:320px;">
     <div class="widget-header" data-widget-id="summaryWidget">
-      <div class="widget-title">Generation Summary</div>
+      <div class="widget-title">世代サマリ</div>
       <div class="widget-controls">
         <button data-ui-action="minimize" data-widget-id="summaryWidget">—</button>
         <button data-ui-action="maximize" data-widget-id="summaryWidget">▢</button>
       </div>
     </div>
     <div class="widget-body">
-      <div id="presetInfo" class="help">Preset: Temperate Forest</div>
-      <div id="genSummary">No data yet.</div>
+      <div id="presetInfo" class="help">プリセット: 温帯森林</div>
+      <div id="genSummary">まだデータがありません。</div>
     </div>
   </div>
 
-  <div class="widget" id="controlsWidget" style="left:16px; top:320px; width:320px;">
+  <div class="widget" id="controlsWidget" data-widget-id="controlsWidget" style="left:16px; top:320px; width:320px;">
     <div class="widget-header" data-widget-id="controlsWidget">
-      <div class="widget-title">Quick Controls</div>
+      <div class="widget-title">クイック操作</div>
       <div class="widget-controls">
         <button data-ui-action="minimize" data-widget-id="controlsWidget">—</button>
         <button data-ui-action="maximize" data-widget-id="controlsWidget">▢</button>
@@ -130,25 +146,25 @@
     </div>
     <div class="widget-body">
       <div class="row" style="display:flex; gap:8px; flex-wrap:wrap;">
-        <button class="btn primary" id="startBtn">Start</button>
-        <button class="btn" id="stopBtn">Stop</button>
-        <button class="btn danger" id="panicBtn">Panic</button>
+        <button class="btn primary" id="startBtn">開始</button>
+        <button class="btn" id="stopBtn">停止</button>
+        <button class="btn danger" id="panicBtn">パニック</button>
       </div>
       <div class="section">
         <details open>
-          <summary>Overlay toggles</summary>
+          <summary>オーバーレイ切替</summary>
           <div class="section-body">
-            <label><input type="checkbox" id="toggleHearts" checked /> show ♡</label>
-            <label><input type="checkbox" id="toggleFlashes" checked /> show hunts</label>
+            <label><input type="checkbox" id="toggleHearts" checked /> ♡を表示</label>
+            <label><input type="checkbox" id="toggleFlashes" checked /> 狩りエフェクトを表示</label>
           </div>
         </details>
       </div>
       <div class="section">
         <details open>
-          <summary>Camera</summary>
+          <summary>カメラ</summary>
           <div class="section-body">
             <div class="row" style="display:flex; gap:8px; flex-wrap:wrap;">
-              <button class="btn" id="resetView">Reset View</button>
+              <button class="btn" id="resetView">表示リセット</button>
             </div>
           </div>
         </details>
@@ -156,9 +172,9 @@
     </div>
   </div>
 
-  <div class="widget" id="legendWidget" style="right:16px; top:96px; width:300px;">
+  <div class="widget" id="legendWidget" data-widget-id="legendWidget" style="right:16px; top:96px; width:300px;">
     <div class="widget-header" data-widget-id="legendWidget">
-      <div class="widget-title">Legend</div>
+      <div class="widget-title">凡例</div>
       <div class="widget-controls">
         <button data-ui-action="minimize" data-widget-id="legendWidget">—</button>
         <button data-ui-action="maximize" data-widget-id="legendWidget">▢</button>
@@ -169,9 +185,9 @@
     </div>
   </div>
 
-  <div class="widget" id="settingsWidget" style="right:16px; top:320px; width:360px;">
+  <div class="widget" id="settingsWidget" data-widget-id="settingsWidget" style="right:16px; top:320px; width:360px;">
     <div class="widget-header" data-widget-id="settingsWidget">
-      <div class="widget-title">Settings</div>
+      <div class="widget-title">設定</div>
       <div class="widget-controls">
         <button data-ui-action="minimize" data-widget-id="settingsWidget">—</button>
         <button data-ui-action="maximize" data-widget-id="settingsWidget">▢</button>
@@ -180,19 +196,19 @@
     <div class="widget-body">
       <div class="section">
         <details open>
-          <summary>Simulation</summary>
+          <summary>シミュレーション</summary>
           <div class="section-body">
             <div class="row" style="display:flex; gap:8px; flex-wrap:wrap;">
-              <button class="btn" data-preset="temperate">Temperate Forest</button>
-              <button class="btn" data-preset="savanna">Savanna</button>
-              <button class="btn" data-preset="wetland">Wetland</button>
+              <button class="btn" data-preset="temperate">温帯森林</button>
+              <button class="btn" data-preset="savanna">サバンナ</button>
+              <button class="btn" data-preset="wetland">湿地</button>
             </div>
             <div class="row" style="display:flex; gap:8px; flex-wrap:wrap;">
-              <label><input type="checkbox" id="modeExtinction" /> run until all extinct</label>
+              <label><input type="checkbox" id="modeExtinction" /> 全滅まで実行</label>
             </div>
             <div class="section" style="margin-top:8px;">
               <details open>
-                <summary>Behavior mode (per species)</summary>
+                <summary>行動モード（種別ごと）</summary>
                 <div class="section-body" id="behaviorControls" style="display:grid; gap:8px;"></div>
               </details>
             </div>
@@ -213,65 +229,67 @@
     /* Window manager */
     const widgetManager = (() => {
       const widgets = new Map();
-      const dockLeft = document.getElementById('dockLeft');
-      const dockRight = document.getElementById('dockRight');
       let dragging = null;
+      let dragShield = null;
 
       const register = (id) => {
         const el = document.getElementById(id);
         if(!el) return;
-        widgets.set(id, { el, docked:false });
+        el.dataset.widgetId = id;
+        widgets.set(id, { el, restoreRect:null });
+        syncButtons(el, 'minimize', false);
+        syncButtons(el, 'maximize', false);
+      };
+
+      const syncButtons = (el, action, active) => {
+        el.querySelectorAll(`[data-ui-action="${action}"]`).forEach(btn => {
+          btn.setAttribute('aria-pressed', active);
+        });
+      };
+
+      const saveRect = (el) => {
+        const rect = el.getBoundingClientRect();
+        return {
+          left: el.style.left || `${rect.left}px`,
+          top: el.style.top || `${rect.top}px`,
+          width: el.style.width || `${rect.width}px`,
+          height: el.style.height || `${rect.height}px`,
+        };
+      };
+
+      const applyRect = (el, rect) => {
+        if(!rect) return;
+        el.style.left = rect.left;
+        el.style.top = rect.top;
+        el.style.width = rect.width;
+        el.style.height = rect.height;
       };
 
       const minimize = (id) => {
         const entry = widgets.get(id); if(!entry) return;
         const { el } = entry;
-        if(el.classList.contains('is-minimized')) return restoreFromDock(id);
-        el.classList.add('is-minimized');
-        const dockTarget = el.classList.contains('dock-right') ? dockRight : dockLeft;
-        const chip = document.createElement('button');
-        chip.className = 'dock-chip';
-        chip.textContent = el.querySelector('.widget-title').textContent;
-        chip.dataset.widgetId = id;
-        dockTarget.appendChild(chip);
-        entry.dockedChip = chip;
-        entry.prevStyle = { left: el.style.left, top: el.style.top };
-        el.style.left = '-9999px'; el.style.top = '-9999px';
-      };
-
-      const restoreFromDock = (id) => {
-        const entry = widgets.get(id); if(!entry) return;
-        const { el, dockedChip, prevStyle } = entry;
-        el.classList.remove('is-minimized');
-        if(dockedChip?.parentNode) dockedChip.parentNode.removeChild(dockedChip);
-        if(prevStyle){ el.style.left = prevStyle.left; el.style.top = prevStyle.top; }
-        clampToViewport(el);
+        const willMinimize = !el.classList.contains('is-minimized');
+        el.classList.toggle('is-minimized', willMinimize);
+        if(willMinimize) el.classList.remove('is-maximized');
+        syncButtons(el, 'minimize', willMinimize);
+        if(!willMinimize) clampToViewport(el);
       };
 
       const maximize = (id) => {
         const entry = widgets.get(id); if(!entry) return;
         const { el } = entry;
-        if(el.classList.contains('is-maximized')) return restoreSize(id);
-        entry.restoreRect = {
-          left: el.style.left,
-          top: el.style.top,
-          width: el.style.width,
-          height: el.style.height,
-        };
-        el.classList.add('is-maximized');
-      };
-
-      const restoreSize = (id) => {
-        const entry = widgets.get(id); if(!entry) return;
-        const { el, restoreRect } = entry;
-        el.classList.remove('is-maximized');
-        if(restoreRect){
-          el.style.left = restoreRect.left;
-          el.style.top = restoreRect.top;
-          el.style.width = restoreRect.width;
-          el.style.height = restoreRect.height;
+        if(el.classList.contains('is-maximized')){
+          el.classList.remove('is-maximized');
+          syncButtons(el, 'maximize', false);
+          applyRect(el, entry.restoreRect);
+          clampToViewport(el);
+          return;
         }
-        clampToViewport(el);
+        entry.restoreRect = saveRect(el);
+        el.classList.add('is-maximized');
+        el.classList.remove('is-minimized');
+        syncButtons(el, 'maximize', true);
+        syncButtons(el, 'minimize', false);
       };
 
       const clampToViewport = (el) => {
@@ -283,62 +301,92 @@
         el.style.left = `${left}px`; el.style.top = `${top}px`;
       };
 
+      const createShield = () => {
+        if(dragShield) return;
+        dragShield = document.createElement('div');
+        dragShield.id = 'dragShield';
+        document.body.appendChild(dragShield);
+      };
+
+      const removeShield = () => {
+        if(dragShield && dragShield.parentNode){ dragShield.parentNode.removeChild(dragShield); }
+        dragShield = null;
+      };
+
       const startDrag = (e) => {
         const header = e.target.closest('.widget-header');
         if(!header) return;
-        const id = header.dataset.widgetId; const entry = widgets.get(id); if(!entry) return;
+        const id = header.dataset.widgetId || header.parentElement?.dataset.widgetId;
+        const entry = widgets.get(id); if(!entry) return;
         const el = entry.el;
         if(el.classList.contains('is-maximized')) return;
-        dragging = { id, startX:e.clientX, startY:e.clientY, rect: el.getBoundingClientRect() };
-        document.body.classList.add('is-widget-dragging');
-        header.setPointerCapture(e.pointerId);
+        const rect = el.getBoundingClientRect();
+        dragging = { id, offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top };
+        createShield();
       };
 
       const doDrag = (e) => {
         if(!dragging) return;
         const entry = widgets.get(dragging.id); if(!entry) return;
         const el = entry.el;
-        const dx = e.clientX - dragging.startX;
-        const dy = e.clientY - dragging.startY;
-        const left = dragging.rect.left + dx;
-        const top = dragging.rect.top + dy;
+        const left = e.clientX - dragging.offsetX;
+        const top = e.clientY - dragging.offsetY;
         el.style.left = `${left}px`;
         el.style.top = `${top}px`;
       };
 
-      const endDrag = (e) => {
-        if(!dragging) return;
+      const endDrag = () => {
+        if(!dragging) { removeShield(); return; }
         const entry = widgets.get(dragging.id); if(entry) clampToViewport(entry.el);
         dragging = null;
-        document.body.classList.remove('is-widget-dragging');
+        removeShield();
+      };
+
+      const panicReset = () => {
+        removeShield();
+        widgets.forEach(({el, restoreRect}) => {
+          el.classList.remove('is-maximized', 'is-minimized');
+          syncButtons(el, 'maximize', false);
+          syncButtons(el, 'minimize', false);
+          applyRect(el, restoreRect);
+          clampToViewport(el);
+        });
       };
 
       document.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-ui-action]');
         if(!btn) return;
-        const id = btn.dataset.widgetId;
+        const id = btn.dataset.widgetId || btn.closest('.widget')?.dataset.widgetId;
         const action = btn.dataset.uiAction;
         if(action === 'minimize') minimize(id);
         if(action === 'maximize') maximize(id);
-        if(action === 'close') restoreFromDock(id);
-      });
-
-      document.addEventListener('click', (e) => {
-        const chip = e.target.closest('.dock-chip');
-        if(!chip) return;
-        restoreFromDock(chip.dataset.widgetId);
       });
 
       document.addEventListener('pointerdown', startDrag);
       document.addEventListener('pointermove', doDrag);
       document.addEventListener('pointerup', endDrag);
+      document.addEventListener('pointercancel', endDrag);
 
       window.addEventListener('resize', () => widgets.forEach(({el}) => clampToViewport(el)));
 
-      return { register, minimize, maximize, restoreSize, restoreFromDock, clampToViewport };
+      return { register, minimize, maximize, clampToViewport, panicReset };
     })();
 
     ['hudWidget','summaryWidget','controlsWidget','legendWidget','settingsWidget'].forEach(widgetManager.register);
+
+    /* Canvas manager */
+    const mapStage = document.getElementById('mapStage');
+    const canvasDebug = document.getElementById('canvasDebug');
+    const canvasDebugToggle = document.getElementById('canvasDebugToggle');
+    const canvasSizeStat = document.getElementById('canvasSizeStat');
+    const canvasDprStat = document.getElementById('canvasDprStat');
+    const canvasRenderStat = document.getElementById('canvasRenderStat');
+    const canvasTilesStat = document.getElementById('canvasTilesStat');
+    let pInstance = null;
+    let simFrame = null;
+    let resizeObserver = null;
+    let debugEnabled = true;
+    const renderStats = { lastRenderMs: 0, worldTiles: 0 };
 
     /* Simulation */
     const legendList = document.getElementById('legendList');
@@ -349,28 +397,28 @@
     const behaviorControls = document.getElementById('behaviorControls');
 
     const terrainTypes = [
-      { key:'grass', name:'Grassland', color:'#1f6f3f', texture:'#2b8a4f', plantK:0.65, cover:0.1, isWater:false, isRock:false },
-      { key:'forest', name:'Forest', color:'#19341f', texture:'#225028', plantK:0.8, cover:0.4, isWater:false, isRock:false },
-      { key:'shrub', name:'Shrubland', color:'#245c3c', texture:'#2f7a4c', plantK:0.7, cover:0.25, isWater:false, isRock:false },
-      { key:'rock', name:'Rock', color:'#545b63', texture:'#737b84', plantK:0, cover:0.05, isWater:false, isRock:true },
-      { key:'water', name:'Water', color:'#1b3b62', texture:'#27517f', plantK:0, cover:0, isWater:true, isRock:false },
-      { key:'wetland', name:'Wetland', color:'#1f4f58', texture:'#2f7a88', plantK:0.9, cover:0.18, isWater:false, isRock:false },
-      { key:'sand', name:'Sand', color:'#7a623c', texture:'#8b754f', plantK:0.3, cover:0.05, isWater:false, isRock:false },
+      { key:'grass', name:'草原', color:'#1f6f3f', texture:'#2b8a4f', plantK:0.65, cover:0.1, isWater:false, isRock:false },
+      { key:'forest', name:'森林', color:'#19341f', texture:'#225028', plantK:0.8, cover:0.4, isWater:false, isRock:false },
+      { key:'shrub', name:'低木地', color:'#245c3c', texture:'#2f7a4c', plantK:0.7, cover:0.25, isWater:false, isRock:false },
+      { key:'rock', name:'岩地', color:'#545b63', texture:'#737b84', plantK:0, cover:0.05, isWater:false, isRock:true },
+      { key:'water', name:'水域', color:'#1b3b62', texture:'#27517f', plantK:0, cover:0, isWater:true, isRock:false },
+      { key:'wetland', name:'湿地', color:'#1f4f58', texture:'#2f7a88', plantK:0.9, cover:0.18, isWater:false, isRock:false },
+      { key:'sand', name:'砂地', color:'#7a623c', texture:'#8b754f', plantK:0.3, cover:0.05, isWater:false, isRock:false },
     ];
 
     const speciesLibrary = {
-      deer:{ name:'Deer-like', diet:'herb', color:'#9be070', outline:'#0d190a', inner:'#d7f7b2', speed:0.6, sociality:0.5, behavior:'herd', metabolism:0.002, satietyDecay:0.003, reproduction: {interval:1400, litter:[1,2]}, vision:4, coverAffinity:0.2 },
-      wolf:{ name:'Wolf-like', diet:'carn', color:'#ff9f70', outline:'#3a1205', inner:'#ffc9a6', speed:0.8, sociality:0.7, behavior:'pack', metabolism:0.0022, satietyDecay:0.003, reproduction: {interval:1800, litter:[2,3]}, vision:5, coverAffinity:-0.1 },
-      zebra:{ name:'Zebra-like', diet:'herb', color:'#d8f0ff', outline:'#101820', inner:'#6dc6ff', speed:0.75, sociality:0.7, behavior:'herd', metabolism:0.002, satietyDecay:0.003, reproduction: {interval:1600, litter:[1,1]}, vision:4, coverAffinity:0 },
-      lion:{ name:'Lion-like', diet:'carn', color:'#f1c56a', outline:'#4e2c05', inner:'#ffe2a6', speed:0.7, sociality:0.6, behavior:'pack', metabolism:0.0024, satietyDecay:0.003, reproduction:{interval:1900, litter:[2,3]}, vision:5, coverAffinity:-0.05 },
-      capybara:{ name:'Wetland herb', diet:'herb', color:'#cdb18a', outline:'#302215', inner:'#f3e3c8', speed:0.45, sociality:0.4, behavior:'den', metabolism:0.0018, satietyDecay:0.0025, reproduction:{interval:1500, litter:[2,4]}, vision:3, coverAffinity:0.25 },
-      otter:{ name:'Otter-like', diet:'carn', color:'#9cc4ff', outline:'#0c1d32', inner:'#d7e7ff', speed:0.6, sociality:0.5, behavior:'ambush', metabolism:0.0021, satietyDecay:0.0028, reproduction:{interval:1600, litter:[1,2]}, vision:4, coverAffinity:0.15 }
+      deer:{ name:'シカ系', diet:'herb', color:'#9be070', outline:'#0d190a', inner:'#d7f7b2', speed:0.6, sociality:0.5, behavior:'herd', metabolism:0.002, satietyDecay:0.003, reproduction: {interval:1400, litter:[1,2]}, vision:4, coverAffinity:0.2 },
+      wolf:{ name:'オオカミ系', diet:'carn', color:'#ff9f70', outline:'#3a1205', inner:'#ffc9a6', speed:0.8, sociality:0.7, behavior:'pack', metabolism:0.0022, satietyDecay:0.003, reproduction: {interval:1800, litter:[2,3]}, vision:5, coverAffinity:-0.1 },
+      zebra:{ name:'シマウマ系', diet:'herb', color:'#d8f0ff', outline:'#101820', inner:'#6dc6ff', speed:0.75, sociality:0.7, behavior:'herd', metabolism:0.002, satietyDecay:0.003, reproduction: {interval:1600, litter:[1,1]}, vision:4, coverAffinity:0 },
+      lion:{ name:'ライオン系', diet:'carn', color:'#f1c56a', outline:'#4e2c05', inner:'#ffe2a6', speed:0.7, sociality:0.6, behavior:'pack', metabolism:0.0024, satietyDecay:0.003, reproduction:{interval:1900, litter:[2,3]}, vision:5, coverAffinity:-0.05 },
+      capybara:{ name:'カピバラ系', diet:'herb', color:'#cdb18a', outline:'#302215', inner:'#f3e3c8', speed:0.45, sociality:0.4, behavior:'den', metabolism:0.0018, satietyDecay:0.0025, reproduction:{interval:1500, litter:[2,4]}, vision:3, coverAffinity:0.25 },
+      otter:{ name:'カワウソ系', diet:'carn', color:'#9cc4ff', outline:'#0c1d32', inner:'#d7e7ff', speed:0.6, sociality:0.5, behavior:'ambush', metabolism:0.0021, satietyDecay:0.0028, reproduction:{interval:1600, litter:[1,2]}, vision:4, coverAffinity:0.15 }
     };
 
     const presets = {
       temperate: {
         label:'温帯森林',
-        description:'Four seasons, browse-rich understory, wolves pack up in late winter.',
+        description:'四季と豊かな下草。冬の終わりにオオカミが群れを作る。',
         climate:{ temp: [10,18,12,2], rain:[0.22,0.32,0.25,0.16] },
         animals:[
           { species:'deer', count:32 },
@@ -380,7 +428,7 @@
       },
       savanna: {
         label:'サバンナ',
-        description:'Long dry season, explosive wet growth; lions cooperate around water holes.',
+        description:'乾季が長く、雨季に草木が爆発的成長。ライオンは水場周りで協調。',
         climate:{ temp:[24,31,27,19], rain:[0.1,0.32,0.07,0.04] },
         animals:[
           { species:'zebra', count:34 },
@@ -390,7 +438,7 @@
       },
       wetland: {
         label:'湿地',
-        description:'Expansive marsh with rocky dens; otters ambush along reeds.',
+        description:'岩の巣穴が点在する大きな沼地。カワウソは葦際で待ち伏せ。',
         climate:{ temp:[18,24,15,9], rain:[0.32,0.44,0.28,0.22] },
         animals:[
           { species:'capybara', count:28 },
@@ -420,12 +468,87 @@
       endAllExtinct:false,
     };
 
+    function measureStage(){
+      const rect = mapStage.getBoundingClientRect();
+      return { width: Math.round(rect.width), height: Math.round(rect.height) };
+    }
+
+    function updateDebugPanel(rect){
+      if(!debugEnabled){
+        canvasDebug.classList.add('off');
+        return;
+      }
+      canvasDebug.classList.remove('off');
+      const dpr = Math.round((window.devicePixelRatio||1)*100)/100;
+      canvasSizeStat.textContent = `キャンバス: ${rect.width}x${rect.height}`;
+      canvasDprStat.textContent = `DPR: ${dpr}`;
+      canvasRenderStat.textContent = `最終描画: ${renderStats.lastRenderMs.toFixed(1)} ms`;
+      canvasTilesStat.textContent = `タイル数: ${renderStats.worldTiles}`;
+      if(rect.width===0 || rect.height===0){
+        canvasSizeStat.classList.add('is-error');
+      } else {
+        canvasSizeStat.classList.remove('is-error');
+      }
+    }
+
+    function ensureCanvasSize(){
+      if(!pInstance) return false;
+      const rect = measureStage();
+      const dpr = window.devicePixelRatio || 1;
+      pInstance.pixelDensity(dpr);
+      if(rect.width && rect.height){
+        pInstance.resizeCanvas(rect.width, rect.height, true);
+        updateDebugPanel(rect);
+        return true;
+      }
+      updateDebugPanel(rect);
+      requestAnimationFrame(()=>{
+        const retryRect = measureStage();
+        if(retryRect.width && retryRect.height){
+          pInstance.resizeCanvas(retryRect.width, retryRect.height, true);
+          renderOnce('recover');
+        }
+      });
+      return false;
+    }
+
     const legendEntries = [
       ...terrainTypes.map(t=>({label:t.name, color:t.color})),
-      { label:'Herbivore', color:'#9be070' },
-      { label:'Carnivore', color:'#ff9f70' },
-      { label:'Den', color:'#f5d97a' }
+      { label:'草食動物', color:'#9be070' },
+      { label:'肉食動物', color:'#ff9f70' },
+      { label:'巣', color:'#f5d97a' }
     ];
+
+    function renderOnce(reason='manual'){
+      if(!pInstance) return;
+      const rect = measureStage();
+      if(!rect.width || !rect.height){
+        updateDebugPanel(rect);
+        requestAnimationFrame(()=>renderOnce('recover')); 
+        return;
+      }
+      const start = performance.now();
+      ensureCanvasSize();
+      pInstance.redraw();
+      renderStats.lastRenderMs = performance.now() - start;
+      updateDebugPanel(rect);
+    }
+
+    function startSimLoop(){
+      if(simFrame) return;
+      const tick = () => {
+        if(!state.running){ simFrame = null; return; }
+        stepSim();
+        renderOnce('sim');
+        simFrame = requestAnimationFrame(tick);
+      };
+      simFrame = requestAnimationFrame(tick);
+    }
+
+    function stopSimLoop(){
+      state.running = false;
+      if(simFrame){ cancelAnimationFrame(simFrame); simFrame = null; }
+    }
 
     function renderLegend(){
       legendList.innerHTML = '';
@@ -437,6 +560,8 @@
       });
     }
     renderLegend();
+    toggleHearts.addEventListener('change', ()=>renderOnce('overlay'));
+    toggleFlashes.addEventListener('change', ()=>renderOnce('overlay'));
 
     /* Core sim helpers */
     const clamp01 = (v) => Math.min(1, Math.max(0, v));
@@ -519,16 +644,20 @@
       renderSummary();
       updateHUD();
       const note = preset.description || '';
-      document.getElementById('presetInfo').textContent = `Preset: ${preset.label}${note ? ' — ' + note : ''}`;
+      document.getElementById('presetInfo').textContent = `プリセット: ${preset.label}${note ? ' — ' + note : ''}`;
+      renderStats.worldTiles = state.gridW * state.gridH;
+      renderOnce('preset');
     }
 
     presetButtons.forEach(btn => btn.addEventListener('click', ()=>{
       applyPreset(btn.dataset.preset);
       state.running = true;
+      startSimLoop();
     }));
 
     function renderBehaviorControls(){
       behaviorControls.innerHTML = '';
+      const behaviorLabels = { herd:'群れ', pack:'群れ狩り', ambush:'待ち伏せ', den:'巣ごもり', wander:'放浪' };
       Object.entries(speciesLibrary).forEach(([key, sp]) => {
         const row = document.createElement('div');
         row.style.display = 'grid';
@@ -539,7 +668,7 @@
         const select = document.createElement('select');
         ['herd','pack','ambush','den','wander'].forEach(mode => {
           const opt = document.createElement('option');
-          opt.value = mode; opt.textContent = mode;
+          opt.value = mode; opt.textContent = behaviorLabels[mode] || mode;
           if(sp.behavior===mode) opt.selected = true;
           select.appendChild(opt);
         });
@@ -562,7 +691,7 @@
 
     function updateHUD(){
       hudEls.pop.textContent = state.animals.length;
-      hudEls.season.textContent = ['Spring','Summer','Autumn','Winter'][state.season%4];
+      hudEls.season.textContent = ['春','夏','秋','冬'][state.season%4];
       hudEls.temp.textContent = `${state.temp.toFixed(1)}℃`;
       hudEls.rain.textContent = state.rain.toFixed(2);
       hudEls.score.textContent = state.score.toFixed(0);
@@ -572,23 +701,33 @@
       const counts = {};
       state.animals.forEach(a => { counts[a.species] = (counts[a.species]||0)+1; });
       const lines = Object.entries(counts).map(([k,v])=>`${speciesLibrary[k]?.name||k}: ${v}`);
-      document.getElementById('genSummary').textContent = lines.join(' / ') || 'No data';
+      document.getElementById('genSummary').textContent = lines.join(' / ') || 'データなし';
     }
 
     /* Simulation */
     let sketch = (p) => {
+      pInstance = p;
       let pan = { active:false, startX:0, startY:0, originX:0, originY:0 };
 
       p.setup = () => {
-        const wrap = document.getElementById('p5-container');
-        const cnv = p.createCanvas(wrap.clientWidth, wrap.clientHeight);
-        cnv.parent('p5-container');
+        const placeholder = document.getElementById('mapCanvas');
+        const rect = measureStage();
+        if(placeholder && placeholder.parentNode) placeholder.parentNode.removeChild(placeholder);
+        const cnv = p.createCanvas(Math.max(1, rect.width), Math.max(1, rect.height));
+        cnv.parent(mapStage);
+        cnv.canvas.id = 'mapCanvas';
+        p.pixelDensity(window.devicePixelRatio || 1);
+        p.noLoop();
         applyPreset('temperate');
+        if(!resizeObserver){
+          resizeObserver = new ResizeObserver(()=>{ ensureCanvasSize(); renderOnce('resize'); });
+          resizeObserver.observe(mapStage);
+        }
       };
 
       p.windowResized = () => {
-        const wrap = document.getElementById('p5-container');
-        p.resizeCanvas(wrap.clientWidth, wrap.clientHeight);
+        ensureCanvasSize();
+        renderOnce('resize');
       };
 
       p.draw = () => {
@@ -598,7 +737,6 @@
         drawDens(p);
         drawAnimals(p);
         drawEvents(p);
-        if(state.running) stepSim();
       };
 
       function worldToScreen(x,y){
@@ -716,6 +854,7 @@
       p.mouseWheel = (event) => {
         const factor = event.delta > 0 ? 0.92 : 1.08;
         state.view.scale = Math.min(Math.max(state.view.scale * factor, 0.6), 2.6);
+        renderOnce('zoom');
       };
 
       p.mousePressed = () => {
@@ -727,22 +866,24 @@
         if(pan.active){
           state.view.offsetX = pan.originX + (p.mouseX - pan.startX);
           state.view.offsetY = pan.originY + (p.mouseY - pan.startY);
+          renderOnce('pan');
         }
       };
-      p.mouseReleased = () => { pan.active=false; };
+      p.mouseReleased = () => { if(pan.active) renderOnce('pan'); pan.active=false; };
 
       document.getElementById('resetView').addEventListener('click', ()=>{
         state.view = { scale:1, offsetX:0, offsetY:0 };
+        renderOnce('reset');
       });
-      document.getElementById('startBtn').addEventListener('click', ()=> state.running=true);
-      document.getElementById('stopBtn').addEventListener('click', ()=> state.running=false);
+      document.getElementById('startBtn').addEventListener('click', ()=> { state.running=true; startSimLoop(); });
+      document.getElementById('stopBtn').addEventListener('click', ()=> { stopSimLoop(); renderOnce('stop'); });
       document.getElementById('panicBtn').addEventListener('click', ()=>{
         document.querySelectorAll('.backdrop').forEach(el=>el.classList.remove('active'));
-        document.querySelectorAll('.widget').forEach(el=>{
-          el.classList.remove('is-maximized');
-          widgetManager.clampToViewport(el);
-        });
+        document.querySelectorAll('.widget').forEach(el=>el.style.pointerEvents='auto');
+        widgetManager.panicReset();
         state.view = { scale:1, offsetX:0, offsetY:0 };
+        stopSimLoop();
+        renderOnce('panic');
       });
     };
 
@@ -965,7 +1106,22 @@
       return best;
     }
 
-    new p5(sketch);
+    canvasDebugToggle.addEventListener('click', ()=>{
+      debugEnabled = !debugEnabled;
+      canvasDebugToggle.setAttribute('aria-pressed', debugEnabled);
+      canvasDebugToggle.textContent = debugEnabled ? '非表示' : '表示';
+      updateDebugPanel(measureStage());
+    });
+
+    function initCanvas(){
+      requestAnimationFrame(()=>{
+        requestAnimationFrame(()=>{
+          if(pInstance) return;
+          pInstance = new p5(sketch, mapStage);
+        });
+      });
+    }
+    initCanvas();
   </script>
 </body>
 </html>
