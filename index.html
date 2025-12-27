@@ -669,6 +669,30 @@ function mulberry32(seed){
   };
 }
 
+function renderDependencyWarning(missing){
+  const div = document.createElement('div');
+  div.style.cssText = [
+    'position:fixed','inset:16px','z-index:9999','display:flex','align-items:center','justify-content:center',
+    'background:rgba(8,12,18,0.86)','border:1px solid #3a1a28','border-radius:12px','color:#f2dede',
+    'font-weight:700','box-shadow:0 12px 34px rgba(0,0,0,0.45)','padding:18px','text-align:center'
+  ].join(';');
+  div.textContent = `必要なライブラリ(${missing.join(', ')})が読み込めませんでした。ネットワークを確認し、再度読み込んでください。`;
+  document.body.appendChild(div);
+}
+
+function checkDependencies(){
+  const missing = [];
+  if(typeof window.p5 === 'undefined') missing.push('p5.js');
+  if(typeof window.Chart === 'undefined') missing.push('Chart.js');
+  if(missing.length){
+    renderDependencyWarning(missing);
+    return false;
+  }
+  return true;
+}
+
+const depsReady = checkDependencies();
+
 /* ========= シミュレーション設定 ========= */
 const GRID = 50;
 const BASE_CANVAS = 900;
@@ -2284,6 +2308,7 @@ function refreshUI(){
 /* ========= Chart.js ========= */
 let chart = null;
 function resetChart(){
+  if(!depsReady) return;
   const ctx = el('chart').getContext('2d');
   if(chart) chart.destroy();
   chart = new Chart(ctx, {
@@ -2310,7 +2335,7 @@ function resetChart(){
   });
 }
 function pushChartPoint(step, g, h, c){
-  if(!chart) return;
+  if(!depsReady || !chart) return;
   // グラフは重くしないため、ログ間隔でのみ更新（logsと同じタイミング）
   chart.data.labels.push(step);
   chart.data.datasets[0].data.push(g);
@@ -2383,6 +2408,7 @@ function copyScoreShare(){
 }
 
 /* ========= p5.js 描画 ========= */
+if(depsReady){
 new p5((p)=>{
   p.setup = () => {
     const cnv = p.createCanvas(canvasSize, canvasSize);
@@ -2523,6 +2549,7 @@ new p5((p)=>{
     refreshUI();
   };
 });
+}
 
 /* ========= 設定モーダル ========= */
 const settingsBackdrop = el('settingsBackdrop');
