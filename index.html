@@ -18,8 +18,13 @@
       overflow:hidden;
     }
     #mapStage{
-      position:fixed; inset:0; z-index:0; overflow:hidden;
-      background:radial-gradient(circle at 10% 20%, rgba(60,120,200,0.06), transparent 38%), #05080f;
+      position:fixed; left:0; top:0; right:360px; bottom:0; z-index:0; overflow:hidden;
+      background-color:#05080f;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px),
+        radial-gradient(circle at 10% 20%, rgba(60,120,200,0.08), transparent 42%);
+      background-size: 48px 48px, 48px 48px, auto;
     }
     #mapStage canvas{display:block; width:100%; height:100%; border-radius:18px; box-shadow:0 18px 46px rgba(0,0,0,0.55);}
     .canvas-debug{position:absolute; left:12px; top:12px; padding:8px 10px; border-radius:12px; border:1px solid #30445c; background:rgba(6,10,15,0.72); color:#cfd8e3; font-size:12px; display:flex; gap:8px; align-items:center; z-index:5;}
@@ -84,6 +89,7 @@
     .backdrop{position:fixed; inset:0; background:rgba(8,12,18,0.72); display:none; align-items:center; justify-content:center; z-index:100; pointer-events:none;}
     .backdrop.active{display:flex; pointer-events:auto;}
     #dragShield{position:fixed; inset:0; background:transparent; z-index:9; pointer-events:auto;}
+    .status-badge{position:absolute; left:14px; bottom:14px; background:rgba(30,10,10,0.7); border:1px solid rgba(255,120,120,0.45); color:#ffb0b0; padding:8px 10px; border-radius:10px; font-size:13px; pointer-events:none; z-index:6; box-shadow:0 8px 20px rgba(0,0,0,0.4);}
     .hidden{display:none!important;}
   </style>
 </head>
@@ -97,6 +103,7 @@
       <span class="stat" id="canvasTilesStat">タイル数: --</span>
       <button id="canvasDebugToggle" aria-pressed="true">非表示</button>
     </div>
+    <div class="status-badge hidden" id="canvasStatus">キャンバス初期化を再試行中...</div>
   </div>
   <header>
     <div class="title">Bio-Sphere Manager</div>
@@ -156,6 +163,8 @@
           <div class="section-body">
             <label><input type="checkbox" id="toggleHearts" checked /> ♡を表示</label>
             <label><input type="checkbox" id="toggleFlashes" checked /> 狩りエフェクトを表示</label>
+            <label><input type="checkbox" id="toggleTrails" checked /> 軌跡を表示</label>
+            <label><input type="checkbox" id="toggleVectors" checked /> 速度ベクトルを表示</label>
           </div>
         </details>
       </div>
@@ -165,6 +174,10 @@
           <div class="section-body">
             <div class="row" style="display:flex; gap:8px; flex-wrap:wrap;">
               <button class="btn" id="resetView">表示リセット</button>
+              <label style="display:flex; gap:6px; align-items:center; font-size:13px; color:#a9b7c6;">
+                ズーム
+                <input id="zoomSlider" type="range" min="0.5" max="2.5" step="0.01" value="1" />
+              </label>
             </div>
           </div>
         </details>
@@ -376,16 +389,20 @@
 
     /* Canvas manager */
     const mapStage = document.getElementById('mapStage');
+    if(!mapStage){ throw new Error('#mapStage が見つかりません'); }
     const canvasDebug = document.getElementById('canvasDebug');
     const canvasDebugToggle = document.getElementById('canvasDebugToggle');
     const canvasSizeStat = document.getElementById('canvasSizeStat');
     const canvasDprStat = document.getElementById('canvasDprStat');
     const canvasRenderStat = document.getElementById('canvasRenderStat');
     const canvasTilesStat = document.getElementById('canvasTilesStat');
+    const canvasStatus = document.getElementById('canvasStatus');
     let pInstance = null;
     let simFrame = null;
     let resizeObserver = null;
     let debugEnabled = true;
+    let stageRetry = 0;
+    const maxStageRetry = 10;
     const renderStats = { lastRenderMs: 0, worldTiles: 0 };
 
     /* Simulation */
@@ -393,8 +410,11 @@
     const presetButtons = document.querySelectorAll('[data-preset]');
     const toggleHearts = document.getElementById('toggleHearts');
     const toggleFlashes = document.getElementById('toggleFlashes');
+    const toggleTrails = document.getElementById('toggleTrails');
+    const toggleVectors = document.getElementById('toggleVectors');
     const extinctionModeCheckbox = document.getElementById('modeExtinction');
     const behaviorControls = document.getElementById('behaviorControls');
+    const zoomSlider = document.getElementById('zoomSlider');
 
     const terrainTypes = [
       { key:'grass', name:'草原', color:'#1f6f3f', texture:'#2b8a4f', plantK:0.65, cover:0.1, isWater:false, isRock:false },
@@ -468,9 +488,53 @@
       endAllExtinct:false,
     };
 
+    function clampScale(value){ return Math.min(Math.max(value, 0.5), 2.5); }
+
+    function recenterView(){
+      const rect = measureStage();
+      const worldW = state.gridW * state.tile * state.view.scale;
+      const worldH = state.gridH * state.tile * state.view.scale;
+      state.view.offsetX = (rect.width - worldW)/2;
+      state.view.offsetY = (rect.height - worldH)/2;
+    }
+
+    function syncZoomSlider(){
+      if(!zoomSlider) return;
+      zoomSlider.value = clampScale(state.view.scale).toFixed(2);
+    }
+
+    function updateScale(newScale, anchorX=null, anchorY=null){
+      const rect = measureStage();
+      const anchor = {
+        x: anchorX ?? rect.width/2,
+        y: anchorY ?? rect.height/2,
+      };
+      const prevScale = state.view.scale || 1;
+      const worldX = (anchor.x - state.view.offsetX) / (state.tile * prevScale);
+      const worldY = (anchor.y - state.view.offsetY) / (state.tile * prevScale);
+      state.view.scale = clampScale(newScale);
+      const scaledTile = state.tile * state.view.scale;
+      state.view.offsetX = anchor.x - worldX * scaledTile;
+      state.view.offsetY = anchor.y - worldY * scaledTile;
+      syncZoomSlider();
+    }
+
     function measureStage(){
       const rect = mapStage.getBoundingClientRect();
       return { width: Math.round(rect.width), height: Math.round(rect.height) };
+    }
+
+    function setCanvasStatus(message, isError=false){
+      if(!canvasStatus) return;
+      if(message){
+        canvasStatus.textContent = message;
+        canvasStatus.style.borderColor = isError ? 'rgba(255,120,120,0.65)' : 'rgba(110,200,255,0.45)';
+        canvasStatus.style.background = isError ? 'rgba(55,10,10,0.82)' : 'rgba(10,30,55,0.7)';
+        canvasStatus.style.color = isError ? '#ffb0b0' : '#cde7ff';
+        canvasStatus.classList.remove('hidden');
+      } else {
+        canvasStatus.classList.add('hidden');
+      }
     }
 
     function updateDebugPanel(rect){
@@ -499,17 +563,40 @@
       if(rect.width && rect.height){
         pInstance.resizeCanvas(rect.width, rect.height, true);
         updateDebugPanel(rect);
+        setCanvasStatus('');
+        stageRetry = 0;
         return true;
       }
       updateDebugPanel(rect);
-      requestAnimationFrame(()=>{
-        const retryRect = measureStage();
-        if(retryRect.width && retryRect.height){
-          pInstance.resizeCanvas(retryRect.width, retryRect.height, true);
-          renderOnce('recover');
-        }
-      });
+      if(stageRetry < maxStageRetry){
+        stageRetry++;
+        setCanvasStatus(`キャンバス準備待機中 (${stageRetry}/${maxStageRetry})`);
+        setTimeout(()=>{ ensureCanvasSize(); renderOnce('recover'); }, 100);
+      } else {
+        setCanvasStatus('キャンバス領域が 0x0 のため初期化に失敗しました', true);
+      }
       return false;
+    }
+
+    function createCanvasSafely(p, onSuccess=null){
+      const rect = measureStage();
+      if(rect.width && rect.height){
+        const cnv = p.createCanvas(Math.max(1, rect.width), Math.max(1, rect.height));
+        cnv.parent(mapStage);
+        cnv.canvas.id = 'mapCanvas';
+        setCanvasStatus('');
+        stageRetry = 0;
+        if(typeof onSuccess === 'function'){ onSuccess(); }
+        return cnv;
+      }
+      if(stageRetry < maxStageRetry){
+        stageRetry++;
+        setCanvasStatus(`キャンバス初期化を再試行中 (${stageRetry}/${maxStageRetry})`);
+        setTimeout(()=>createCanvasSafely(p, onSuccess), 100);
+      } else {
+        setCanvasStatus('キャンバス領域が 0x0 のため描画できません', true);
+      }
+      return null;
     }
 
     const legendEntries = [
@@ -562,6 +649,9 @@
     renderLegend();
     toggleHearts.addEventListener('change', ()=>renderOnce('overlay'));
     toggleFlashes.addEventListener('change', ()=>renderOnce('overlay'));
+    toggleTrails.addEventListener('change', ()=>renderOnce('overlay'));
+    toggleVectors.addEventListener('change', ()=>renderOnce('overlay'));
+    zoomSlider.addEventListener('input', ()=>{ updateScale(parseFloat(zoomSlider.value||'1')); renderOnce('zoom'); });
 
     /* Core sim helpers */
     const clamp01 = (v) => Math.min(1, Math.max(0, v));
@@ -629,6 +719,7 @@
         satiety: 0.6,
         age: 0,
         lastBreed:0,
+        trail:[],
       };
     }
 
@@ -646,6 +737,8 @@
       const note = preset.description || '';
       document.getElementById('presetInfo').textContent = `プリセット: ${preset.label}${note ? ' — ' + note : ''}`;
       renderStats.worldTiles = state.gridW * state.gridH;
+      recenterView();
+      syncZoomSlider();
       renderOnce('preset');
     }
 
@@ -711,18 +804,17 @@
 
       p.setup = () => {
         const placeholder = document.getElementById('mapCanvas');
-        const rect = measureStage();
         if(placeholder && placeholder.parentNode) placeholder.parentNode.removeChild(placeholder);
-        const cnv = p.createCanvas(Math.max(1, rect.width), Math.max(1, rect.height));
-        cnv.parent(mapStage);
-        cnv.canvas.id = 'mapCanvas';
-        p.pixelDensity(window.devicePixelRatio || 1);
-        p.noLoop();
-        applyPreset('temperate');
-        if(!resizeObserver){
-          resizeObserver = new ResizeObserver(()=>{ ensureCanvasSize(); renderOnce('resize'); });
-          resizeObserver.observe(mapStage);
-        }
+        const finishSetup = () => {
+          p.pixelDensity(window.devicePixelRatio || 1);
+          p.noLoop();
+          applyPreset('temperate');
+          if(!resizeObserver){
+            resizeObserver = new ResizeObserver(()=>{ ensureCanvasSize(); renderOnce('resize'); });
+            resizeObserver.observe(mapStage);
+          }
+        };
+        createCanvasSafely(p, finishSetup);
       };
 
       p.windowResized = () => {
@@ -735,6 +827,7 @@
         drawTerrain(p);
         drawPlants(p);
         drawDens(p);
+        drawTrails(p);
         drawAnimals(p);
         drawEvents(p);
       };
@@ -755,7 +848,9 @@
             const pos = worldToScreen(x,y);
             const size = state.tile*state.view.scale;
             p.noStroke();
-            p.fill(terrain.color);
+            const c = p.color(terrain.color);
+            c.setAlpha(190);
+            p.fill(c);
             p.rect(pos.x, pos.y, size, size);
             p.stroke(terrain.texture);
             p.strokeWeight(1);
@@ -807,6 +902,24 @@
         });
       }
 
+      function drawTrails(p){
+        if(!toggleTrails.checked) return;
+        state.animals.forEach(a=>{
+          if(!a.trail || a.trail.length < 2) return;
+          p.noFill();
+          p.stroke('rgba(160,210,255,0.45)');
+          p.strokeWeight(Math.max(1, state.tile*state.view.scale*0.06));
+          p.beginShape();
+          a.trail.forEach(pt => {
+            const pos = worldToScreen(pt.x, pt.y);
+            p.vertex(pos.x, pos.y);
+          });
+          const head = worldToScreen(a.x, a.y);
+          p.vertex(head.x, head.y);
+          p.endShape();
+        });
+      }
+
       function drawAnimals(p){
         state.animals.forEach(a=>{
           const pos = worldToScreen(a.x,a.y);
@@ -822,6 +935,20 @@
             p.triangle(pos.x-size*0.4,pos.y+size*0.4,pos.x+size*0.4,pos.y+size*0.4,pos.x,pos.y-size*0.5);
             p.fill(sp.inner); p.noStroke();
             p.triangle(pos.x-size*0.18,pos.y+size*0.18,pos.x+size*0.18,pos.y+size*0.18,pos.x,pos.y-size*0.24);
+          }
+          if(toggleVectors.checked){
+            const mag = Math.hypot(a.vx, a.vy) || 0;
+            if(mag > 0.001){
+              const dirX = a.vx / mag;
+              const dirY = a.vy / mag;
+              const len = size * 0.9;
+              p.stroke('rgba(240,255,255,0.85)');
+              p.strokeWeight(Math.max(1, size*0.08));
+              p.line(pos.x, pos.y, pos.x + dirX*len, pos.y + dirY*len);
+              p.strokeWeight(Math.max(1, size*0.05));
+              p.line(pos.x + dirX*len, pos.y + dirY*len, pos.x + dirX*len - dirY*len*0.25, pos.y + dirY*len + dirX*len*0.25);
+              p.line(pos.x + dirX*len, pos.y + dirY*len, pos.x + dirX*len + dirY*len*0.25, pos.y + dirY*len - dirX*len*0.25);
+            }
           }
         });
       }
@@ -853,7 +980,7 @@
 
       p.mouseWheel = (event) => {
         const factor = event.delta > 0 ? 0.92 : 1.08;
-        state.view.scale = Math.min(Math.max(state.view.scale * factor, 0.6), 2.6);
+        updateScale(state.view.scale * factor, p.mouseX, p.mouseY);
         renderOnce('zoom');
       };
 
@@ -872,7 +999,9 @@
       p.mouseReleased = () => { if(pan.active) renderOnce('pan'); pan.active=false; };
 
       document.getElementById('resetView').addEventListener('click', ()=>{
-        state.view = { scale:1, offsetX:0, offsetY:0 };
+        state.view.scale = 1;
+        recenterView();
+        syncZoomSlider();
         renderOnce('reset');
       });
       document.getElementById('startBtn').addEventListener('click', ()=> { state.running=true; startSimLoop(); });
@@ -882,6 +1011,8 @@
         document.querySelectorAll('.widget').forEach(el=>el.style.pointerEvents='auto');
         widgetManager.panicReset();
         state.view = { scale:1, offsetX:0, offsetY:0 };
+        recenterView();
+        syncZoomSlider();
         stopSimLoop();
         renderOnce('panic');
       });
@@ -924,6 +1055,7 @@
       const preyIndex = new Map();
       state.animals.forEach((a,i)=>{ if(a.diet==='herb') preyIndex.set(a.id, i); });
       const alerts = [];
+      const trailLimit = 18;
 
       state.animals.forEach(a => {
         const sp = speciesLibrary[a.species];
@@ -934,8 +1066,10 @@
         if(Math.random() < speed){
           const dir = chooseDirection(a, sp, alerts);
           a.vx = dir.x; a.vy = dir.y;
+          const before = {x:a.x, y:a.y};
           a.x = wrap(a.x + a.vx, state.gridW);
           a.y = wrap(a.y + a.vy, state.gridH);
+          a.trail = [...(a.trail||[]), before].slice(-trailLimit);
         }
         a.satiety = clamp01(a.satiety - sp.satietyDecay);
         a.energy = clamp01(a.energy - sp.metabolism + a.satiety*0.0004);
