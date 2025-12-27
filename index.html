@@ -38,6 +38,7 @@
       border-radius:10px; padding:10px 12px; cursor:pointer; min-height:34px;
     }
     button:hover{background:#162a42;}
+    .speed-btn.active{background:#1f3c5d; border-color:#2d5f87;}
     button.primary{background:#1b3554; border-color:#2a466b;}
     button.danger{background:#3a1620; border-color:#5a2430;}
     input[type="number"], input[type="text"], select{
@@ -312,6 +313,21 @@
             <div class="tiny">直近1ステップ</div>
           </div>
           <div class="hud-item">
+            <div class="label">草食の繁殖</div>
+            <div class="value" id="outHerbMating">試行0 / 成立0</div>
+            <div class="tiny" id="outHerbMatingDetail">空き0 / 相手0 / 低エネ0 | 近傍- 平均E-</div>
+          </div>
+          <div class="hud-item">
+            <div class="label">肉食の繁殖</div>
+            <div class="value" id="outCarnMating">試行0 / 成立0</div>
+            <div class="tiny" id="outCarnMatingDetail">空き0 / 相手0 / 低エネ0 | 近傍- 平均E-</div>
+          </div>
+          <div class="hud-item">
+            <div class="label">速度モード</div>
+            <div class="value" id="outSpeedMode">通常</div>
+            <div class="tiny" id="outSpeedDetail">自動減速: ON</div>
+          </div>
+          <div class="hud-item">
             <div class="label">スコア</div>
             <div class="value" id="outScore">0</div>
             <div class="tiny" id="outScoreDetail">生存・多様性・安定度</div>
@@ -369,13 +385,17 @@
               <label class="tiny">デフォルトシナリオ</label>
               <select id="selScenario">
                 <option value="">選択</option>
-                <option value="temperate">温帯草原（シカ-オオカミ）</option>
-                <option value="river">河川敷（ウサギ-キツネ）</option>
-                <option value="arid">乾燥地</option>
-                <option value="grassland">旧：草原（安定）</option>
-                <option value="dryCollapse">旧：乾燥（崩壊）</option>
+                <option value="temperate">温帯草原（安定）</option>
+                <option value="forest">森林（湿潤）</option>
+                <option value="arid">乾燥地（省水）</option>
               </select>
               <button id="btnApplyScenario" class="primary">適用してリセット</button>
+            </div>
+            <div class="toolbar-row" style="margin-top:4px;">
+              <label class="tiny">速度モード</label>
+              <button id="btnSpeedNormal" class="ghost speed-btn active">通常</button>
+              <button id="btnSpeedTurbo" class="ghost speed-btn">ターボ</button>
+              <label class="note"><input id="chkAutoSlow" type="checkbox" checked /> イベントで自動スローダウン</label>
             </div>
             <div class="toolbar-row" style="margin-top:4px;">
               <button id="btnOpenDrawerInline" class="primary">⚙ 設定を開く</button>
@@ -447,8 +467,12 @@
                 </div>
               </div>
               <div class="ctrl">
+                <label>ターボ時の進行速度<div class="help">1フレームあたりのステップ数（通常モードは常に1）</div></label>
+                <input id="inTurboTicks" type="number" min="2" max="20" value="10" />
+              </div>
+              <div class="ctrl">
                 <label>ログ間隔（ステップ）<div class="help">CSV/グラフの更新頻度</div></label>
-                <input id="inLogEvery" type="number" min="1" max="50" value="5" />
+                <input id="inLogEvery" type="number" min="1" max="50" value="1" />
               </div>
               <div class="ctrl">
                 <label>マップ拡大率<div class="help">1.0〜2.0の間で拡大/縮小</div></label>
@@ -486,15 +510,15 @@
                 <div class="ctrl">
                   <label>草の成長率（0〜0.20）</label>
                   <div class="row">
-                    <input id="slGrass" type="range" min="0" max="0.20" step="0.005" value="0.02" />
-                    <span class="mono" id="valGrass">0.02</span>
+                    <input id="slGrass" type="range" min="0" max="0.20" step="0.005" value="0.022" />
+                    <span class="mono" id="valGrass">0.022</span>
                   </div>
                 </div>
               </div>
               <div class="grid3">
                 <div class="ctrl">
                   <label>川割合<div class="help">0〜0.40くらいを推奨</div></label>
-                  <input id="inRiverRatio" type="number" min="0" max="0.6" step="0.01" value="0.12" />
+                  <input id="inRiverRatio" type="number" min="0" max="0.6" step="0.01" value="0.14" />
                 </div>
                 <div class="ctrl">
                   <label>岩割合<div class="help">河川と同様に植生は生えません</div></label>
@@ -502,7 +526,7 @@
                 </div>
                 <div class="ctrl">
                   <label>森林割合<div class="help">残りから自動配分</div></label>
-                  <input id="inForestRatio" type="number" min="0" max="0.6" step="0.01" value="0.18" />
+                  <input id="inForestRatio" type="number" min="0" max="0.6" step="0.01" value="0.20" />
                 </div>
               </div>
             </div>
@@ -537,7 +561,7 @@
               <div class="grid2">
                 <div class="ctrl">
                   <label>初期 草 数<div class="help">開始時の草セル数</div></label>
-                  <input id="inInitGrass" type="number" min="0" max="2500" value="800" />
+                  <input id="inInitGrass" type="number" min="0" max="2500" value="1200" />
                 </div>
               </div>
               <div class="card-section">
@@ -552,29 +576,29 @@
               <div class="grid2">
                 <div class="ctrl">
                   <label>草食：採食エネルギー<div class="help">草1セルを食べたときの獲得量</div></label>
-                  <input id="inHerbGain" type="number" min="1" max="50" value="12" />
+                  <input id="inHerbGain" type="number" min="1" max="50" value="13" />
                 </div>
                 <div class="ctrl">
                   <label>草食：繁殖閾値<div class="help">エネルギーが閾値以上なら繁殖試行</div></label>
-                  <input id="inHerbRepro" type="number" min="5" max="100" value="28" />
+                  <input id="inHerbRepro" type="number" min="5" max="100" value="30" />
                 </div>
                 <div class="ctrl">
                   <label>肉食：捕食エネルギー<div class="help">草食を食べたときの獲得量</div></label>
-                  <input id="inCarnGain" type="number" min="1" max="80" value="32" />
+                  <input id="inCarnGain" type="number" min="1" max="80" value="34" />
                 </div>
                 <div class="ctrl">
                   <label>肉食：繁殖閾値<div class="help">エネルギーが閾値以上なら繁殖試行</div></label>
-                  <input id="inCarnRepro" type="number" min="5" max="120" value="38" />
+                  <input id="inCarnRepro" type="number" min="5" max="120" value="42" />
                 </div>
               </div>
               <div class="grid2">
                 <div class="ctrl">
                   <label>草食の寿命[step]<div class="help">寿命を超えると老衰で死亡</div></label>
-                  <input id="inHerbMaxAge" type="number" min="10" max="2000" value="120" />
+                  <input id="inHerbMaxAge" type="number" min="10" max="2000" value="150" />
                 </div>
                 <div class="ctrl">
                   <label>肉食の寿命[step]<div class="help">寿命を超えると老衰で死亡</div></label>
-                  <input id="inCarnMaxAge" type="number" min="10" max="2000" value="160" />
+                  <input id="inCarnMaxAge" type="number" min="10" max="2000" value="180" />
                 </div>
               </div>
             </div>
@@ -586,21 +610,21 @@
             <summary>密度効果・競合</summary>
             <div class="section-body stack">
               <div class="row" style="margin-bottom:8px;">
-                <label class="note"><input id="chkCompetition" type="checkbox" /> 競合（密度依存）を有効化</label>
+                <label class="note"><input id="chkCompetition" type="checkbox" checked /> 競合（密度依存）を有効化</label>
               </div>
               <div class="grid2">
                 <div class="ctrl">
                   <label>草食の環境収容力K<div class="help">草食が増えるほど繁殖成功率が低下</div></label>
-                  <input id="inHerbK" type="number" min="1" max="5000" value="400" />
+                  <input id="inHerbK" type="number" min="1" max="5000" value="420" />
                 </div>
                 <div class="ctrl">
                   <label>肉食の環境収容力K<div class="help">肉食が増えるほど繁殖成功率が低下</div></label>
-                  <input id="inCarnK" type="number" min="1" max="5000" value="200" />
+                  <input id="inCarnK" type="number" min="1" max="5000" value="220" />
                 </div>
               </div>
               <div class="ctrl">
                 <label>密度コスト係数（代謝追加）<div class="help">個体が密集すると代謝コストが増加</div></label>
-                <input id="inDensityCost" type="number" min="0" max="50" value="0" />
+                <input id="inDensityCost" type="number" min="0" max="50" value="6" />
               </div>
             </div>
           </details>
@@ -981,7 +1005,7 @@ let mapScale = 1.25;
 let canvasSize = Math.round(BASE_CANVAS * mapScale);
 let cellSize = canvasSize / GRID;
 const N = GRID * GRID;
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 const SCORE_BIO_BONUS = 150;
 const SCORE_STABILITY_BASE = 220;
 const MAX_STABILITY_SAMPLES = 160;
@@ -989,8 +1013,11 @@ const EFFECT_LIFETIME = 22;
 const DEATH_MARK_LIFETIME = 26;
 const HEART_LIFETIME_MIN = 20;
 const HEART_LIFETIME_MAX = 40;
-const HUNT_RADIUS = 4;
+const HUNT_RADIUS = 5;
+const MATE_SEARCH_RADIUS = 4;
+const MATE_NEIGHBOR_RADIUS = 2;
 const CARN_METABOLISM_SCALE = 0.9;
+const EVENT_SLOWDOWN_WINDOW = 12;
 
 const TERRAIN = {
   GRASSLAND: 0,
@@ -1060,6 +1087,10 @@ let rng = mulberry32(1);
 let running = false;
 let step = 0;
 let tickPerFrame = 1;
+let turboTickPerFrame = 10;
+let speedMode = 'normal';
+let autoSlowdownEnabled = true;
+let slowdownUntilStep = 0;
 let statusMessage = '停止中';
 let currentSeed = 'daily:0000-00-00';
 
@@ -1088,7 +1119,9 @@ let activeCarnSpecies = [];
 
 // ログ（CSV出力用）
 let logs = [];
-let logEvery = 5;
+let logEvery = 1;
+let matingStepStats = null;
+let lastMatingSnapshot = {herb:null, carn:null};
 let herbReproAttempts = 0;
 let herbReproSuccess = 0;
 let carnReproAttempts = 0;
@@ -1110,58 +1143,36 @@ let scoreState = {total:0, base:0, bioBonus:0, biodiversity:0, stability:0};
 // プリセット（シナリオ）
 const PRESETS = {
   temperate: {
-    label: '温帯草原（シカ-オオカミ）',
+    label: '温帯草原（安定）',
     values: {
-      initGrass: 1400,
-      species: {herb_a: 62, herb_b: 34, carn_a: 12, carn_b: 6},
-      grassGrowthRate: 0.02, plantK: 10, herbGain: 12, carnGain: 32,
-      herbRepro: 30, carnRepro: 40, herbMaxAge: 140, carnMaxAge: 170,
+      initGrass: 1500,
+      species: {herb_a: 62, herb_b: 40, carn_a: 12, carn_b: 7},
+      grassGrowthRate: 0.022, plantK: 11, herbGain: 13, carnGain: 34,
+      herbRepro: 30, carnRepro: 42, herbMaxAge: 160, carnMaxAge: 190,
       climateIntensity: 1.05, terrainMix: 0.32,
-      endCondition: 'animalExtinct', maxSteps: 3000, logEvery: 5
+      endCondition: 'animalExtinct', maxSteps: 3200, logEvery: 4
     }
   },
-  river: {
-    label: '河川敷（ウサギ-キツネ）',
+  forest: {
+    label: '森林（湿潤）',
     values: {
-      initGrass: 1320,
-      species: {herb_a: 70, herb_b: 28, carn_a: 10, carn_b: 5},
-      grassGrowthRate: 0.021, plantK: 11, herbGain: 13, carnGain: 30,
-      herbRepro: 29, carnRepro: 38, herbMaxAge: 135, carnMaxAge: 168,
-      climateIntensity: 1.0, terrainMix: 0.52,
-      endCondition: 'animalExtinct', maxSteps: 2800, logEvery: 5
+      initGrass: 1380,
+      species: {herb_a: 48, herb_b: 52, carn_a: 11, carn_b: 6},
+      grassGrowthRate: 0.021, plantK: 12, herbGain: 13, carnGain: 33,
+      herbRepro: 29, carnRepro: 40, herbMaxAge: 160, carnMaxAge: 188,
+      climateIntensity: 1.1, terrainMix: 0.54,
+      endCondition: 'animalExtinct', maxSteps: 3000, logEvery: 4
     }
   },
   arid: {
-    label: '乾燥地',
+    label: '乾燥地（省水）',
     values: {
-      initGrass: 720,
-      species: {herb_a: 40, herb_b: 20, carn_a: 9, carn_b: 6},
-      grassGrowthRate: 0.011, plantK: 7, herbGain: 11, carnGain: 28,
-      herbRepro: 31, carnRepro: 40, herbMaxAge: 120, carnMaxAge: 168,
-      climateIntensity: 0.82, terrainMix: 0.46,
-      endCondition: 'anyExtinct', maxSteps: 2200, logEvery: 4
-    }
-  },
-  grassland: {
-    label: '旧：草原（安定）',
-    values: {
-      initGrass: 1250,
-      species: {herb_a: 55, herb_b: 35, carn_a: 11, carn_b: 7},
-      grassGrowthRate: 0.018, plantK: 8, herbGain: 12, carnGain: 32,
-      herbRepro: 28, carnRepro: 40, herbMaxAge: 130, carnMaxAge: 172,
-      climateIntensity: 1.0, terrainMix: 0.30,
-      endCondition: 'animalExtinct', maxSteps: 2600, logEvery: 5
-    }
-  },
-  dryCollapse: {
-    label: '旧：乾燥（崩壊）',
-    values: {
-      initGrass: 620,
-      species: {herb_a: 38, herb_b: 22, carn_a: 9, carn_b: 7},
-      grassGrowthRate: 0.009, plantK: 7, herbGain: 11, carnGain: 28,
-      herbRepro: 30, carnRepro: 40, herbMaxAge: 120, carnMaxAge: 170,
-      climateIntensity: 0.9, terrainMix: 0.28,
-      endCondition: 'anyExtinct', maxSteps: 1800, logEvery: 4
+      initGrass: 900,
+      species: {herb_a: 44, herb_b: 26, carn_a: 9, carn_b: 6},
+      grassGrowthRate: 0.014, plantK: 9, herbGain: 12, carnGain: 30,
+      herbRepro: 31, carnRepro: 42, herbMaxAge: 150, carnMaxAge: 180,
+      climateIntensity: 0.86, terrainMix: 0.44,
+      endCondition: 'anyExtinct', maxSteps: 2400, logEvery: 4
     }
   }
 };
@@ -1187,16 +1198,16 @@ const ENV_PRESETS = {
 
 // パラメータ（UIから読み込み）
 let P = {
-  initGrass: 800,
-  grassGrowthRate: 0.02,
-  plantK: 8,
-  herbGain: 12,
-  herbRepro: 28,
-  carnGain: 32,
-  carnRepro: 38,
+  initGrass: 1200,
+  grassGrowthRate: 0.022,
+  plantK: 10,
+  herbGain: 13,
+  herbRepro: 30,
+  carnGain: 34,
+  carnRepro: 42,
   metabolism: 1,
-  herbMaxAge: 120,
-  carnMaxAge: 160,
+  herbMaxAge: 150,
+  carnMaxAge: 180,
   avgTemp: 18,
   tempAmp: 12,
   avgRain: 80,
@@ -1208,10 +1219,10 @@ let P = {
   soilRichness: 1,
   endCondition: 'anyExtinct',
   maxSteps: 2000,
-  competition: false,
-  herbK: 400,
-  carnK: 200,
-  densityCostScale: 0,
+  competition: true,
+  herbK: 420,
+  carnK: 220,
+  densityCostScale: 6,
 };
 
 // 死因ログ（最低限）
@@ -1278,6 +1289,7 @@ function readParamsFromUI(){
   const fps = clampInt(parseInt(el('slFPS').value,10), 10, 60);
   el('valFPS').textContent = fps;
   tickPerFrame = Math.max(1, Math.round(fps / 30)); // ざっくり（後で精密化可）
+  turboTickPerFrame = clampInt(parseInt(el('inTurboTicks').value,10), 2, 20);
 
   el('valGrass').textContent = P.grassGrowthRate.toFixed(3);
   el('valZoom').textContent = mapScale.toFixed(2);
@@ -1571,12 +1583,19 @@ function updateTerrainMap(seedStr){
 }
 function spawnEffect(type, x, y){
   if(!effectsEnabled) return;
+  if(visualEffects.length > 240) visualEffects.shift();
   visualEffects.push({type, x, y, life: type === 'predation' ? EFFECT_LIFETIME : DEATH_MARK_LIFETIME, max: type === 'predation' ? EFFECT_LIFETIME : DEATH_MARK_LIFETIME});
 }
 function spawnHeartEffect(x, y){
   if(!effectsEnabled) return;
   const life = HEART_LIFETIME_MIN + randInt(HEART_LIFETIME_MAX - HEART_LIFETIME_MIN + 1);
+  if(visualEffects.length > 240) visualEffects.shift();
   visualEffects.push({type:'heart', x, y, life, max: life, float:0});
+}
+
+function triggerEventSlowdown(reason){
+  if(!autoSlowdownEnabled) return;
+  slowdownUntilStep = Math.max(slowdownUntilStep, step + EVENT_SLOWDOWN_WINDOW);
 }
 function drawEffects(p){
   if(!effectsEnabled){
@@ -1864,6 +1883,48 @@ function competitionExtraCost(count, k){
   return Math.floor((count / Math.max(1, k)) * P.densityCostScale);
 }
 
+function createMatingStats(){
+  return {attempts:0, success:0, blockedNoSpace:0, blockedNoMate:0, blockedLowEnergy:0, neighborSum:0, energySum:0, samples:0};
+}
+function resetMatingStats(){
+  matingStepStats = {herb: createMatingStats(), carn: createMatingStats()};
+}
+function recordMatingSample(kind, energy, neighbors){
+  if(!matingStepStats) resetMatingStats();
+  const s = matingStepStats[kind];
+  s.samples += 1;
+  s.energySum += energy;
+  s.neighborSum += neighbors;
+}
+function recordMatingAttempt(kind){
+  if(!matingStepStats) resetMatingStats();
+  matingStepStats[kind].attempts += 1;
+}
+function recordMatingSuccess(kind){
+  if(!matingStepStats) resetMatingStats();
+  matingStepStats[kind].success += 1;
+}
+function recordMatingBlocked(kind, reason){
+  if(!matingStepStats) resetMatingStats();
+  const s = matingStepStats[kind];
+  if(reason === 'space') s.blockedNoSpace += 1;
+  else if(reason === 'mate') s.blockedNoMate += 1;
+  else if(reason === 'energy') s.blockedLowEnergy += 1;
+}
+function finalizeMatingSnapshot(){
+  const normalize = (s)=>{
+    const base = s || createMatingStats();
+    const avgNeighbors = base.samples > 0 ? base.neighborSum / base.samples : 0;
+    const avgEnergy = base.samples > 0 ? base.energySum / base.samples : 0;
+    return {...base, avgNeighbors, avgEnergy};
+  };
+  lastMatingSnapshot = {
+    herb: normalize(matingStepStats?.herb),
+    carn: normalize(matingStepStats?.carn),
+  };
+  return lastMatingSnapshot;
+}
+
 function deterministicNoise(step, key){
   const h = hash32FromString(`${currentSeed}:${key}:${step}`);
   return (h / 4294967296);
@@ -1960,6 +2021,19 @@ function terrainGrowthMultiplier(t){
   return 1;
 }
 
+function terrainCarryingMultiplier(t){
+  if(t === TERRAIN.ROCK) return 0.2;
+  if(t === TERRAIN.RIVER) return 0;
+  if(t === TERRAIN.FOREST) return 1.25;
+  return 1;
+}
+
+function localPlantCapacity(idx, t){
+  const climateSuit = clampFloat(climateLayer[idx], 0.6, 1.6);
+  const soil = clampFloat(soilFertility[idx], 0.5, 1.6);
+  return P.plantK * terrainCarryingMultiplier(t) * climateSuit * soil;
+}
+
 function terrainMoveCost(t){
   if(t === TERRAIN.ROCK) return 1;
   if(t === TERRAIN.RIVER) return 2;
@@ -2033,6 +2107,16 @@ function moveTerrainAware(a, peers, opts={}){
   return best.cost;
 }
 
+function countSameSpeciesNeighbors(list, origin, radius){
+  let count = 0;
+  for(const cand of list){
+    if(cand === origin || !cand.alive) continue;
+    const dist = torusDistance(origin.x, origin.y, cand.x, cand.y);
+    if(dist <= radius) count++;
+  }
+  return count;
+}
+
 function findNearestHerbivoreTarget(x, y, radius){
   let nearest = null;
   for(let dy=-radius; dy<=radius; dy++){
@@ -2053,21 +2137,29 @@ function findNearestHerbivoreTarget(x, y, radius){
 }
 
 function findMateNear(list, origin, radius){
+  let best = null;
   for(const cand of list){
-    if(!cand.alive || cand.sex === origin.sex) continue;
-    const dx = Math.min(Math.abs(cand.x - origin.x), GRID - Math.abs(cand.x - origin.x));
-    const dy = Math.min(Math.abs(cand.y - origin.y), GRID - Math.abs(cand.y - origin.y));
-    if(dx <= radius && dy <= radius) return cand;
+    if(!cand || cand === origin || !cand.alive || cand.sex === origin.sex) continue;
+    if(cand.mateSeeking === false && origin.mateSeeking) continue;
+    const dist = torusDistance(origin.x, origin.y, cand.x, cand.y);
+    if(dist <= radius && (!best || dist < best.dist)){
+      best = {ref: cand, dist};
+    }
   }
-  return null;
+  return best?.ref || null;
 }
 
-function findEmptyNeighborCell(x, y){
-  const dirs = [
-    [-1,-1],[0,-1],[1,-1],
-    [-1,0],[1,0],
-    [-1,1],[0,1],[1,1],
-  ];
+function findEmptyNeighborCell(x, y, maxRadius=1){
+  const dirs = [];
+  for(let r=1;r<=maxRadius;r++){
+    for(let dy=-r;dy<=r;dy++){
+      for(let dx=-r;dx<=r;dx++){
+        if(dx === 0 && dy === 0) continue;
+        if(Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        dirs.push([dx, dy]);
+      }
+    }
+  }
   for(let i=dirs.length-1;i>0;i--){
     const j = Math.floor(rng() * (i + 1));
     [dirs[i], dirs[j]] = [dirs[j], dirs[i]];
@@ -2166,6 +2258,9 @@ function resetSim(){
   weatherState = getWeatherForStep(step);
   updateClimateLayer();
   occupancy.fill(0);
+  resetMatingStats();
+  finalizeMatingSnapshot();
+  slowdownUntilStep = 0;
 
   // 草をランダム配置（重複を避けて指定数を確保）
   let gPlaced = 0;
@@ -2221,6 +2316,7 @@ function tick(){
   if(endReason) return;
   step++;
   stepCarnStats = {predation:0, starve:0, age:0};
+  resetMatingStats();
 
   weatherState = getWeatherForStep(step);
   updateClimateLayer();
@@ -2243,14 +2339,14 @@ function tick(){
     }
     const terrainMult = terrainGrowthMultiplier(t);
     const soilFactor = soilFertility[i];
+    const carrying = localPlantCapacity(i, t);
     const g = P.grassGrowthRate * terrainMult * growthClimate * soilFactor * P.plantGrowthScale;
-    if(g > 0){
-      const carrying = P.plantK;
+    if(g > 0 && carrying > 0){
       const growth = g * (1 - (biomass[i] / carrying)) * carrying;
       biomass[i] = clampFloat(biomass[i] + growth, 0, carrying);
     }
     if(rainSuit < 0.5){
-      biomass[i] = clampFloat(biomass[i] - (0.12 * (0.5 - rainSuit)), 0, P.plantK);
+      biomass[i] = clampFloat(biomass[i] - (0.12 * (0.5 - rainSuit)), 0, carrying);
     }
   }
 
@@ -2275,6 +2371,9 @@ function tick(){
     for(const h of list){
       if(!h.alive) continue;
 
+      const neighborCount = countSameSpeciesNeighbors(list, h, MATE_NEIGHBOR_RADIUS);
+      recordMatingSample('herb', h.energy, neighborCount);
+
       const prevIdx = h.y * GRID + h.x;
 
       h.age += 1;
@@ -2287,7 +2386,10 @@ function tick(){
         continue;
       }
 
-      const moveCost = moveTerrainAware(h, list, {social:true, territorial:false});
+      const seekingEnergy = h.energy >= Math.max(4, traits.reproduction * 0.7);
+      h.mateSeeking = seekingEnergy;
+      const mateTarget = seekingEnergy ? findMateNear(list, h, MATE_SEARCH_RADIUS) : null;
+      const moveCost = moveTerrainAware(h, list, {social:true, territorial:false, target: mateTarget});
 
       const currentIdx = h.y * GRID + h.x;
       if(currentIdx !== prevIdx){
@@ -2315,22 +2417,35 @@ function tick(){
       }
 
       const seasonFactor = reproductionSeasonMultiplier();
-      if(h.sex === 'F' && h.energy >= traits.reproduction * affinity.reproduction * Math.max(0.7, 1 / seasonFactor)){
-        herbReproAttempts++;
-        const mate = findMateNear(list, h, 1);
-        const birthSpot = mate ? findEmptyNeighborCell(h.x, h.y) : null;
-        if(mate && birthSpot && competitionReproPass(herbAliveCount, P.herbK)){
-          herbReproSuccess++;
-          const reproCost = Math.max(2, Math.floor(traits.reproduction * 0.35));
-          h.energy = Math.max(1, h.energy - reproCost);
-          mate.energy = Math.max(1, mate.energy - reproCost);
-          const childEnergy = Math.max(4, Math.floor(traits.reproduction * 0.5));
-          const sex = rng() < 0.5 ? 'F' : 'M';
-          list.push({x:birthSpot.x, y:birthSpot.y, energy: childEnergy, alive:true, age:0, speciesId: sp.id, sex, generation: (h.generation || 1) + 1, familyId: h.familyId ?? nextFamilyId++, packId: h.packId ?? h.familyId ?? nextFamilyId++, homeX: h.homeX ?? h.x, homeY: h.homeY ?? h.y});
-          herbAliveCount++;
-          birthsHerbivore++;
-          occupancy[birthSpot.idx]++;
-          spawnHeartEffect(birthSpot.x, birthSpot.y);
+      const reproThreshold = traits.reproduction * affinity.reproduction * Math.max(0.7, 1 / seasonFactor);
+      if(h.sex === 'F'){
+        if(h.energy < reproThreshold){
+          recordMatingBlocked('herb', 'energy');
+        } else {
+          herbReproAttempts++;
+          const mate = findMateNear(list, h, MATE_SEARCH_RADIUS);
+          if(!mate){
+            recordMatingBlocked('herb', 'mate');
+          }
+          const birthSpot = mate ? findEmptyNeighborCell(h.x, h.y, 2) : null;
+          if(mate && !birthSpot){
+            recordMatingBlocked('herb', 'space');
+          }
+          if(mate && birthSpot && competitionReproPass(herbAliveCount, P.herbK)){
+            recordMatingSuccess('herb');
+            herbReproSuccess++;
+            const reproCost = Math.max(2, Math.floor(traits.reproduction * 0.35));
+            h.energy = Math.max(1, h.energy - reproCost);
+            mate.energy = Math.max(1, mate.energy - reproCost);
+            const childEnergy = Math.max(4, Math.floor(traits.reproduction * 0.5));
+            const sex = rng() < 0.5 ? 'F' : 'M';
+            list.push({x:birthSpot.x, y:birthSpot.y, energy: childEnergy, alive:true, age:0, speciesId: sp.id, sex, generation: (h.generation || 1) + 1, familyId: h.familyId ?? nextFamilyId++, packId: h.packId ?? h.familyId ?? nextFamilyId++, homeX: h.homeX ?? h.x, homeY: h.homeY ?? h.y});
+            herbAliveCount++;
+            birthsHerbivore++;
+            occupancy[birthSpot.idx]++;
+            spawnHeartEffect(birthSpot.x, birthSpot.y);
+            triggerEventSlowdown('reproduction');
+          }
         }
       }
     }
@@ -2378,6 +2493,9 @@ function tick(){
     for(const c of list){
       if(!c.alive) continue;
 
+      const neighborCount = countSameSpeciesNeighbors(list, c, MATE_NEIGHBOR_RADIUS);
+      recordMatingSample('carn', c.energy, neighborCount);
+
       const prevIdx = c.y * GRID + c.x;
 
       c.age += 1;
@@ -2392,7 +2510,11 @@ function tick(){
       }
 
       const huntTarget = findNearestHerbivoreTarget(c.x, c.y, HUNT_RADIUS);
-      const moveCost = moveTerrainAware(c, list, {social:true, territorial:true, target: huntTarget});
+      const seekingEnergy = c.energy >= Math.max(6, traits.reproduction * 0.7);
+      c.mateSeeking = seekingEnergy;
+      const mateTarget = seekingEnergy ? findMateNear(list, c, MATE_SEARCH_RADIUS) : null;
+      const chosenTarget = huntTarget || mateTarget;
+      const moveCost = moveTerrainAware(c, list, {social:true, territorial:true, target: chosenTarget});
 
       const idx = c.y * GRID + c.x;
       if(idx !== prevIdx){
@@ -2430,6 +2552,7 @@ function tick(){
             stepCarnStats.predation++;
             herbAliveCount--;
             spawnEffect('predation', c.x, c.y);
+            triggerEventSlowdown('predation');
             occupancy[idx] = Math.max(0, occupancy[idx]-1);
           }
         }
@@ -2454,25 +2577,38 @@ function tick(){
         continue;
       }
 
-      const seasonFactor = reproductionSeasonMultiplier();
-      if(c.sex === 'F' && c.energy >= traits.reproduction * affinity.reproduction * Math.max(0.75, 1 / seasonFactor)){
-        carnReproAttempts++;
-        const mate = findMateNear(list, c, 1);
-        const birthSpot = mate ? findEmptyNeighborCell(c.x, c.y) : null;
-        if(mate && birthSpot && competitionReproPass(carnAliveCount, P.carnK)){
-          carnReproSuccess++;
-          const reproCost = Math.max(3, Math.floor(traits.reproduction * 0.4));
-          c.energy = Math.max(2, c.energy - reproCost);
-          mate.energy = Math.max(2, mate.energy - reproCost);
-          const childEnergy = Math.max(6, Math.floor(traits.reproduction * 0.55));
-          const sex = rng() < 0.5 ? 'F' : 'M';
-          list.push({x:birthSpot.x, y:birthSpot.y, energy: childEnergy, alive:true, age:0, speciesId: sp.id, sex, generation: (c.generation || 1) + 1, familyId: c.familyId ?? nextFamilyId++, packId: c.packId ?? nextPackId++, homeX: c.homeX ?? birthSpot.x, homeY: c.homeY ?? birthSpot.y});
-          carnAliveCount++;
-          birthsCarnivore++;
-          occupancy[birthSpot.idx]++;
-          spawnHeartEffect(birthSpot.x, birthSpot.y);
+        const seasonFactor = reproductionSeasonMultiplier();
+        const reproThreshold = traits.reproduction * affinity.reproduction * Math.max(0.75, 1 / seasonFactor);
+        if(c.sex === 'F'){
+          if(c.energy < reproThreshold){
+            recordMatingBlocked('carn', 'energy');
+          } else {
+            carnReproAttempts++;
+            const mate = findMateNear(list, c, MATE_SEARCH_RADIUS);
+            if(!mate){
+              recordMatingBlocked('carn', 'mate');
+            }
+            const birthSpot = mate ? findEmptyNeighborCell(c.x, c.y, 2) : null;
+            if(mate && !birthSpot){
+              recordMatingBlocked('carn', 'space');
+            }
+            if(mate && birthSpot && competitionReproPass(carnAliveCount, P.carnK)){
+              recordMatingSuccess('carn');
+              carnReproSuccess++;
+              const reproCost = Math.max(3, Math.floor(traits.reproduction * 0.4));
+              c.energy = Math.max(2, c.energy - reproCost);
+              mate.energy = Math.max(2, mate.energy - reproCost);
+              const childEnergy = Math.max(6, Math.floor(traits.reproduction * 0.55));
+              const sex = rng() < 0.5 ? 'F' : 'M';
+              list.push({x:birthSpot.x, y:birthSpot.y, energy: childEnergy, alive:true, age:0, speciesId: sp.id, sex, generation: (c.generation || 1) + 1, familyId: c.familyId ?? nextFamilyId++, packId: c.packId ?? nextPackId++, homeX: c.homeX ?? birthSpot.x, homeY: c.homeY ?? birthSpot.y});
+              carnAliveCount++;
+              birthsCarnivore++;
+              occupancy[birthSpot.idx]++;
+              spawnHeartEffect(birthSpot.x, birthSpot.y);
+              triggerEventSlowdown('reproduction');
+            }
+          }
         }
-      }
     }
   }
 
@@ -2483,6 +2619,7 @@ function tick(){
     }
   }
 
+  finalizeMatingSnapshot();
   lastCarnStepStats = {...stepCarnStats};
   // 6) ログ
   if(step % logEvery === 0) pushLog();
@@ -2493,6 +2630,9 @@ function tick(){
   peakCounts.grass = Math.max(peakCounts.grass, counts.grass);
   peakCounts.herb = Math.max(peakCounts.herb, counts.herb);
   peakCounts.carn = Math.max(peakCounts.carn, counts.carn);
+  if(autoSlowdownEnabled && (counts.herb <= 5 || counts.carn <= 3)){
+    triggerEventSlowdown('low-pop');
+  }
   checkEndConditions(counts);
 }
 
@@ -2605,6 +2745,7 @@ function pushLog(){
   updateScore(counts, true);
   const herbRate = herbReproAttempts > 0 ? herbReproSuccess / herbReproAttempts : '';
   const carnRate = carnReproAttempts > 0 ? carnReproSuccess / carnReproAttempts : '';
+  const mating = lastMatingSnapshot || finalizeMatingSnapshot();
   logs.push({
     schema_version: SCHEMA_VERSION,
     seed: currentSeed,
@@ -2622,6 +2763,20 @@ function pushLog(){
     carn_age_step: lastCarnStepStats.age,
     death_herb_conflict: deathHerbConflict,
     death_carn_conflict: deathCarnConflict,
+    herb_mating_attempts: mating.herb?.attempts ?? 0,
+    herb_mating_success: mating.herb?.success ?? 0,
+    herb_blocked_no_space: mating.herb?.blockedNoSpace ?? 0,
+    herb_blocked_no_mate: mating.herb?.blockedNoMate ?? 0,
+    herb_blocked_low_energy: mating.herb?.blockedLowEnergy ?? 0,
+    herb_avg_neighbors: (mating.herb?.avgNeighbors ?? 0).toFixed(2),
+    herb_avg_energy: (mating.herb?.avgEnergy ?? 0).toFixed(2),
+    carn_mating_attempts: mating.carn?.attempts ?? 0,
+    carn_mating_success: mating.carn?.success ?? 0,
+    carn_blocked_no_space: mating.carn?.blockedNoSpace ?? 0,
+    carn_blocked_no_mate: mating.carn?.blockedNoMate ?? 0,
+    carn_blocked_low_energy: mating.carn?.blockedLowEnergy ?? 0,
+    carn_avg_neighbors: (mating.carn?.avgNeighbors ?? 0).toFixed(2),
+    carn_avg_energy: (mating.carn?.avgEnergy ?? 0).toFixed(2),
     herb_K: P.herbK,
     carn_K: P.carnK,
     competition_enabled: P.competition ? 1 : 0,
@@ -2705,6 +2860,26 @@ function refreshUI(){
   el('outCarnEvents').textContent = `捕食${lastCarnStepStats.predation} / 飢餓${lastCarnStepStats.starve} / 老衰${lastCarnStepStats.age}`;
   el('outHerbGroup').textContent = `${demo.herbFamilies}家系 / 群${demo.herbPacks}`;
   el('outCarnTerritory').textContent = `群${demo.carnPacks} / 衝突${deathCarnConflict}`;
+  const mating = lastMatingSnapshot || finalizeMatingSnapshot();
+  if(mating?.herb){
+    el('outHerbMating').textContent = `試行${mating.herb.attempts} / 成立${mating.herb.success}`;
+    el('outHerbMatingDetail').textContent = `空き${mating.herb.blockedNoSpace} / 相手${mating.herb.blockedNoMate} / 低エネ${mating.herb.blockedLowEnergy} | 近傍${(mating.herb.avgNeighbors ?? 0).toFixed(1)} 平均E${(mating.herb.avgEnergy ?? 0).toFixed(1)}`;
+  }
+  if(mating?.carn){
+    el('outCarnMating').textContent = `試行${mating.carn.attempts} / 成立${mating.carn.success}`;
+    el('outCarnMatingDetail').textContent = `空き${mating.carn.blockedNoSpace} / 相手${mating.carn.blockedNoMate} / 低エネ${mating.carn.blockedLowEnergy} | 近傍${(mating.carn.avgNeighbors ?? 0).toFixed(1)} 平均E${(mating.carn.avgEnergy ?? 0).toFixed(1)}`;
+  }
+  el('outSpeedMode').textContent = speedMode === 'turbo' ? 'ターボ' : '通常';
+  el('outSpeedDetail').textContent = `自動減速: ${autoSlowdownEnabled ? 'ON' : 'OFF'} / step=${speedMode === 'turbo' ? turboTickPerFrame : 1}`;
+}
+
+function updateSpeedButtons(){
+  const normalBtn = el('btnSpeedNormal');
+  const turboBtn = el('btnSpeedTurbo');
+  if(normalBtn) normalBtn.classList.toggle('active', speedMode === 'normal');
+  if(turboBtn) turboBtn.classList.toggle('active', speedMode === 'turbo');
+  const autoSlowChk = el('chkAutoSlow');
+  if(autoSlowChk) autoSlowChk.checked = autoSlowdownEnabled;
 }
 
 /* ========= Chart.js ========= */
@@ -2767,6 +2942,8 @@ function downloadCSV(){
     "grass_count","herbivore_count","carnivore_count",
     "death_herbivore_starve","death_herbivore_eaten","death_carnivore_starve","death_herbivore_age","death_carnivore_age",
     "births_herbivore","births_carnivore",
+    "herb_mating_attempts","herb_mating_success","herb_blocked_no_space","herb_blocked_no_mate","herb_blocked_low_energy","herb_avg_neighbors","herb_avg_energy",
+    "carn_mating_attempts","carn_mating_success","carn_blocked_no_space","carn_blocked_no_mate","carn_blocked_low_energy","carn_avg_neighbors","carn_avg_energy",
     "herb_K","carn_K","competition_enabled","herb_repro_success_rate","carn_repro_success_rate",
     "biomass_total","temperature","rainfall","season_name",
     ...SPECIES_DEFS.map(sp=>`${sp.id}_count`)
@@ -2777,6 +2954,8 @@ function downloadCSV(){
     r.grass, r.herb, r.carn,
     r.death_herb_starve, r.death_herb_eaten, r.death_carn_starve, r.death_herb_age, r.death_carn_age,
     r.births_herbivore, r.births_carnivore,
+    r.herb_mating_attempts, r.herb_mating_success, r.herb_blocked_no_space, r.herb_blocked_no_mate, r.herb_blocked_low_energy, r.herb_avg_neighbors, r.herb_avg_energy,
+    r.carn_mating_attempts, r.carn_mating_success, r.carn_blocked_no_space, r.carn_blocked_no_mate, r.carn_blocked_low_energy, r.carn_avg_neighbors, r.carn_avg_energy,
     r.herb_K, r.carn_K, r.competition_enabled, r.herb_repro_success_rate, r.carn_repro_success_rate,
     r.biomass_total, r.temperature, r.rainfall, r.season_name,
     ...SPECIES_DEFS.map(sp=> r.species_counts ? r.species_counts[sp.id] : '')
@@ -2839,7 +3018,12 @@ new p5((p)=>{
 
     // 進行
     if(running){
-      for(let t=0;t<tickPerFrame;t++) tick();
+      const shouldSlow = autoSlowdownEnabled && step < slowdownUntilStep;
+      const ticksThisFrame = shouldSlow ? 1 : (speedMode === 'turbo' ? turboTickPerFrame : tickPerFrame);
+      for(let t=0;t<ticksThisFrame;t++) tick();
+      if(!shouldSlow && slowdownUntilStep > 0 && step >= slowdownUntilStep){
+        slowdownUntilStep = 0;
+      }
     }
 
     // 背景
@@ -3195,6 +3379,8 @@ function init(){
     resetSim();
   }));
   handlerFlags.push(bindClick('btnCSV', downloadCSV));
+  handlerFlags.push(bindClick('btnSpeedNormal', ()=>{ speedMode = 'normal'; slowdownUntilStep = 0; updateSpeedButtons(); }));
+  handlerFlags.push(bindClick('btnSpeedTurbo', ()=>{ speedMode = 'turbo'; updateSpeedButtons(); }));
   handlerFlags.push(bindClick('btnOpenSettings', openSettingsModal));
   const inlineDrawerBtn = el('btnOpenDrawerInline');
   if(inlineDrawerBtn) inlineDrawerBtn.addEventListener('click', openSettingsModal);
@@ -3248,6 +3434,8 @@ function init(){
   if(slGrass) slGrass.addEventListener('input', ()=>{ readParamsFromUI(); }); else logDebug('slGrass missing');
   const slZoom = el('slZoom');
   if(slZoom) slZoom.addEventListener('input', ()=>{ updateZoomFromUI(); }); else logDebug('slZoom missing');
+  const turboInput = el('inTurboTicks');
+  if(turboInput) turboInput.addEventListener('change', ()=>{ readParamsFromUI(); updateSpeedButtons(); }); else logDebug('inTurboTicks missing');
   const chkDaily = el('chkDaily');
   if(chkDaily) chkDaily.addEventListener('change', ()=>{ resetSim(); }); else logDebug('chkDaily missing');
   const inSeed = el('inSeed');
@@ -3287,6 +3475,10 @@ function init(){
       applyEnvironmentPreset(key);
     });
   }
+  const autoSlowChk = el('chkAutoSlow');
+  if(autoSlowChk){
+    autoSlowChk.addEventListener('change', ()=>{ autoSlowdownEnabled = autoSlowChk.checked; updateSpeedButtons(); });
+  }
 
   // 初期化
   setupP5();
@@ -3295,6 +3487,7 @@ function init(){
   updateSpeciesSettingsFromUI();
   updateActiveSpeciesLists();
   readParamsFromUI();
+  updateSpeedButtons();
   resetSim();
   updateStartupBanner();
 }
