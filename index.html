@@ -11,6 +11,7 @@
 
   <style>
     :root { color-scheme: dark; }
+    #uiRoot{position:fixed; inset:0; pointer-events:none; z-index:24;}
     body{
       margin:0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
       background:#0b0f14; color:#e6edf3; line-height:1.5;
@@ -73,8 +74,8 @@
     .badge-warning{color:#f5d97a; background:#4a3810; border:1px solid #8f6d1f; padding:2px 6px; border-radius:8px; font-size:11px;}
     .canvas-wrap{position:relative; border-radius:18px; padding:12px; background:radial-gradient(circle at 30% 20%, rgba(70,120,200,0.08), transparent 42%), linear-gradient(180deg, rgba(16,24,36,0.9), rgba(8,12,18,0.96)); box-shadow:inset 0 0 0 1px rgba(255,255,255,0.02), 0 16px 46px rgba(0,0,0,0.55); min-height:72vh;}
     .canvas-hud{min-width:260px; max-width:380px; background:rgba(8,12,18,0.78); backdrop-filter: blur(8px); display:grid; gap:8px;}
-    .canvas-hud[data-minimized="true"] .hud-grid,.canvas-hud[data-minimized="true"] .hud-top{display:none;}
-    .canvas-hud[data-minimized="true"]{min-width:200px;}
+    .canvas-hud.is-minimized .hud-grid,.canvas-hud.is-minimized .hud-top{display:none;}
+    .canvas-hud.is-minimized{min-width:200px;}
     .hud-top{display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:space-between;}
     .hud-status{display:grid; gap:4px;}
     .hud-status .label{font-size:12px; color:#9fb0c3;}
@@ -103,9 +104,9 @@
     .species-shape.triangle{width:0; height:0; border-left:10px solid transparent; border-right:10px solid transparent; border-top:18px solid #e6edf3; border-radius:0; border:0;}
     .species-controls{display:flex; gap:10px; align-items:center; justify-content:flex-end;}
     .modal-backdrop{
-      position:fixed; inset:0; background:rgba(8,12,18,0.72); display:none; align-items:center; justify-content:center; z-index:30;
+      position:fixed; inset:0; background:rgba(8,12,18,0.72); display:none; align-items:center; justify-content:center; z-index:30; pointer-events:none;
     }
-    .modal-backdrop.active{display:flex;}
+    .modal-backdrop.active{display:flex; pointer-events:auto;}
     .modal{
       background:#0f1620; border:1px solid #2a3a52; border-radius:14px; padding:16px; width:420px; box-shadow:0 20px 60px rgba(0,0,0,0.55);
     }
@@ -157,10 +158,12 @@
     .widget .widget-actions{display:flex; gap:6px;}
     .widget .widget-actions button{padding:6px 8px; min-height:28px;}
     .widget .widget-body{padding:10px 12px;}
-    .widget[data-minimized="true"] .widget-body{display:none;}
-    .widget[data-minimized="true"]{min-height:0;}
-    .widget[data-maximized="true"]{max-width:92vw; max-height:92vh; width:min(520px, 92vw); height:min(80vh, 92vh); box-shadow:0 16px 42px rgba(0,0,0,0.55);}
-    .widget[data-maximized="true"] .widget-body{max-height:calc(min(80vh, 92vh) - 60px); overflow:auto;}
+    .widget.is-minimized{min-height:48px;}
+    .widget.is-minimized .widget-body{display:none;}
+    .widget.is-maximized{width:90vw; height:90vh; max-width:92vw; max-height:92vh; box-shadow:0 16px 42px rgba(0,0,0,0.55);}
+    .widget.is-maximized .widget-body{max-height:calc(90vh - 70px); overflow:auto;}
+    .widget.is-maximized .widget-bar{cursor:default;}
+    body.is-widget-dragging, body.is-widget-dragging *{user-select:none !important;}
     .stage{max-width:1600px; margin:0 auto; padding:18px; display:grid; gap:14px;}
     .map-area{display:grid; gap:10px;}
     .map-head{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;}
@@ -252,8 +255,8 @@
           <div class="widget-bar">
             <div class="widget-title">状態HUD</div>
             <div class="widget-actions">
-              <button class="ghost widget-maximize" data-target="hud" aria-label="最大化/元に戻す">⤢</button>
-              <button class="ghost widget-minimize" data-target="hud" aria-label="最小化">▁</button>
+              <button class="ghost widget-maximize" data-ui-action="maximize" data-widget-id="hud" aria-label="最大化/元に戻す">⤢</button>
+              <button class="ghost widget-minimize" data-ui-action="minimize" data-widget-id="hud" aria-label="最小化">▁</button>
             </div>
           </div>
           <div class="widget-body">
@@ -320,8 +323,8 @@
           <div class="widget-bar">
             <div class="widget-title">凡例</div>
             <div class="widget-actions">
-              <button class="ghost widget-maximize" data-target="legend" aria-label="最大化/元に戻す">⤢</button>
-              <button class="ghost widget-minimize" data-target="legend" aria-label="最小化">▁</button>
+              <button class="ghost widget-maximize" data-ui-action="maximize" data-widget-id="legend" aria-label="最大化/元に戻す">⤢</button>
+              <button class="ghost widget-minimize" data-ui-action="minimize" data-widget-id="legend" aria-label="最小化">▁</button>
             </div>
           </div>
           <div class="widget-body">
@@ -337,8 +340,8 @@
           <div class="widget-bar">
             <div class="widget-title">世代サマリ</div>
             <div class="widget-actions">
-              <button class="ghost widget-maximize" data-target="generation" aria-label="最大化/元に戻す">⤢</button>
-              <button class="ghost widget-minimize" data-target="generation" aria-label="最小化">▁</button>
+              <button class="ghost widget-maximize" data-ui-action="maximize" data-widget-id="generation" aria-label="最大化/元に戻す">⤢</button>
+              <button class="ghost widget-minimize" data-ui-action="minimize" data-widget-id="generation" aria-label="最小化">▁</button>
             </div>
           </div>
           <div class="widget-body">
@@ -350,8 +353,8 @@
           <div class="widget-bar">
             <div class="widget-title">クイック操作</div>
             <div class="widget-actions">
-              <button class="ghost widget-maximize" data-target="toolbar" aria-label="最大化/元に戻す">⤢</button>
-              <button class="ghost widget-minimize" data-target="toolbar" aria-label="最小化">▁</button>
+              <button class="ghost widget-maximize" data-ui-action="maximize" data-widget-id="toolbar" aria-label="最大化/元に戻す">⤢</button>
+              <button class="ghost widget-minimize" data-ui-action="minimize" data-widget-id="toolbar" aria-label="最小化">▁</button>
             </div>
           </div>
           <div class="widget-body">
@@ -385,6 +388,8 @@
     </div>
   </div>
 
+  <div id="uiRoot" aria-hidden="true"></div>
+
   <div id="startupBanner" class="startup-banner hidden" role="status" aria-live="polite">
     <div class="status" id="startupStatus"></div>
     <button id="btnDismissStartup" class="ghost close-btn" aria-label="閉じる">×</button>
@@ -413,8 +418,8 @@
       <div class="modal-header">
         <div class="modal-title">設定モーダル <span class="chip">かんたん/ふつう/研究</span></div>
         <div class="modal-actions">
-          <button id="btnSettingsMax" class="ghost">⤢</button>
-          <button id="btnCloseSettings" class="ghost">閉じる</button>
+          <button id="btnSettingsMax" class="ghost" data-ui-action="modal-maximize">⤢</button>
+          <button id="btnCloseSettings" class="ghost" data-ui-action="close-settings">閉じる</button>
         </div>
       </div>
       <div class="modal-tabs" role="tablist">
@@ -811,6 +816,35 @@ function overlaySafetySweep(){
   }
 }
 
+function describeElementForLog(el){
+  if(!el) return 'なし';
+  const st = getComputedStyle(el);
+  const classText = el.className ? '.' + String(el.className).split(/\s+/).filter(Boolean).join('.') : '';
+  return `${el.tagName.toLowerCase()}${el.id ? '#'+el.id : ''}${classText} pe:${st.pointerEvents} op:${st.opacity} pos:${st.position} z:${st.zIndex}`;
+}
+
+function startUiDiagnostics(){
+  if(!uiDiagMode) return;
+  document.addEventListener('click', (event)=>{
+    const actionEl = event.target?.closest?.('[data-ui-action]');
+    const pointEl = document.elementFromPoint(event.clientX, event.clientY);
+    const path = event.composedPath ? event.composedPath().slice(0,6).map(describeElementForLog) : [];
+    console.debug('[ui-diag] click', {
+      at: {x: event.clientX, y: event.clientY},
+      elementFromPoint: describeElementForLog(pointEl),
+      actionEl: describeElementForLog(actionEl),
+      path,
+    });
+    if(!actionEl){
+      const stack = document.elementsFromPoint(event.clientX, event.clientY) || [];
+      const cover = stack.find(el=>getComputedStyle(el).pointerEvents !== 'none');
+      if(cover){
+        console.warn('[ui-diag] covering element', describeElementForLog(cover));
+      }
+    }
+  }, true);
+}
+
 function removeLingeringShields(){
   document.querySelectorAll('body *').forEach(el=>{
     const st = getComputedStyle(el);
@@ -922,6 +956,7 @@ function checkDependencies(){
 const depsReady = checkDependencies();
 const searchParams = new URLSearchParams(location.search);
 const debugMode = searchParams.get('debug') === '1';
+const uiDiagMode = debugMode || searchParams.get('uiDiag') === '1';
 const startupChecks = {
   deps: depsReady,
   canvas: false,
@@ -2979,6 +3014,22 @@ window.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') closeSettingsMo
 /* ========= ウィジェット ========= */
 let widgetState = {};
 let widgetZ = 30;
+
+function handleUiActionClick(event){
+  const btn = event.target?.closest?.('[data-ui-action]');
+  if(!btn) return;
+  const action = btn.dataset.uiAction;
+  const widgetId = btn.dataset.widgetId || btn.closest('[data-widget-id]')?.dataset.widgetId;
+  if(['minimize','maximize','close-settings','modal-maximize'].includes(action)){
+    event.preventDefault();
+  }
+  if(action === 'minimize' && widgetId) return toggleWidgetMinimize(widgetId);
+  if(action === 'maximize' && widgetId) return toggleWidgetMaximize(widgetId);
+  if(action === 'close-settings') return closeSettingsModal();
+  if(action === 'modal-maximize') return toggleModalMaximize();
+}
+document.addEventListener('click', handleUiActionClick, true);
+
 function widgetDefaults(){
   return {
     hud: {x: 18, y: 120, width: 360, minimized:false, maximized:false},
@@ -2991,14 +3042,17 @@ function applyWidgetPosition(id){
   const elmt = document.querySelector(`[data-widget-id="${id}"]`);
   if(!elmt || !widgetState[id]) return;
   const st = widgetState[id];
-  elmt.dataset.minimized = st.minimized ? 'true' : 'false';
-  elmt.dataset.maximized = st.maximized ? 'true' : 'false';
+
+  elmt.classList.toggle('is-minimized', !!st.minimized);
+  elmt.classList.toggle('is-maximized', !!st.maximized);
 
   if(st.maximized){
-    const maxWidth = Math.min(520, window.innerWidth * 0.92);
-    const maxHeight = Math.min(window.innerHeight * 0.8, window.innerHeight * 0.92);
+    const prevW = st.restore?.width || st.width || elmt.offsetWidth || 280;
+    const prevH = st.restore?.height || elmt.offsetHeight || 180;
+    const maxWidth = Math.min(window.innerWidth * 0.9, Math.max(prevW + 60, window.innerWidth * 0.6));
+    const maxHeight = Math.min(window.innerHeight * 0.9, Math.max(prevH + 80, window.innerHeight * 0.55));
     const left = Math.max(8, (window.innerWidth - maxWidth) / 2);
-    const top = Math.max(12, (window.innerHeight - maxHeight) / 2);
+    const top = Math.max(8, (window.innerHeight - maxHeight) / 2);
     elmt.style.width = `${maxWidth}px`;
     elmt.style.height = `${maxHeight}px`;
     elmt.style.left = `${left}px`;
@@ -3008,7 +3062,7 @@ function applyWidgetPosition(id){
     return;
   }
 
-  const bodyHeight = st.minimized ? (elmt.querySelector('.widget-bar')?.offsetHeight || 46) : (elmt.offsetHeight || 160);
+  const bodyHeight = st.minimized ? (elmt.querySelector('.widget-bar')?.offsetHeight || 48) : (elmt.offsetHeight || 160);
   const width = Math.max(220, st.width || elmt.offsetWidth || 260);
   const maxX = Math.max(6, window.innerWidth - width - 6);
   const maxY = Math.max(6, window.innerHeight - bodyHeight - 6);
@@ -3035,16 +3089,24 @@ function toggleWidgetMaximize(id){
   if(!elmt || !widgetState[id]) return;
   const st = widgetState[id];
   if(st.maximized){
-    if(st.restore){
-      st.x = st.restore.x;
-      st.y = st.restore.y;
-      st.width = st.restore.width;
-      st.minimized = st.restore.minimized;
-    }
+    const restoreX = Number(elmt.dataset.restoreX || st.restore?.x || st.x || 12);
+    const restoreY = Number(elmt.dataset.restoreY || st.restore?.y || st.y || 12);
+    const restoreW = Number(elmt.dataset.restoreWidth || st.restore?.width || st.width || 260);
+    const restoreH = Number(elmt.dataset.restoreHeight || st.restore?.height || elmt.offsetHeight || 180);
+    st.x = restoreX;
+    st.y = restoreY;
+    st.width = restoreW;
+    st.height = restoreH;
+    st.minimized = st.restore?.minimized || false;
     st.maximized = false;
     st.restore = null;
   } else {
-    st.restore = {x: st.x, y: st.y, width: st.width, minimized: st.minimized};
+    const rect = elmt.getBoundingClientRect();
+    st.restore = {x: st.x, y: st.y, width: st.width, height: rect.height, minimized: st.minimized};
+    elmt.dataset.restoreX = String(st.x);
+    elmt.dataset.restoreY = String(st.y);
+    elmt.dataset.restoreWidth = String(st.width || rect.width);
+    elmt.dataset.restoreHeight = String(rect.height);
     st.maximized = true;
     st.minimized = false;
     bringToFront(elmt);
@@ -3058,13 +3120,24 @@ function initWidget(elmt, defaults){
   const bar = elmt.querySelector('.widget-bar');
   let drag = null;
   if(bar){
+    const endDrag = (reason)=>{
+      if(!drag) return;
+      try{ bar.releasePointerCapture(drag.id); }catch(err){ /* ignore */ }
+      drag = null;
+      elmt.classList.remove('dragging');
+      document.body.classList.remove('is-widget-dragging');
+      applyWidgetPosition(id);
+      clearDragShield(reason);
+    };
     bar.addEventListener('pointerdown', (e)=>{
       if(widgetState[id].maximized) return;
-      drag = {id:e.pointerId, dx: e.clientX - widgetState[id].x, dy: e.clientY - widgetState[id].y};
+      const rect = elmt.getBoundingClientRect();
+      drag = {id:e.pointerId, dx: e.clientX - rect.left, dy: e.clientY - rect.top};
       elmt.classList.add('dragging');
+      document.body.classList.add('is-widget-dragging');
       bringToFront(elmt);
       createDragShield();
-      bar.setPointerCapture(e.pointerId);
+      try{ bar.setPointerCapture(e.pointerId); }catch(err){ /* ignore */ }
     });
     bar.addEventListener('pointermove', (e)=>{
       if(!drag || drag.id !== e.pointerId) return;
@@ -3073,37 +3146,18 @@ function initWidget(elmt, defaults){
       applyWidgetPosition(id);
     });
     ['pointerup','pointercancel'].forEach(ev=>{
-      bar.addEventListener(ev, (e)=>{
-        if(drag && drag.id === e.pointerId){
-          drag = null;
-          elmt.classList.remove('dragging');
-          applyWidgetPosition(id);
-          clearDragShield(ev);
-        }
-      });
+      bar.addEventListener(ev, (e)=>{ if(drag && drag.id === e.pointerId) endDrag(ev); });
     });
   }
   elmt.addEventListener('pointerdown', ()=>bringToFront(elmt));
-  const minBtn = elmt.querySelector('.widget-minimize');
-  if(minBtn){
-    minBtn.addEventListener('click', (ev)=>{
-      ev.stopPropagation();
-      toggleWidgetMinimize(id);
-    });
-  }
-  const maxBtn = elmt.querySelector('.widget-maximize');
-  if(maxBtn){
-    maxBtn.addEventListener('click', (ev)=>{
-      ev.stopPropagation();
-      toggleWidgetMaximize(id);
-    });
-  }
 }
 function setupWidgets(){
+  const uiRoot = document.getElementById('uiRoot') || (()=>{ const r = document.createElement('div'); r.id = 'uiRoot'; document.body.appendChild(r); return r; })();
   const defaults = widgetDefaults();
   widgetState = {...defaults};
   widgetZ = 30;
   document.querySelectorAll('[data-widget-id]').forEach(elmt=>{
+    if(elmt.parentElement !== uiRoot) uiRoot.appendChild(elmt);
     const defs = defaults[elmt.dataset.widgetId] || {x:12,y:12,minimized:false,maximized:false};
     widgetState[elmt.dataset.widgetId] = {...defs, ...(widgetState[elmt.dataset.widgetId] || {})};
     initWidget(elmt, defs);
@@ -3119,6 +3173,7 @@ window.addEventListener('resize', ()=>{
 });
 
 function init(){
+  startUiDiagnostics();
   /* ========= ボタン配線 ========= */
   const handlerFlags = [];
   handlerFlags.push(bindClick('btnStart', ()=>{
@@ -3147,9 +3202,8 @@ function init(){
   const forceEndBtn = el('btnForceEnd');
   if(forceEndBtn) forceEndBtn.addEventListener('click', ()=>{ if(!endReason) applyEndCondition('強制終了'); });
   else logDebug('btnForceEnd missing');
-  handlerFlags.push(bindClick('btnCloseSettings', closeSettingsModal));
-  const btnMax = el('btnSettingsMax');
-  if(btnMax) btnMax.addEventListener('click', toggleModalMaximize); else logDebug('btnSettingsMax missing');
+  handlerFlags.push(!!el('btnCloseSettings'));
+  if(!el('btnSettingsMax')) logDebug('btnSettingsMax missing');
   handlerFlags.push(bindClick('btnCopyResult', copyResult));
   const btnCopyScore = el('btnCopyScore');
   if(btnCopyScore) btnCopyScore.addEventListener('click', copyScoreShare); else logDebug('btnCopyScore missing');
