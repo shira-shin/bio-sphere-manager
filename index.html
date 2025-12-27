@@ -73,8 +73,8 @@
     .badge-warning{color:#f5d97a; background:#4a3810; border:1px solid #8f6d1f; padding:2px 6px; border-radius:8px; font-size:11px;}
     .canvas-wrap{position:relative; border-radius:18px; padding:12px; background:radial-gradient(circle at 30% 20%, rgba(70,120,200,0.08), transparent 42%), linear-gradient(180deg, rgba(16,24,36,0.9), rgba(8,12,18,0.96)); box-shadow:inset 0 0 0 1px rgba(255,255,255,0.02), 0 16px 46px rgba(0,0,0,0.55); min-height:72vh;}
     .canvas-hud{min-width:260px; max-width:380px; background:rgba(8,12,18,0.78); backdrop-filter: blur(8px); display:grid; gap:8px;}
-    .canvas-hud.collapsed .hud-grid,.canvas-hud.collapsed .hud-top{display:none;}
-    .canvas-hud.collapsed{min-width:200px;}
+    .canvas-hud[data-minimized="true"] .hud-grid,.canvas-hud[data-minimized="true"] .hud-top{display:none;}
+    .canvas-hud[data-minimized="true"]{min-width:200px;}
     .hud-top{display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:space-between;}
     .hud-status{display:grid; gap:4px;}
     .hud-status .label{font-size:12px; color:#9fb0c3;}
@@ -117,7 +117,7 @@
     .ghost{background:transparent; border-color:#2a3a52; color:#c9d6e2;}
     .chip{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid #2a3a52; background:#132235; font-size:12px; color:#9fb0c3;}
     .settings-backdrop{align-items:center; justify-content:center; padding:24px;}
-    .settings-modal{
+    .settings-modal{ 
       position:fixed;
       top:50%; left:50%;
       transform:translate(-50%,-50%);
@@ -128,28 +128,39 @@
       resize: both;
       overflow: hidden;
       font-size:16px;
+      line-height:1.65;
     }
     .settings-modal.max{top:5vh; left:5vw; transform:none; width:90vw; height:90vh;}
-    .settings-modal .modal-body{overflow:auto; max-height: calc(90vh - 150px); padding:0 2px 8px;}
-    .settings-modal .modal-header{display:flex; align-items:center; justify-content:space-between; gap:12px; padding-bottom:8px; border-bottom:1px solid #1f2a37;}
+    .settings-modal .modal-body{overflow:auto; max-height: calc(90vh - 150px); padding:4px 6px 10px; display:grid; gap:16px;}
+    .settings-modal .modal-header{display:flex; align-items:center; justify-content:space-between; gap:12px; padding-bottom:10px; border-bottom:1px solid #1f2a37;}
     .settings-modal .modal-title{font-size:19px; font-weight:800; display:flex; align-items:center; gap:8px;}
     .settings-modal .modal-actions{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
-    .modal-tabs{display:flex; gap:8px; padding:12px 0 10px; position:sticky; top:0; background:linear-gradient(180deg, #0f1620 60%, rgba(15,22,32,0.85)); z-index:2;}
+    .modal-tabs{display:flex; gap:10px; padding:14px 0 12px; position:sticky; top:0; background:linear-gradient(180deg, #0f1620 60%, rgba(15,22,32,0.9)); z-index:2;}
     .modal-tabs .tab-btn{flex:1; min-width:120px;}
     .tab-panel{display:none; padding-bottom:12px;}
     .tab-panel.active{display:block;}
-    .settings-modal .section{margin-top:10px;}
-    .settings-modal .ctrl input[type="range"]{width: 280px;}
-    .settings-modal input[type="number"], .settings-modal input[type="text"], .settings-modal select{width: 220px; font-size:16px;}
-    .widget{position:fixed; z-index:12; border-radius:14px; border:1px solid #223247; background:rgba(12,18,26,0.92); box-shadow:0 12px 34px rgba(0,0,0,0.45); padding:0; overflow:hidden; min-width:220px;}
+    .settings-modal .section{margin-top:12px;}
+    .settings-modal .section-body{gap:16px;}
+    .settings-modal .ctrl{grid-template-columns: minmax(240px, 1fr) minmax(180px, auto); gap:14px; align-items:flex-start;}
+    .settings-modal .ctrl label{line-height:1.6;}
+    .settings-modal .ctrl input[type="range"]{width: 320px; max-width:100%;}
+    .settings-modal input[type="number"], .settings-modal input[type="text"], .settings-modal select{width: 200px; max-width:100%; font-size:16px;}
+    .settings-modal .grid3{grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:14px;}
+    .settings-modal .grid2{grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:14px;}
+    @media (max-width: 900px){
+      .settings-modal .ctrl{grid-template-columns: 1fr;}
+    }
+    .widget{position:fixed; z-index:12; border-radius:14px; border:1px solid #223247; background:rgba(12,18,26,0.92); box-shadow:0 12px 34px rgba(0,0,0,0.45); padding:0; overflow:hidden; min-width:220px; pointer-events:auto;}
     .widget .widget-bar{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; cursor:grab; background:linear-gradient(180deg, rgba(26,42,60,0.95), rgba(15,24,36,0.95)); border-bottom:1px solid #1f2a37;}
     .widget.dragging .widget-bar{cursor:grabbing;}
     .widget .widget-title{font-weight:800; font-size:14px; letter-spacing:0.04em; color:#dce6f3;}
     .widget .widget-actions{display:flex; gap:6px;}
     .widget .widget-actions button{padding:6px 8px; min-height:28px;}
     .widget .widget-body{padding:10px 12px;}
-    .widget.collapsed .widget-body{display:none;}
-    .widget.collapsed{min-height:0;}
+    .widget[data-minimized="true"] .widget-body{display:none;}
+    .widget[data-minimized="true"]{min-height:0;}
+    .widget[data-maximized="true"]{max-width:92vw; max-height:92vh; width:min(520px, 92vw); height:min(80vh, 92vh); box-shadow:0 16px 42px rgba(0,0,0,0.55);}
+    .widget[data-maximized="true"] .widget-body{max-height:calc(min(80vh, 92vh) - 60px); overflow:auto;}
     .stage{max-width:1600px; margin:0 auto; padding:18px; display:grid; gap:14px;}
     .map-area{display:grid; gap:10px;}
     .map-head{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;}
@@ -241,7 +252,8 @@
           <div class="widget-bar">
             <div class="widget-title">状態HUD</div>
             <div class="widget-actions">
-              <button class="ghost widget-minimize" data-target="hud">▁</button>
+              <button class="ghost widget-maximize" data-target="hud" aria-label="最大化/元に戻す">⤢</button>
+              <button class="ghost widget-minimize" data-target="hud" aria-label="最小化">▁</button>
             </div>
           </div>
           <div class="widget-body">
@@ -250,9 +262,7 @@
                 <div class="label">状態</div>
                 <div class="hud-pill" id="outStatus">停止中</div>
               </div>
-              <div class="hud-actions">
-                <button class="ghost" id="btnHudToggle">⤢</button>
-              </div>
+              <div class="hud-actions"></div>
             </div>
             <div class="hud-top">
               <div class="hud-meta">ステップ <span id="outStep">0</span></div>
@@ -304,7 +314,10 @@
         <div class="widget legend-card" id="legendCard" data-widget-id="legend">
           <div class="widget-bar">
             <div class="widget-title">凡例</div>
-            <div class="widget-actions"><button class="ghost widget-minimize" data-target="legend">▁</button></div>
+            <div class="widget-actions">
+              <button class="ghost widget-maximize" data-target="legend" aria-label="最大化/元に戻す">⤢</button>
+              <button class="ghost widget-minimize" data-target="legend" aria-label="最小化">▁</button>
+            </div>
           </div>
           <div class="widget-body">
             <div class="legend-row"><span class="legend-swatch" style="background:linear-gradient(90deg,#21402a,#4f9f6d);"></span><span>植生（草量と林床）</span></div>
@@ -318,7 +331,10 @@
         <div class="widget legend-card gen-card" id="generationCard" data-widget-id="generation">
           <div class="widget-bar">
             <div class="widget-title">世代サマリ</div>
-            <div class="widget-actions"><button class="ghost widget-minimize" data-target="generation">▁</button></div>
+            <div class="widget-actions">
+              <button class="ghost widget-maximize" data-target="generation" aria-label="最大化/元に戻す">⤢</button>
+              <button class="ghost widget-minimize" data-target="generation" aria-label="最小化">▁</button>
+            </div>
           </div>
           <div class="widget-body">
             <div class="legend-row legend-note">世代ごとの生存数（最新ステップ）</div>
@@ -328,7 +344,10 @@
         <div class="widget toolbar-card" id="toolbarCard" data-widget-id="toolbar">
           <div class="widget-bar">
             <div class="widget-title">クイック操作</div>
-            <div class="widget-actions"><button class="ghost widget-minimize" data-target="toolbar">▁</button></div>
+            <div class="widget-actions">
+              <button class="ghost widget-maximize" data-target="toolbar" aria-label="最大化/元に戻す">⤢</button>
+              <button class="ghost widget-minimize" data-target="toolbar" aria-label="最小化">▁</button>
+            </div>
           </div>
           <div class="widget-body">
             <div class="toolbar-row">
@@ -2834,30 +2853,75 @@ let widgetState = {};
 let widgetZ = 30;
 function widgetDefaults(){
   return {
-    hud: {x: 18, y: 120, width: 360, collapsed:false},
-    legend: {x: Math.max(12, window.innerWidth - 250), y: Math.max(80, window.innerHeight - 280), width: 240, collapsed:false},
-    generation: {x: Math.max(12, window.innerWidth - 500), y: 16, width: 240, collapsed:false},
-    toolbar: {x: Math.max(12, window.innerWidth - 360), y: Math.max(16, window.innerHeight - 200), width: 360, collapsed:false},
+    hud: {x: 18, y: 120, width: 360, minimized:false, maximized:false},
+    legend: {x: Math.max(12, window.innerWidth - 250), y: Math.max(80, window.innerHeight - 280), width: 240, minimized:false, maximized:false},
+    generation: {x: Math.max(12, window.innerWidth - 500), y: 16, width: 240, minimized:false, maximized:false},
+    toolbar: {x: Math.max(12, window.innerWidth - 360), y: Math.max(16, window.innerHeight - 200), width: 360, minimized:false, maximized:false},
   };
 }
 function applyWidgetPosition(id){
   const elmt = document.querySelector(`[data-widget-id="${id}"]`);
   if(!elmt || !widgetState[id]) return;
   const st = widgetState[id];
-  const width = st.width || elmt.offsetWidth || 260;
-  const height = elmt.offsetHeight || 160;
+  elmt.dataset.minimized = st.minimized ? 'true' : 'false';
+  elmt.dataset.maximized = st.maximized ? 'true' : 'false';
+
+  if(st.maximized){
+    const maxWidth = Math.min(520, window.innerWidth * 0.92);
+    const maxHeight = Math.min(window.innerHeight * 0.8, window.innerHeight * 0.92);
+    const left = Math.max(8, (window.innerWidth - maxWidth) / 2);
+    const top = Math.max(12, (window.innerHeight - maxHeight) / 2);
+    elmt.style.width = `${maxWidth}px`;
+    elmt.style.height = `${maxHeight}px`;
+    elmt.style.left = `${left}px`;
+    elmt.style.top = `${top}px`;
+    elmt.style.transform = 'none';
+    bringToFront(elmt);
+    return;
+  }
+
+  const bodyHeight = st.minimized ? (elmt.querySelector('.widget-bar')?.offsetHeight || 46) : (elmt.offsetHeight || 160);
+  const width = Math.max(220, st.width || elmt.offsetWidth || 260);
   const maxX = Math.max(6, window.innerWidth - width - 6);
-  const maxY = Math.max(6, window.innerHeight - height - 6);
+  const maxY = Math.max(6, window.innerHeight - bodyHeight - 6);
   st.x = clampFloat(st.x, 6, maxX);
   st.y = clampFloat(st.y, 6, maxY);
   elmt.style.left = `${st.x}px`;
   elmt.style.top = `${st.y}px`;
-  if(st.width) elmt.style.width = `${st.width}px`;
-  elmt.classList.toggle('collapsed', !!st.collapsed);
+  elmt.style.width = `${width}px`;
+  elmt.style.height = '';
+  elmt.style.transform = '';
 }
 function bringToFront(elmt){
   widgetZ += 1;
   elmt.style.zIndex = String(20 + widgetZ);
+}
+function toggleWidgetMinimize(id){
+  if(!widgetState[id]) return;
+  widgetState[id].minimized = !widgetState[id].minimized;
+  widgetState[id].maximized = false;
+  applyWidgetPosition(id);
+}
+function toggleWidgetMaximize(id){
+  const elmt = document.querySelector(`[data-widget-id="${id}"]`);
+  if(!elmt || !widgetState[id]) return;
+  const st = widgetState[id];
+  if(st.maximized){
+    if(st.restore){
+      st.x = st.restore.x;
+      st.y = st.restore.y;
+      st.width = st.restore.width;
+      st.minimized = st.restore.minimized;
+    }
+    st.maximized = false;
+    st.restore = null;
+  } else {
+    st.restore = {x: st.x, y: st.y, width: st.width, minimized: st.minimized};
+    st.maximized = true;
+    st.minimized = false;
+    bringToFront(elmt);
+  }
+  applyWidgetPosition(id);
 }
 function initWidget(elmt, defaults){
   const id = elmt.dataset.widgetId;
@@ -2867,6 +2931,7 @@ function initWidget(elmt, defaults){
   let drag = null;
   if(bar){
     bar.addEventListener('pointerdown', (e)=>{
+      if(widgetState[id].maximized) return;
       drag = {id:e.pointerId, dx: e.clientX - widgetState[id].x, dy: e.clientY - widgetState[id].y};
       elmt.classList.add('dragging');
       bringToFront(elmt);
@@ -2895,8 +2960,14 @@ function initWidget(elmt, defaults){
   if(minBtn){
     minBtn.addEventListener('click', (ev)=>{
       ev.stopPropagation();
-      widgetState[id].collapsed = !widgetState[id].collapsed;
-      applyWidgetPosition(id);
+      toggleWidgetMinimize(id);
+    });
+  }
+  const maxBtn = elmt.querySelector('.widget-maximize');
+  if(maxBtn){
+    maxBtn.addEventListener('click', (ev)=>{
+      ev.stopPropagation();
+      toggleWidgetMaximize(id);
     });
   }
 }
@@ -2905,7 +2976,7 @@ function setupWidgets(){
   widgetState = {...defaults};
   widgetZ = 30;
   document.querySelectorAll('[data-widget-id]').forEach(elmt=>{
-    const defs = defaults[elmt.dataset.widgetId] || {x:12,y:12};
+    const defs = defaults[elmt.dataset.widgetId] || {x:12,y:12,minimized:false,maximized:false};
     widgetState[elmt.dataset.widgetId] = {...defs, ...(widgetState[elmt.dataset.widgetId] || {})};
     initWidget(elmt, defs);
   });
@@ -3020,15 +3091,6 @@ function init(){
   overlaySafetySweep();
   removeLingeringShields();
   setupWidgets();
-  const hudToggle = el('btnHudToggle');
-  if(hudToggle){
-    hudToggle.addEventListener('click', ()=>{
-      widgetState.hud.collapsed = !widgetState.hud.collapsed;
-      applyWidgetPosition('hud');
-    });
-  } else {
-    logDebug('btnHudToggle missing');
-  }
   const uiResetBtn = el('btnUiReset');
   if(uiResetBtn){
     uiResetBtn.addEventListener('click', ()=>{
