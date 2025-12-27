@@ -18,15 +18,16 @@
       overflow:hidden;
     }
     #mapStage{
-      position:fixed; left:0; top:0; right:360px; bottom:0; z-index:0; overflow:hidden;
+      position:fixed; left:0; top:0; right:360px; bottom:0; z-index:1; overflow:hidden;
       background-color:#05080f;
       background-image:
         linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
         linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px),
         radial-gradient(circle at 10% 20%, rgba(60,120,200,0.08), transparent 42%);
       background-size: 48px 48px, 48px 48px, auto;
+      pointer-events:auto;
     }
-    #canvasHost{position:absolute; inset:12px 12px 12px 12px; border-radius:18px; box-shadow:0 18px 46px rgba(0,0,0,0.55); overflow:hidden;}
+    #canvasHost{position:absolute; inset:12px 12px 12px 12px; border-radius:18px; box-shadow:0 18px 46px rgba(0,0,0,0.55); overflow:hidden; z-index:2;}
     #mapStage canvas{display:block; width:100%; height:100%;}
     .canvas-debug{position:absolute; left:12px; top:12px; padding:8px 10px; border-radius:12px; border:1px solid #30445c; background:rgba(6,10,15,0.72); color:#cfd8e3; font-size:12px; display:flex; gap:8px; align-items:center; z-index:5;}
     .canvas-debug.off{opacity:0.4;}
@@ -45,7 +46,7 @@
     canvas{display:block;}
 
     /* Widget system */
-    .widget{position:fixed; z-index:10; border-radius:14px; border:1px solid #223247; background:rgba(12,18,26,0.94); box-shadow:0 12px 34px rgba(0,0,0,0.45); min-width:240px; pointer-events:auto; color:#dce6f3;}
+    .widget{position:fixed; z-index:10; border-radius:14px; border:1px solid #223247; background:rgba(12,18,26,0.94); box-shadow:0 12px 34px rgba(0,0,0,0.45); min-width:240px; pointer-events:auto; color:#dce6f3; touch-action:none;}
     .widget-header{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; background:linear-gradient(180deg, rgba(26,42,60,0.95), rgba(15,24,36,0.95)); border-bottom:1px solid #1f2a37; cursor:grab; user-select:none;}
     .widget.dragging .widget-header{cursor:grabbing;}
     .widget-title{font-weight:800; font-size:14px; letter-spacing:0.04em;}
@@ -247,21 +248,24 @@
     /* Window manager */
     const widgetManager = (() => {
       const widgets = new Map();
+      const zBase = 20;
+      let zCursor = zBase;
       let dragging = null;
-
-      const register = (id) => {
-        const el = document.getElementById(id);
-        if(!el) return;
-        el.dataset.widgetId = id;
-        widgets.set(id, { el, restoreRect:null });
-        syncButtons(el, 'minimize', false);
-        syncButtons(el, 'maximize', false);
-      };
 
       const syncButtons = (el, action, active) => {
         el.querySelectorAll(`[data-action="${action}"]`).forEach(btn => {
           btn.setAttribute('aria-pressed', active);
         });
+      };
+
+      const register = (id) => {
+        const el = document.getElementById(id);
+        if(!el) return;
+        el.dataset.widgetId = id;
+        widgets.set(id, { el, restoreRect:null, z:zCursor++ });
+        el.style.zIndex = widgets.get(id).z;
+        syncButtons(el, 'minimize', false);
+        syncButtons(el, 'maximize', false);
       };
 
       const saveRect = (el) => {
@@ -282,10 +286,19 @@
         el.style.height = rect.height;
       };
 
+      const focus = (id) => {
+        const entry = widgets.get(id); if(!entry) return;
+        entry.z = ++zCursor;
+        entry.el.style.zIndex = entry.z;
+      };
+
       const minimize = (id) => {
         const entry = widgets.get(id); if(!entry) return;
         const { el } = entry;
         const willMinimize = !el.classList.contains('is-minimized');
+        if(willMinimize && !el.classList.contains('is-maximized')){
+          entry.restoreRect = saveRect(el);
+        }
         el.classList.toggle('is-minimized', willMinimize);
         if(willMinimize) el.classList.remove('is-maximized');
         syncButtons(el, 'minimize', willMinimize);
@@ -325,6 +338,7 @@
         const entry = widgets.get(id); if(!entry) return;
         const el = entry.el;
         if(el.classList.contains('is-maximized')) return;
+        focus(id);
         const rect = el.getBoundingClientRect();
         dragging = { id, offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top, pointerId:e.pointerId };
         header.setPointerCapture(e.pointerId);
@@ -351,7 +365,18 @@
         dragging = null;
       };
 
+      const cleanupOverlays = () => {
+        document.querySelectorAll('.backdrop').forEach(el=>{
+          el.classList.remove('active');
+          el.style.pointerEvents = 'none';
+        });
+        document.querySelectorAll('.widget').forEach(el=>el.style.pointerEvents='auto');
+        if(typeof mapStage !== 'undefined' && mapStage){ mapStage.style.pointerEvents = 'auto'; }
+        if(typeof canvasHost !== 'undefined' && canvasHost){ canvasHost.style.pointerEvents = 'auto'; }
+      };
+
       const panicReset = () => {
+        cleanupOverlays();
         widgets.forEach(({el, restoreRect}) => {
           el.classList.remove('is-maximized', 'is-minimized', 'dragging');
           syncButtons(el, 'maximize', false);
@@ -362,6 +387,10 @@
       };
 
       document.addEventListener('pointerdown', (e)=>{
+        const widget = e.target.closest('.widget');
+        if(widget){
+          focus(widget.dataset.widgetId);
+        }
         if(e.target.closest('[data-action]')){ e.stopPropagation(); }
       }, true);
 
@@ -381,7 +410,7 @@
 
       window.addEventListener('resize', () => widgets.forEach(({el}) => clampToViewport(el)));
 
-      return { register, minimize, maximize, clampToViewport, panicReset };
+      return { register, minimize, maximize, clampToViewport, panicReset, focus };
     })();
 
     ['hudWidget','summaryWidget','controlsWidget','legendWidget','settingsWidget'].forEach(widgetManager.register);
@@ -402,6 +431,8 @@
     let simFrame = null;
     let resizeObserver = null;
     let debugEnabled = true;
+    const query = new URLSearchParams(location.search);
+    if(query.has('debug')){ debugEnabled = query.get('debug') === '1'; }
     let stageRetry = 0;
     const maxStageRetry = 10;
     const renderStats = { lastRenderMs: 0, worldTiles: 0 };
@@ -890,7 +921,13 @@
               p.line(pos.x, pos.y+size*0.4, pos.x+size, pos.y+size*0.6);
             } else if(tKey==='water'){
               p.noFill();
-              p.curve(pos.x, pos.y+size*0.2, pos.x+size*0.2, pos.y+size*0.4, pos.x+size*0.6, pos.y+size*0.6, pos.x+size, pos.y+size*0.8);
+              p.beginShape();
+              p.curveVertex(pos.x, pos.y+size*0.25);
+              p.curveVertex(pos.x+size*0.15, pos.y+size*0.35);
+              p.curveVertex(pos.x+size*0.45, pos.y+size*0.55);
+              p.curveVertex(pos.x+size*0.75, pos.y+size*0.7);
+              p.curveVertex(pos.x+size, pos.y+size*0.82);
+              p.endShape();
             } else if(tKey==='rock'){
               p.fill(cellType.texture); p.noStroke();
               p.triangle(pos.x+size*0.2,pos.y+size*0.8,pos.x+size*0.5,pos.y+size*0.2,pos.x+size*0.8,pos.y+size*0.9);
@@ -1043,8 +1080,6 @@
       if(stepBtn){ stepBtn.addEventListener('click', ()=> { stopSimLoop(); stepSim(); renderOnce('step'); }); }
       if(panicBtn){
         panicBtn.addEventListener('click', ()=>{
-          document.querySelectorAll('.backdrop').forEach(el=>el.classList.remove('active'));
-          document.querySelectorAll('.widget').forEach(el=>el.style.pointerEvents='auto');
           widgetManager.panicReset();
           state.view = { scale:1, offsetX:0, offsetY:0 };
           recenterView();
