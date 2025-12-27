@@ -370,6 +370,8 @@
     <div class="modal">
       <h3>初期化エラー</h3>
       <div class="kv"><div class="label">内容</div><div class="value mono" id="errorMessage">-</div></div>
+      <div class="kv"><div class="label">位置</div><div class="value mono" id="errorLocation">-</div></div>
+      <div class="kv"><div class="label">詳細</div><div class="value mono" id="errorStack">-</div></div>
       <div class="actions"><button id="btnCloseError" class="primary">閉じる</button></div>
     </div>
   </div>
@@ -379,6 +381,8 @@
   <div class="floating-settings">
     <button id="btnOpenSettings" class="fab primary">⚙ 設定</button>
   </div>
+
+  <button id="btnPanic" class="fab danger" style="position:fixed; right:18px; bottom:78px; z-index:50;">Panic</button>
 
   <div class="modal-backdrop settings-backdrop" id="settingsBackdrop">
     <div class="modal settings-modal" id="settingsModal" aria-hidden="true" role="dialog">
@@ -705,13 +709,50 @@ function renderDependencyWarning(missing){
   document.body.appendChild(div);
 }
 
+function showFatalError(err){
+  const modal = el('errorModal');
+  if(modal){
+    const msgEl = el('errorMessage');
+    const locEl = el('errorLocation');
+    const stackEl = el('errorStack');
+    const message = err?.message || String(err);
+    const location = err?.filename ? `${err.filename}:${err.lineno || ''}` : (err?.stack?.split('\n')[1] || '-');
+    if(msgEl) msgEl.textContent = message;
+    if(locEl) locEl.textContent = location || '-';
+    if(stackEl) stackEl.textContent = err?.stack || '-';
+    activateOverlay(modal);
+  }
+  lastErrorInfo = err;
+  if(debugMode){
+    console.error('[fatal]', err);
+  }
+}
+
+function attachGlobalErrorHandlers(){
+  window.onerror = (message, source, lineno, colno, error)=>{
+    showFatalError({message, filename:source, lineno, colno, stack:error?.stack});
+  };
+  window.onunhandledrejection = (event)=>{
+    const reason = event?.reason || event;
+    showFatalError(reason instanceof Error ? reason : {message:String(reason)});
+  };
+}
+
 function bindClick(id, handler){
   const target = el(id);
   if(!target){
     console.warn(`[ui] missing element: ${id}`);
+    logDebug(`[ui] missing element: ${id}`);
     return false;
   }
-  target.addEventListener('click', handler);
+  target.disabled = false;
+  target.addEventListener('click', (e)=>{
+    try {
+      handler(e);
+    } catch(err){
+      showFatalError(err);
+    }
+  });
   return true;
 }
 
@@ -744,6 +785,19 @@ function overlaySafetySweep(){
   if(overlayState.dragShield && !overlayState.activeIds.has('dragShield')){
     clearDragShield('safety');
   }
+}
+
+function removeLingeringShields(){
+  document.querySelectorAll('body *').forEach(el=>{
+    const st = getComputedStyle(el);
+    const isFull = st.position === 'fixed' && st.top === '0px' && st.left === '0px' && st.right === '0px' && st.bottom === '0px';
+    const transparent = (st.opacity === '0' || st.backgroundColor === 'rgba(0, 0, 0, 0)');
+    const blocking = st.pointerEvents !== 'none';
+    if(isFull && transparent && blocking && el.id !== 'dragShield'){
+      console.warn('[overlay] removing lingering shield', el.id || el.className || el.tagName);
+      el.remove();
+    }
+  });
 }
 
 function createDragShield(){
@@ -804,14 +858,30 @@ function enableDebugPanel(){
   if(!panel) return;
   panel.classList.add('active');
   document.addEventListener('pointermove', (e)=>{
-    const elmt = document.elementFromPoint(e.clientX, e.clientY);
-    const tag = elmt ? `${elmt.tagName.toLowerCase()}${elmt.id ? '#'+elmt.id : ''}${elmt.className ? '.'+String(elmt.className).split(' ').join('.') : ''}` : 'なし';
+    const [top] = document.elementsFromPoint(e.clientX, e.clientY) || [];
+    const tag = top ? `${top.tagName.toLowerCase()}${top.id ? '#'+top.id : ''}${top.className ? '.'+String(top.className).split(' ').join('.') : ''}` : 'なし';
     const visibleOverlays = Array.from(document.querySelectorAll('.modal-backdrop')).filter(m=>getComputedStyle(m).display !== 'none');
     let overlayText = 'なし';
     if(overlayState.dragShield) overlayText = 'dragShield';
     else if(visibleOverlays.length) overlayText = visibleOverlays.map(o=>o.id || 'overlay').join(',');
-    panel.innerHTML = `カーソル: (${Math.round(e.clientX)}, ${Math.round(e.clientY)})<br>要素: ${tag}<br>オーバーレイ: ${overlayText}`;
+    const depText = `p5:${typeof window.p5 !== 'undefined'} / Chart:${typeof window.Chart !== 'undefined'}`;
+    const canvasCount = document.querySelectorAll('canvas').length;
+    const lastErr = lastErrorInfo ? (lastErrorInfo.message || String(lastErrorInfo)) : 'なし';
+    const noteText = debugNotes.slice(-5).join('<br>');
+    panel.innerHTML = `${depText}<br>canvas:${canvasCount}<br>最後のエラー:${lastErr}<br>カーソル: (${Math.round(e.clientX)}, ${Math.round(e.clientY)})<br>要素: ${tag}<br>オーバーレイ: ${overlayText}<br>${noteText}`;
   });
+}
+
+const debugNotes = [];
+function logDebug(msg){
+  debugNotes.push(msg);
+  if(debugNotes.length > 50) debugNotes.shift();
+  if(debugMode){
+    const panel = el('debugPanel');
+    if(panel){
+      panel.innerHTML = debugNotes.slice(-5).join('<br>');
+    }
+  }
 }
 
 function checkDependencies(){
@@ -834,6 +904,10 @@ const startupChecks = {
   chart: false,
   handlers: false,
 };
+
+let lastErrorInfo = null;
+let safeMode = false;
+let safeTicker = null;
 
 const overlayState = {
   activeIds: new Set(),
@@ -2457,7 +2531,12 @@ function refreshUI(){
 let chart = null;
 function resetChart(){
   if(!depsReady) return;
-  const ctx = el('chart').getContext('2d');
+  const chartEl = el('chart');
+  if(!chartEl){
+    logDebug('chart element missing');
+    return;
+  }
+  const ctx = chartEl.getContext('2d');
   if(chart) chart.destroy();
   chart = new Chart(ctx, {
     type: 'line',
@@ -2557,7 +2636,11 @@ function copyScoreShare(){
 }
 
 /* ========= p5.js 描画 ========= */
-if(depsReady){
+function setupP5(){
+if(!depsReady){
+  logDebug('p5 unavailable, skipping main renderer');
+  return;
+}
 new p5((p)=>{
   p.setup = () => {
     const cnv = p.createCanvas(canvasSize, canvasSize);
@@ -2701,6 +2784,7 @@ new p5((p)=>{
   };
 });
 }
+}
 
 /* ========= 設定モーダル ========= */
 const settingsBackdrop = el('settingsBackdrop');
@@ -2836,116 +2920,207 @@ window.addEventListener('resize', ()=>{
   Object.keys(widgetState).forEach(applyWidgetPosition);
 });
 
-/* ========= ボタン配線 ========= */
-const handlerFlags = [];
-handlerFlags.push(bindClick('btnStart', ()=>{
-  if(endReason){
+function init(){
+  /* ========= ボタン配線 ========= */
+  const handlerFlags = [];
+  handlerFlags.push(bindClick('btnStart', ()=>{
+    if(endReason){
+      resetSim();
+    }
+    running = !running;
+    const btn = el('btnStart');
+    if(btn) btn.textContent = running ? '停止' : '開始';
+    refreshUI();
+  }));
+  handlerFlags.push(bindClick('btnStep', ()=>{
+    if(!running) tick();
+    refreshUI();
+  }));
+  handlerFlags.push(bindClick('btnReset', ()=>{
+    const btn = el('btnStart');
+    if(btn) btn.textContent = '開始';
     resetSim();
-  }
-  running = !running;
-  const btn = el('btnStart');
-  if(btn) btn.textContent = running ? '停止' : '開始';
-  refreshUI();
-}));
-handlerFlags.push(bindClick('btnStep', ()=>{
-  if(!running) tick();
-  refreshUI();
-}));
-handlerFlags.push(bindClick('btnReset', ()=>{
-  const btn = el('btnStart');
-  if(btn) btn.textContent = '開始';
-  resetSim();
-}));
-handlerFlags.push(bindClick('btnCSV', downloadCSV));
-handlerFlags.push(bindClick('btnOpenSettings', openSettingsModal));
-const inlineDrawerBtn = el('btnOpenDrawerInline');
-if(inlineDrawerBtn) inlineDrawerBtn.addEventListener('click', openSettingsModal);
-const forceEndBtn = el('btnForceEnd');
-if(forceEndBtn) forceEndBtn.addEventListener('click', ()=>{ if(!endReason) applyEndCondition('強制終了'); });
-handlerFlags.push(bindClick('btnCloseSettings', closeSettingsModal));
-const btnMax = el('btnSettingsMax');
-if(btnMax) btnMax.addEventListener('click', toggleModalMaximize);
-handlerFlags.push(bindClick('btnCopyResult', copyResult));
-const btnCopyScore = el('btnCopyScore');
-if(btnCopyScore) btnCopyScore.addEventListener('click', copyScoreShare);
-handlerFlags.push(bindClick('btnModalReset', ()=>{ hideEndModal(); const btn = el('btnStart'); if(btn) btn.textContent = '開始'; resetSim(); }));
-handlerFlags.push(bindClick('btnModalCSV', downloadCSV));
-handlerFlags.push(bindClick('btnModalCopy', copyResult));
-const btnModalCopyScore = el('btnModalCopyScore');
-if(btnModalCopyScore) btnModalCopyScore.addEventListener('click', copyScoreShare);
-handlerFlags.push(bindClick('btnCloseError', ()=>deactivateOverlay(el('errorModal'))));
-handlerFlags.push(bindClick('btnDismissStartup', ()=>{ const banner = el('startupBanner'); if(banner) banner.classList.add('hidden'); }));
-bindClick('btnApplyScenario', ()=>{
-  const sel = el('selScenario');
-  const key = sel ? sel.value : '';
-  if(!key) return;
-  applyPresetToUI(key);
-  resetSim();
-  const preset = PRESETS[key];
-  if(preset){
-    statusMessage = `シナリオ: ${preset.label} を適用しました`;
-  }
-  refreshUI();
-});
-startupChecks.handlers = handlerFlags.every(Boolean);
-updateStartupBanner();
+  }));
+  handlerFlags.push(bindClick('btnCSV', downloadCSV));
+  handlerFlags.push(bindClick('btnOpenSettings', openSettingsModal));
+  const inlineDrawerBtn = el('btnOpenDrawerInline');
+  if(inlineDrawerBtn) inlineDrawerBtn.addEventListener('click', openSettingsModal);
+  else logDebug('btnOpenDrawerInline missing');
+  const forceEndBtn = el('btnForceEnd');
+  if(forceEndBtn) forceEndBtn.addEventListener('click', ()=>{ if(!endReason) applyEndCondition('強制終了'); });
+  else logDebug('btnForceEnd missing');
+  handlerFlags.push(bindClick('btnCloseSettings', closeSettingsModal));
+  const btnMax = el('btnSettingsMax');
+  if(btnMax) btnMax.addEventListener('click', toggleModalMaximize); else logDebug('btnSettingsMax missing');
+  handlerFlags.push(bindClick('btnCopyResult', copyResult));
+  const btnCopyScore = el('btnCopyScore');
+  if(btnCopyScore) btnCopyScore.addEventListener('click', copyScoreShare); else logDebug('btnCopyScore missing');
+  handlerFlags.push(bindClick('btnModalReset', ()=>{ hideEndModal(); const btn = el('btnStart'); if(btn) btn.textContent = '開始'; resetSim(); }));
+  handlerFlags.push(bindClick('btnModalCSV', downloadCSV));
+  handlerFlags.push(bindClick('btnModalCopy', copyResult));
+  const btnModalCopyScore = el('btnModalCopyScore');
+  if(btnModalCopyScore) btnModalCopyScore.addEventListener('click', copyScoreShare); else logDebug('btnModalCopyScore missing');
+  handlerFlags.push(bindClick('btnCloseError', ()=>deactivateOverlay(el('errorModal'))));
+  handlerFlags.push(bindClick('btnDismissStartup', ()=>{ const banner = el('startupBanner'); if(banner) banner.classList.add('hidden'); }));
+  bindClick('btnApplyScenario', ()=>{
+    const sel = el('selScenario');
+    const key = sel ? sel.value : '';
+    if(!key) return;
+    applyPresetToUI(key);
+    resetSim();
+    const preset = PRESETS[key];
+    if(preset){
+      statusMessage = `シナリオ: ${preset.label} を適用しました`;
+    }
+    refreshUI();
+  });
+  const btnPanic = el('btnPanic');
+  if(btnPanic) btnPanic.addEventListener('click', panicRecovery); else logDebug('Panic button missing');
+  startupChecks.handlers = handlerFlags.every(Boolean);
+  updateStartupBanner();
 
-document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', ()=>{
-    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-    document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
-    btn.classList.add('active');
-    const panel = document.getElementById(btn.dataset.tab);
-    if(panel) panel.classList.add('active');
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+      btn.classList.add('active');
+      const panel = document.getElementById(btn.dataset.tab);
+      if(panel) panel.classList.add('active');
+    });
   });
-});
 
-// スライダー表示更新（初期）
-el('slFPS').addEventListener('input', ()=>{ readParamsFromUI(); });
-el('slGrass').addEventListener('input', ()=>{ readParamsFromUI(); });
-el('slZoom').addEventListener('input', ()=>{ updateZoomFromUI(); });
-el('chkDaily').addEventListener('change', ()=>{ resetSim(); });
-el('inSeed').addEventListener('change', ()=>{ resetSim(); });
-document.querySelectorAll('.overlay-btn').forEach(btn => {
-  btn.addEventListener('click', ()=>{
-    document.querySelectorAll('.overlay-btn').forEach(b=>b.classList.remove('active'));
-    overlayMode = btn.dataset.mode || 'fauna';
-    btn.classList.add('active');
+  // スライダー表示更新（初期）
+  const slFPS = el('slFPS');
+  if(slFPS) slFPS.addEventListener('input', ()=>{ readParamsFromUI(); }); else logDebug('slFPS missing');
+  const slGrass = el('slGrass');
+  if(slGrass) slGrass.addEventListener('input', ()=>{ readParamsFromUI(); }); else logDebug('slGrass missing');
+  const slZoom = el('slZoom');
+  if(slZoom) slZoom.addEventListener('input', ()=>{ updateZoomFromUI(); }); else logDebug('slZoom missing');
+  const chkDaily = el('chkDaily');
+  if(chkDaily) chkDaily.addEventListener('change', ()=>{ resetSim(); }); else logDebug('chkDaily missing');
+  const inSeed = el('inSeed');
+  if(inSeed) inSeed.addEventListener('change', ()=>{ resetSim(); }); else logDebug('inSeed missing');
+  document.querySelectorAll('.overlay-btn').forEach(btn => {
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.overlay-btn').forEach(b=>b.classList.remove('active'));
+      overlayMode = btn.dataset.mode || 'fauna';
+      btn.classList.add('active');
+    });
   });
-});
-el('btnApplyEnvironment').addEventListener('click', ()=>{
-  const key = el('selEnvPreset').value;
-  applyEnvironmentPreset(key);
+  const btnEnv = el('btnApplyEnvironment');
+  if(btnEnv){
+    btnEnv.addEventListener('click', ()=>{
+      const key = el('selEnvPreset').value;
+      applyEnvironmentPreset(key);
+      resetSim();
+    });
+  } else {
+    logDebug('btnApplyEnvironment missing');
+  }
+  if(debugMode) enableDebugPanel();
+  overlaySafetySweep();
+  removeLingeringShields();
+  setupWidgets();
+  const hudToggle = el('btnHudToggle');
+  if(hudToggle){
+    hudToggle.addEventListener('click', ()=>{
+      widgetState.hud.collapsed = !widgetState.hud.collapsed;
+      applyWidgetPosition('hud');
+    });
+  } else {
+    logDebug('btnHudToggle missing');
+  }
+  const uiResetBtn = el('btnUiReset');
+  if(uiResetBtn){
+    uiResetBtn.addEventListener('click', ()=>{
+      resetWidgetLayout();
+      Object.keys(widgetState).forEach(applyWidgetPosition);
+    });
+  }
+  const envPresetSel = el('selEnvPreset');
+  if(envPresetSel){
+    envPresetSel.addEventListener('change', ()=>{
+      const key = el('selEnvPreset').value;
+      applyEnvironmentPreset(key);
+    });
+  }
+
+  // 初期化
+  setupP5();
+  buildLegendAnimals();
+  buildSpeciesControls();
+  updateSpeciesSettingsFromUI();
+  updateActiveSpeciesLists();
+  readParamsFromUI();
   resetSim();
-});
-if(debugMode) enableDebugPanel();
-overlaySafetySweep();
-setupWidgets();
-const hudEl = el('hud');
-el('btnHudToggle').addEventListener('click', ()=>{
-  widgetState.hud.collapsed = !widgetState.hud.collapsed;
-  applyWidgetPosition('hud');
-});
-const uiResetBtn = el('btnUiReset');
-if(uiResetBtn){
-  uiResetBtn.addEventListener('click', ()=>{
-    resetWidgetLayout();
-    Object.keys(widgetState).forEach(applyWidgetPosition);
-  });
+  updateStartupBanner();
 }
-el('selEnvPreset').addEventListener('change', ()=>{
-  const key = el('selEnvPreset').value;
-  applyEnvironmentPreset(key);
-});
 
-// 初期化
-buildLegendAnimals();
-buildSpeciesControls();
-updateSpeciesSettingsFromUI();
-updateActiveSpeciesLists();
-readParamsFromUI();
-resetSim();
-updateStartupBanner();
+attachGlobalErrorHandlers();
+if(!depsReady){
+  showFatalError({message:'CDN読み込み失敗', stack:'p5 / Chart の読み込みが確認できません'});
+}
+try {
+  init();
+  if(!depsReady){
+    safeFallback('依存ライブラリ不足');
+  }
+} catch(err){
+  showFatalError(err);
+  safeFallback(err);
+}
+
+function safeFallback(reason){
+  if(safeMode) return;
+  safeMode = true;
+  logDebug(`Safe Mode: ${reason?.message || reason}`);
+  const container = el('p5-container');
+  removeLingeringShields();
+  if(container && !container.querySelector('canvas')){
+    const c = document.createElement('canvas');
+    c.width = 640; c.height = 640;
+    c.style.borderRadius = '12px';
+    c.style.width = '100%';
+    c.style.background = '#0b1624';
+    container.appendChild(c);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#112030';
+    ctx.fillRect(0,0,c.width,c.height);
+    ctx.fillStyle = '#5aa2f7';
+    ctx.font = '18px sans-serif';
+    ctx.fillText('Safe Mode: 基本盤面のみ', 20, 32);
+  }
+  const btnStart = el('btnStart');
+  const btnStop = btnStart;
+  if(btnStart && !btnStart.dataset.safeBound){
+    btnStart.dataset.safeBound = '1';
+    btnStart.disabled = false;
+    btnStart.addEventListener('click', ()=>{
+      running = !running;
+      btnStart.textContent = running ? '停止' : '開始';
+      if(running && !safeTicker){
+        safeTicker = setInterval(()=>{ /* noop loop to keep button responsive */ }, 500);
+      } else if(!running && safeTicker){
+        clearInterval(safeTicker); safeTicker = null;
+      }
+    });
+  }
+  const btnStep = el('btnStep');
+  if(btnStep) btnStep.addEventListener('click', ()=>{});
+  const btnReset = el('btnReset');
+  if(btnReset) btnReset.addEventListener('click', ()=>{ running=false; if(btnStart) btnStart.textContent='開始'; });
+  startupChecks.canvas = !!container;
+  updateStartupBanner();
+}
+
+function panicRecovery(){
+  document.querySelectorAll('.modal-backdrop').forEach(deactivateOverlay);
+  clearDragShield('panic');
+  removeLingeringShields();
+  document.body.style.pointerEvents = 'auto';
+  const app = document.querySelector('.stage');
+  if(app) app.style.pointerEvents = 'auto';
+}
 </script>
 </body>
 </html>
