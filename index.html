@@ -139,6 +139,12 @@
     .legend-animals{display:grid; gap:6px;}
     .legend-species{display:flex; align-items:center; gap:8px; color:#dce6f3; font-size:13px;}
     .legend-species .label{color:#9fb0c3; font-size:12px;}
+    .legend-note{color:#8ea7c4; font-size:12px;}
+    .gen-card{top:12px; right:234px; min-width:240px;}
+    .gen-row{display:flex; gap:6px; align-items:center; justify-content:space-between; border:1px solid #1f2a37; padding:6px 8px; border-radius:10px; background:rgba(17,24,38,0.82);}
+    .gen-name{display:flex; gap:6px; align-items:center; font-weight:700;}
+    .gen-chip{display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; border:1px solid #2a3a52; background:#132235; font-size:11px; color:#9fb0c3;}
+    .gen-values{display:flex; gap:6px; align-items:center; flex-wrap:wrap; font-size:12px;}
     .floating-toolbar{position:absolute; inset:auto 16px 16px auto; display:flex; flex-direction:column; gap:8px; z-index:20; align-items:flex-end; pointer-events:none;}
     .toolbar-row{display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;}
     .toolbar-card{background:rgba(12,18,26,0.92); border:1px solid #1f2a37; border-radius:14px; padding:10px; box-shadow:0 12px 34px rgba(0,0,0,0.45); pointer-events:auto; min-width:240px;}
@@ -250,6 +256,11 @@
           <div class="legend-row tiny">レイヤーは「表示モード」で切替（動物・土壌・植生・気象）</div>
           <div class="legend-title" style="margin-top:6px;">動物</div>
           <div id="legendAnimals" class="legend-animals"></div>
+        </div>
+        <div class="legend-card gen-card" id="generationCard">
+          <div class="legend-title">世代サマリ</div>
+          <div class="legend-row legend-note">世代ごとの生存数（最新ステップ）</div>
+          <div id="generationStats" class="legend-animals"></div>
         </div>
         <div class="floating-toolbar">
           <div class="toolbar-card">
@@ -1002,7 +1013,91 @@ function buildLegendAnimals(){
     meta.className = 'label';
     meta.textContent = sp.diet === 'herbivore' ? '草食' : '肉食';
     row.appendChild(meta);
+    const count = document.createElement('span');
+    count.className = 'label';
+    count.id = `legend-count-${sp.id}`;
+    count.textContent = '0';
+    row.appendChild(count);
     wrap.appendChild(row);
+  }
+}
+function updateLegendCounts(counts){
+  for(const sp of SPECIES_DEFS){
+    const elCount = el(`legend-count-${sp.id}`);
+    if(elCount){
+      const val = counts.species?.[sp.id] ?? 0;
+      elCount.textContent = `${val}体`;
+    }
+  }
+}
+function terrainAffinityMultiplier(spSetting, idx){
+  const t = terrain[idx];
+  const moisture = moistureBias[idx] ?? 0.7;
+  const ridge = soilHeight[idx] ?? 0.5;
+  const affinity = spSetting?.affinity || 'neutral';
+  let gain = 1, reproduction = 1, metabolism = 1;
+  if(affinity === 'river'){
+    if(t === TERRAIN.RIVER) {gain += 0.14; reproduction -= 0.12;}
+    else reproduction += 0.06;
+    gain += clampFloat((moisture - 0.8) * 0.2, -0.08, 0.12);
+  } else if(affinity === 'forest'){
+    if(t === TERRAIN.FOREST){gain += 0.1; metabolism -= 0.08;}
+    else if(t === TERRAIN.ROCK){gain -= 0.08; reproduction += 0.06;}
+  } else if(affinity === 'upland'){
+    gain += clampFloat((ridge - 0.55) * 0.25, -0.05, 0.14);
+    reproduction += clampFloat((0.45 - ridge) * 0.2, -0.08, 0.1);
+  }
+  return {gain: clampFloat(gain, 0.6, 1.6), reproduction: clampFloat(reproduction, 0.6, 1.5), metabolism: clampFloat(metabolism, 0.75, 1.25)};
+}
+function generationSummary(){
+  const rows = [];
+  for(const sp of SPECIES_DEFS){
+    const list = animals[sp.id] || [];
+    const tally = {};
+    for(const a of list){
+      if(!a.alive) continue;
+      const g = a.generation || 1;
+      tally[g] = (tally[g] || 0) + 1;
+    }
+    const entries = Object.entries(tally).sort((a,b)=>Number(a[0]) - Number(b[0])).slice(0,5);
+    rows.push({sp, entries, total: entries.reduce((s,[,v])=>s+v,0)});
+  }
+  return rows;
+}
+function renderGenerationStats(){
+  const wrap = el('generationStats');
+  if(!wrap) return;
+  wrap.innerHTML = '';
+  for(const row of generationSummary()){
+    const div = document.createElement('div');
+    div.className = 'gen-row';
+    const name = document.createElement('div');
+    name.className = 'gen-name';
+    const sw = document.createElement('span');
+    sw.className = 'legend-swatch';
+    if(row.sp.shape === 'triangle'){
+      sw.classList.add('tri');
+      sw.style.borderTopColor = speciesColor(row.sp);
+    } else {
+      sw.classList.add('circle');
+      sw.style.background = speciesColor(row.sp);
+    }
+    name.append(sw, document.createTextNode(row.sp.nameJP));
+    div.appendChild(name);
+    const vals = document.createElement('div');
+    vals.className = 'gen-values';
+    if(row.entries.length === 0){
+      vals.textContent = '生存個体なし';
+    } else {
+      for(const [g,v] of row.entries){
+        const chip = document.createElement('span');
+        chip.className = 'gen-chip';
+        chip.textContent = `G${g}: ${v}`;
+        vals.appendChild(chip);
+      }
+    }
+    div.appendChild(vals);
+    wrap.appendChild(div);
   }
 }
 function drawTerrainPattern(p, x, y, t, pat){
@@ -1139,7 +1234,7 @@ function buildScoreShareText(){
 function defaultSpeciesSettings(){
   const s = {};
   for(const sp of SPECIES_DEFS){
-    s[sp.id] = {enabled: sp.defaultEnabled !== false, init: sp.defaultInit || 0};
+    s[sp.id] = {enabled: sp.defaultEnabled !== false, init: sp.defaultInit || 0, gainMult:1, reproMult:1, affinity:'neutral'};
   }
   return s;
 }
@@ -1147,9 +1242,15 @@ function updateSpeciesSettingsFromUI(){
   for(const sp of SPECIES_DEFS){
     const chk = el(`chk-${sp.id}`);
     const inp = el(`inInit-${sp.id}`);
+    const gainInp = el(`inGainMult-${sp.id}`);
+    const reproInp = el(`inReproMult-${sp.id}`);
+    const affinitySel = el(`selAffinity-${sp.id}`);
     const enabled = chk ? chk.checked : true;
     const init = inp ? clampInt(parseInt(inp.value,10), 0, 5000) : (sp.defaultInit || 0);
-    speciesSettings[sp.id] = {enabled, init};
+    const gainMult = gainInp ? clampFloat(parseFloat(gainInp.value), 0.25, 3) : 1;
+    const reproMult = reproInp ? clampFloat(parseFloat(reproInp.value), 0.25, 3) : 1;
+    const affinity = affinitySel ? affinitySel.value : 'neutral';
+    speciesSettings[sp.id] = {enabled, init, gainMult, reproMult, affinity};
   }
 }
 function applySpeciesSettingsToUI(settings){
@@ -1158,8 +1259,14 @@ function applySpeciesSettingsToUI(settings){
     if(!st) continue;
     const chk = el(`chk-${sp.id}`);
     const inp = el(`inInit-${sp.id}`);
+    const gainInp = el(`inGainMult-${sp.id}`);
+    const reproInp = el(`inReproMult-${sp.id}`);
+    const affinitySel = el(`selAffinity-${sp.id}`);
     if(chk) chk.checked = !!st.enabled;
     if(inp) inp.value = st.init;
+    if(gainInp) gainInp.value = st.gainMult ?? 1;
+    if(reproInp) reproInp.value = st.reproMult ?? 1;
+    if(affinitySel) affinitySel.value = st.affinity || 'neutral';
   }
   updateSpeciesSettingsFromUI();
   updateActiveSpeciesLists();
@@ -1172,9 +1279,12 @@ function getSpeciesTraits(def){
   const baseGain = def.diet === 'herbivore' ? P.herbGain : P.carnGain;
   const baseRepro = def.diet === 'herbivore' ? P.herbRepro : P.carnRepro;
   const gainDelta = def.gains?.grassDelta ?? def.gains?.herbivoreDelta ?? 0;
+  const st = speciesSettings[def.id] || {};
+  const gainMult = clampFloat(st.gainMult ?? 1, 0.25, 3);
+  const reproMult = clampFloat(st.reproMult ?? 1, 0.25, 3);
   return {
-    gain: clampInt(baseGain + gainDelta, 1, 800),
-    reproduction: clampInt(baseRepro + (def.reproDelta || 0), 2, 1200),
+    gain: clampInt((baseGain + gainDelta) * gainMult, 1, 800),
+    reproduction: clampInt((baseRepro + (def.reproDelta || 0)) * reproMult, 2, 1200),
     metabolism: Math.max(0, def.metabolism ?? P.metabolism),
     maxAge: def.maxAge ?? (def.diet === 'herbivore' ? P.herbMaxAge : P.carnMaxAge),
   };
@@ -1227,7 +1337,42 @@ function buildSpeciesControls(){
     inp.max = '5000';
     inp.value = speciesSettings[sp.id].init;
     inp.addEventListener('change', readParamsFromUI);
-    controls.append(lbl, inp);
+    const gainLbl = document.createElement('label');
+    gainLbl.textContent = '採食/捕食倍率';
+    gainLbl.className = 'note';
+    const gainInp = document.createElement('input');
+    gainInp.type = 'number';
+    gainInp.step = '0.1';
+    gainInp.min = '0.25';
+    gainInp.max = '3';
+    gainInp.id = `inGainMult-${sp.id}`;
+    gainInp.value = speciesSettings[sp.id].gainMult;
+    gainInp.addEventListener('change', readParamsFromUI);
+    const reproLbl = document.createElement('label');
+    reproLbl.textContent = '繁殖閾値倍率';
+    reproLbl.className = 'note';
+    const reproInp = document.createElement('input');
+    reproInp.type = 'number';
+    reproInp.step = '0.1';
+    reproInp.min = '0.25';
+    reproInp.max = '3';
+    reproInp.id = `inReproMult-${sp.id}`;
+    reproInp.value = speciesSettings[sp.id].reproMult;
+    reproInp.addEventListener('change', readParamsFromUI);
+    const affinityLbl = document.createElement('label');
+    affinityLbl.textContent = '環境適正';
+    affinityLbl.className = 'note';
+    const affinitySel = document.createElement('select');
+    affinitySel.id = `selAffinity-${sp.id}`;
+    ['neutral','river','forest','upland'].forEach(key=>{
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = key === 'neutral' ? 'ニュートラル' : key === 'river' ? '水辺好み' : key === 'forest' ? '森林好み' : '尾根好み';
+      affinitySel.appendChild(opt);
+    });
+    affinitySel.value = speciesSettings[sp.id].affinity;
+    affinitySel.addEventListener('change', readParamsFromUI);
+    controls.append(lbl, inp, gainLbl, gainInp, reproLbl, reproInp, affinityLbl, affinitySel);
 
     row.append(head, desc, controls);
     listEl.appendChild(row);
@@ -1278,10 +1423,10 @@ function applyPresetToUI(key){
   const nextSpeciesSettings = {};
   for(const sp of SPECIES_DEFS){
     const presetCount = speciesPreset[sp.id];
-    const baseSetting = speciesSettings[sp.id] || {enabled: sp.defaultEnabled !== false, init: sp.defaultInit || 0};
+    const baseSetting = speciesSettings[sp.id] || {enabled: sp.defaultEnabled !== false, init: sp.defaultInit || 0, gainMult:1, reproMult:1, affinity:'neutral'};
     const init = presetCount !== undefined ? presetCount : baseSetting.init;
     const enabled = presetCount !== undefined ? presetCount > 0 : baseSetting.enabled;
-    nextSpeciesSettings[sp.id] = {enabled, init};
+    nextSpeciesSettings[sp.id] = {enabled, init, gainMult: baseSetting.gainMult ?? 1, reproMult: baseSetting.reproMult ?? 1, affinity: baseSetting.affinity || 'neutral'};
   }
   applySpeciesSettingsToUI(nextSpeciesSettings);
   if(v.endCondition) el('selEndCondition').value = v.endCondition;
@@ -1576,6 +1721,7 @@ function tick(){
   // 2) 草食の行動：移動→採食→代謝→繁殖
   for(const sp of activeHerbSpecies){
     const traits = getSpeciesTraits(sp);
+    const spSetting = speciesSettings[sp.id] || {};
     const list = animals[sp.id] || [];
     for(const h of list){
       if(!h.alive) continue;
@@ -1592,15 +1738,16 @@ function tick(){
       const moveCost = moveTerrainAware(h);
 
       const idx = h.y * GRID + h.x;
+      const affinity = terrainAffinityMultiplier(spSetting, idx);
       if(biomass[idx] > 0){
         const eat = Math.min(biomass[idx], traits.gain);
         biomass[idx] -= eat;
-        h.energy += eat;
+        h.energy += eat * affinity.gain;
       }
 
       const herbExtraCost = competitionExtraCost(herbAliveCount, P.herbK);
       const weatherCost = Math.max(0, Math.abs(weatherState.temperature - P.avgTemp) * 0.05);
-      h.energy -= (traits.metabolism + herbExtraCost + moveCost + weatherCost);
+      h.energy -= (traits.metabolism * affinity.metabolism + herbExtraCost + moveCost + weatherCost);
       if(h.energy <= 0){
         h.alive = false;
         herbAliveCount--;
@@ -1610,7 +1757,7 @@ function tick(){
       }
 
       const seasonFactor = reproductionSeasonMultiplier();
-      if(h.sex === 'F' && h.energy >= traits.reproduction * Math.max(0.7, 1 / seasonFactor)){
+      if(h.sex === 'F' && h.energy >= traits.reproduction * affinity.reproduction * Math.max(0.7, 1 / seasonFactor)){
         const mate = findMateNear(list, h, 2);
         herbReproAttempts++;
         if(mate && competitionReproPass(herbAliveCount, P.herbK)){
@@ -1644,6 +1791,7 @@ function tick(){
   // 4) 肉食の行動：移動→捕食→代謝→繁殖
   for(const sp of activeCarnSpecies){
     const traits = getSpeciesTraits(sp);
+    const spSetting = speciesSettings[sp.id] || {};
     const list = animals[sp.id] || [];
     for(const c of list){
       if(!c.alive) continue;
@@ -1660,6 +1808,7 @@ function tick(){
       const moveCost = moveTerrainAware(c);
 
       const idx = c.y * GRID + c.x;
+      const affinity = terrainAffinityMultiplier(spSetting, idx);
       const cellList = herbivoreAt[idx];
       if(cellList.length > 0){
         const preyRef = cellList.pop();
@@ -1669,7 +1818,7 @@ function tick(){
           if(prey && prey.alive){
             prey.alive = false;
             deathHerbEaten++;
-            c.energy += traits.gain;
+            c.energy += traits.gain * affinity.gain;
             herbAliveCount--;
             spawnEffect('predation', c.x, c.y);
           }
@@ -1679,7 +1828,7 @@ function tick(){
       const carnExtraCost = competitionExtraCost(carnAliveCount, P.carnK);
       const weatherCost = Math.max(0, Math.abs(weatherState.temperature - P.avgTemp) * 0.04);
       if(cellList.length === 0){
-        c.energy -= (traits.metabolism + carnExtraCost + moveCost + weatherCost);
+        c.energy -= (traits.metabolism * affinity.metabolism + carnExtraCost + moveCost + weatherCost);
       } else {
         c.energy -= (carnExtraCost + moveCost + weatherCost);
       }
@@ -1692,7 +1841,7 @@ function tick(){
       }
 
       const seasonFactor = reproductionSeasonMultiplier();
-      if(c.sex === 'F' && c.energy >= traits.reproduction * Math.max(0.75, 1 / seasonFactor)){
+      if(c.sex === 'F' && c.energy >= traits.reproduction * affinity.reproduction * Math.max(0.75, 1 / seasonFactor)){
         const mate = findMateNear(list, c, 3);
         carnReproAttempts++;
         if(mate && competitionReproPass(carnAliveCount, P.carnK)){
@@ -1881,6 +2030,8 @@ function updateScore(counts, recordSample){
 function refreshUI(){
   const counts = getCounts();
   updateScore(counts, false);
+  updateLegendCounts(counts);
+  renderGenerationStats();
   el('outStep').textContent = String(step);
   el('outSeed').textContent = currentSeed;
   el('outGrass').textContent = String(counts.grass);
