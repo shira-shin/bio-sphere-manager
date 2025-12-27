@@ -26,7 +26,8 @@
         radial-gradient(circle at 10% 20%, rgba(60,120,200,0.08), transparent 42%);
       background-size: 48px 48px, 48px 48px, auto;
     }
-    #mapStage canvas{display:block; width:100%; height:100%; border-radius:18px; box-shadow:0 18px 46px rgba(0,0,0,0.55);}
+    #canvasHost{position:absolute; inset:12px 12px 12px 12px; border-radius:18px; box-shadow:0 18px 46px rgba(0,0,0,0.55); overflow:hidden;}
+    #mapStage canvas{display:block; width:100%; height:100%;}
     .canvas-debug{position:absolute; left:12px; top:12px; padding:8px 10px; border-radius:12px; border:1px solid #30445c; background:rgba(6,10,15,0.72); color:#cfd8e3; font-size:12px; display:flex; gap:8px; align-items:center; z-index:5;}
     .canvas-debug.off{opacity:0.4;}
     .canvas-debug .stat{text-shadow:0 2px 8px rgba(0,0,0,0.6);}
@@ -88,14 +89,16 @@
 
     .backdrop{position:fixed; inset:0; background:rgba(8,12,18,0.72); display:none; align-items:center; justify-content:center; z-index:100; pointer-events:none;}
     .backdrop.active{display:flex; pointer-events:auto;}
-    #dragShield{position:fixed; inset:0; background:transparent; z-index:9; pointer-events:auto;}
+    .modal{background:#0d1420; border:1px solid #30445c; border-radius:14px; padding:18px 20px; min-width:280px; max-width:480px; box-shadow:0 14px 40px rgba(0,0,0,0.55);}
+    .modal h3{margin:0 0 10px 0; font-size:18px;}
+    .modal p{margin:0 0 12px 0; color:#cdd9e5;}
     .status-badge{position:absolute; left:14px; bottom:14px; background:rgba(30,10,10,0.7); border:1px solid rgba(255,120,120,0.45); color:#ffb0b0; padding:8px 10px; border-radius:10px; font-size:13px; pointer-events:none; z-index:6; box-shadow:0 8px 20px rgba(0,0,0,0.4);}
     .hidden{display:none!important;}
   </style>
 </head>
 <body>
   <div id="mapStage">
-    <canvas id="mapCanvas" aria-label="シミュレーションマップ"></canvas>
+    <div id="canvasHost" aria-label="シミュレーションマップ"></div>
     <div class="canvas-debug" id="canvasDebug">
       <span class="stat" id="canvasSizeStat">キャンバス: --</span>
       <span class="stat" id="canvasDprStat">DPR: --</span>
@@ -114,8 +117,8 @@
     <div class="widget-header" data-widget-id="hudWidget">
       <div class="widget-title">状態表示</div>
       <div class="widget-controls">
-        <button data-ui-action="minimize" data-widget-id="hudWidget">—</button>
-        <button data-ui-action="maximize" data-widget-id="hudWidget">▢</button>
+        <button data-action="minimize" data-widget-id="hudWidget">—</button>
+        <button data-action="maximize" data-widget-id="hudWidget">▢</button>
       </div>
     </div>
     <div class="widget-body">
@@ -133,8 +136,8 @@
     <div class="widget-header" data-widget-id="summaryWidget">
       <div class="widget-title">世代サマリ</div>
       <div class="widget-controls">
-        <button data-ui-action="minimize" data-widget-id="summaryWidget">—</button>
-        <button data-ui-action="maximize" data-widget-id="summaryWidget">▢</button>
+        <button data-action="minimize" data-widget-id="summaryWidget">—</button>
+        <button data-action="maximize" data-widget-id="summaryWidget">▢</button>
       </div>
     </div>
     <div class="widget-body">
@@ -147,14 +150,15 @@
     <div class="widget-header" data-widget-id="controlsWidget">
       <div class="widget-title">クイック操作</div>
       <div class="widget-controls">
-        <button data-ui-action="minimize" data-widget-id="controlsWidget">—</button>
-        <button data-ui-action="maximize" data-widget-id="controlsWidget">▢</button>
+        <button data-action="minimize" data-widget-id="controlsWidget">—</button>
+        <button data-action="maximize" data-widget-id="controlsWidget">▢</button>
       </div>
     </div>
     <div class="widget-body">
       <div class="row" style="display:flex; gap:8px; flex-wrap:wrap;">
         <button class="btn primary" id="startBtn">開始</button>
         <button class="btn" id="stopBtn">停止</button>
+        <button class="btn" id="stepBtn">1ステップ</button>
         <button class="btn danger" id="panicBtn">パニック</button>
       </div>
       <div class="section">
@@ -189,8 +193,8 @@
     <div class="widget-header" data-widget-id="legendWidget">
       <div class="widget-title">凡例</div>
       <div class="widget-controls">
-        <button data-ui-action="minimize" data-widget-id="legendWidget">—</button>
-        <button data-ui-action="maximize" data-widget-id="legendWidget">▢</button>
+        <button data-action="minimize" data-widget-id="legendWidget">—</button>
+        <button data-action="maximize" data-widget-id="legendWidget">▢</button>
       </div>
     </div>
     <div class="widget-body">
@@ -202,8 +206,8 @@
     <div class="widget-header" data-widget-id="settingsWidget">
       <div class="widget-title">設定</div>
       <div class="widget-controls">
-        <button data-ui-action="minimize" data-widget-id="settingsWidget">—</button>
-        <button data-ui-action="maximize" data-widget-id="settingsWidget">▢</button>
+        <button data-action="minimize" data-widget-id="settingsWidget">—</button>
+        <button data-action="maximize" data-widget-id="settingsWidget">▢</button>
       </div>
     </div>
     <div class="widget-body">
@@ -239,11 +243,11 @@
   <div class="backdrop" id="modalBackdrop"></div>
 
   <script>
+    console.log('[BioSphere] スクリプト初期化開始');
     /* Window manager */
     const widgetManager = (() => {
       const widgets = new Map();
       let dragging = null;
-      let dragShield = null;
 
       const register = (id) => {
         const el = document.getElementById(id);
@@ -255,7 +259,7 @@
       };
 
       const syncButtons = (el, action, active) => {
-        el.querySelectorAll(`[data-ui-action="${action}"]`).forEach(btn => {
+        el.querySelectorAll(`[data-action="${action}"]`).forEach(btn => {
           btn.setAttribute('aria-pressed', active);
         });
       };
@@ -314,32 +318,21 @@
         el.style.left = `${left}px`; el.style.top = `${top}px`;
       };
 
-      const createShield = () => {
-        if(dragShield) return;
-        dragShield = document.createElement('div');
-        dragShield.id = 'dragShield';
-        document.body.appendChild(dragShield);
-      };
-
-      const removeShield = () => {
-        if(dragShield && dragShield.parentNode){ dragShield.parentNode.removeChild(dragShield); }
-        dragShield = null;
-      };
-
       const startDrag = (e) => {
         const header = e.target.closest('.widget-header');
-        if(!header) return;
+        if(!header || e.target.closest('[data-action]')) return;
         const id = header.dataset.widgetId || header.parentElement?.dataset.widgetId;
         const entry = widgets.get(id); if(!entry) return;
         const el = entry.el;
         if(el.classList.contains('is-maximized')) return;
         const rect = el.getBoundingClientRect();
-        dragging = { id, offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top };
-        createShield();
+        dragging = { id, offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top, pointerId:e.pointerId };
+        header.setPointerCapture(e.pointerId);
+        el.classList.add('dragging');
       };
 
       const doDrag = (e) => {
-        if(!dragging) return;
+        if(!dragging || e.pointerId !== dragging.pointerId) return;
         const entry = widgets.get(dragging.id); if(!entry) return;
         const el = entry.el;
         const left = e.clientX - dragging.offsetX;
@@ -348,17 +341,19 @@
         el.style.top = `${top}px`;
       };
 
-      const endDrag = () => {
-        if(!dragging) { removeShield(); return; }
-        const entry = widgets.get(dragging.id); if(entry) clampToViewport(entry.el);
+      const endDrag = (e) => {
+        if(!dragging || (e && e.pointerId !== dragging.pointerId)) { return; }
+        const entry = widgets.get(dragging.id);
+        if(entry){
+          clampToViewport(entry.el);
+          entry.el.classList.remove('dragging');
+        }
         dragging = null;
-        removeShield();
       };
 
       const panicReset = () => {
-        removeShield();
         widgets.forEach(({el, restoreRect}) => {
-          el.classList.remove('is-maximized', 'is-minimized');
+          el.classList.remove('is-maximized', 'is-minimized', 'dragging');
           syncButtons(el, 'maximize', false);
           syncButtons(el, 'minimize', false);
           applyRect(el, restoreRect);
@@ -366,11 +361,15 @@
         });
       };
 
+      document.addEventListener('pointerdown', (e)=>{
+        if(e.target.closest('[data-action]')){ e.stopPropagation(); }
+      }, true);
+
       document.addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-ui-action]');
+        const btn = e.target.closest('[data-action]');
         if(!btn) return;
         const id = btn.dataset.widgetId || btn.closest('.widget')?.dataset.widgetId;
-        const action = btn.dataset.uiAction;
+        const action = btn.dataset.action;
         if(action === 'minimize') minimize(id);
         if(action === 'maximize') maximize(id);
       });
@@ -389,7 +388,8 @@
 
     /* Canvas manager */
     const mapStage = document.getElementById('mapStage');
-    if(!mapStage){ throw new Error('#mapStage が見つかりません'); }
+    const canvasHost = document.getElementById('canvasHost');
+    if(!mapStage || !canvasHost){ throw new Error('#mapStage / #canvasHost が見つかりません'); }
     const canvasDebug = document.getElementById('canvasDebug');
     const canvasDebugToggle = document.getElementById('canvasDebugToggle');
     const canvasSizeStat = document.getElementById('canvasSizeStat');
@@ -397,6 +397,7 @@
     const canvasRenderStat = document.getElementById('canvasRenderStat');
     const canvasTilesStat = document.getElementById('canvasTilesStat');
     const canvasStatus = document.getElementById('canvasStatus');
+    const modalBackdrop = document.getElementById('modalBackdrop');
     let pInstance = null;
     let simFrame = null;
     let resizeObserver = null;
@@ -404,6 +405,7 @@
     let stageRetry = 0;
     const maxStageRetry = 10;
     const renderStats = { lastRenderMs: 0, worldTiles: 0 };
+    let drawErrored = false;
 
     /* Simulation */
     const legendList = document.getElementById('legendList');
@@ -412,6 +414,10 @@
     const toggleFlashes = document.getElementById('toggleFlashes');
     const toggleTrails = document.getElementById('toggleTrails');
     const toggleVectors = document.getElementById('toggleVectors');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const stepBtn = document.getElementById('stepBtn');
+    const panicBtn = document.getElementById('panicBtn');
     const extinctionModeCheckbox = document.getElementById('modeExtinction');
     const behaviorControls = document.getElementById('behaviorControls');
     const zoomSlider = document.getElementById('zoomSlider');
@@ -520,7 +526,7 @@
     }
 
     function measureStage(){
-      const rect = mapStage.getBoundingClientRect();
+      const rect = canvasHost.getBoundingClientRect();
       return { width: Math.round(rect.width), height: Math.round(rect.height) };
     }
 
@@ -535,6 +541,18 @@
       } else {
         canvasStatus.classList.add('hidden');
       }
+    }
+
+    function showErrorModal(message){
+      if(!modalBackdrop) return;
+      modalBackdrop.innerHTML = '';
+      const modal = document.createElement('div');
+      modal.className = 'modal';
+      modal.innerHTML = `<h3>描画エラー</h3><p>${message}</p><button class="btn" id="modalClose">閉じる</button>`;
+      modalBackdrop.appendChild(modal);
+      modalBackdrop.classList.add('active');
+      const closeBtn = modal.querySelector('#modalClose');
+      closeBtn?.addEventListener('click', ()=>modalBackdrop.classList.remove('active'));
     }
 
     function updateDebugPanel(rect){
@@ -582,10 +600,11 @@
       const rect = measureStage();
       if(rect.width && rect.height){
         const cnv = p.createCanvas(Math.max(1, rect.width), Math.max(1, rect.height));
-        cnv.parent(mapStage);
+        cnv.parent(canvasHost);
         cnv.canvas.id = 'mapCanvas';
         setCanvasStatus('');
         stageRetry = 0;
+        console.log(`[BioSphere] canvas created ${rect.width}x${rect.height}`);
         if(typeof onSuccess === 'function'){ onSuccess(); }
         return cnv;
       }
@@ -732,6 +751,7 @@
       setupDens();
       initPlants();
       spawnAnimals(preset.animals);
+      drawErrored = false;
       renderSummary();
       updateHUD();
       const note = preset.description || '';
@@ -803,8 +823,7 @@
       let pan = { active:false, startX:0, startY:0, originX:0, originY:0 };
 
       p.setup = () => {
-        const placeholder = document.getElementById('mapCanvas');
-        if(placeholder && placeholder.parentNode) placeholder.parentNode.removeChild(placeholder);
+        canvasHost.innerHTML = '';
         const finishSetup = () => {
           p.pixelDensity(window.devicePixelRatio || 1);
           p.noLoop();
@@ -813,6 +832,8 @@
             resizeObserver = new ResizeObserver(()=>{ ensureCanvasSize(); renderOnce('resize'); });
             resizeObserver.observe(mapStage);
           }
+          const rect = measureStage();
+          console.log(`[BioSphere] p5 ready / map dims ${rect.width}x${rect.height}`);
         };
         createCanvasSafely(p, finishSetup);
       };
@@ -823,14 +844,24 @@
       };
 
       p.draw = () => {
-        p.background('#05080f');
-        drawTerrain(p);
-        drawPlants(p);
-        drawDens(p);
-        drawTrails(p);
-        drawAnimals(p);
-        drawEvents(p);
+        if(drawErrored) return;
+        try {
+          p.background('#05080f');
+          drawTerrain(p);
+          drawPlants(p);
+          drawDens(p);
+          drawTrails(p);
+          drawAnimals(p);
+          drawEvents(p);
+        } catch(err){
+          drawErrored = true;
+          stopSimLoop();
+          p.noLoop();
+          console.error('[BioSphere] draw error', err);
+          showErrorModal(`描画中にエラーが発生しました: ${err.message}`);
+        }
       };
+      console.log('[BioSphere] draw handlers ready');
 
       function worldToScreen(x,y){
         return {
@@ -844,15 +875,15 @@
           for(let x=0;x<state.gridW;x++){
             const idx = y*state.gridW+x;
             const tKey = state.terrain[idx];
-            const terrain = terrainTypes.find(t=>t.key===tKey) || terrainTypes[0];
+            const cellType = terrainTypes.find(t=>t.key===tKey) || terrainTypes[0];
             const pos = worldToScreen(x,y);
             const size = state.tile*state.view.scale;
             p.noStroke();
-            const c = p.color(terrain.color);
+            const c = p.color(cellType.color);
             c.setAlpha(190);
             p.fill(c);
             p.rect(pos.x, pos.y, size, size);
-            p.stroke(terrain.texture);
+            p.stroke(cellType.texture);
             p.strokeWeight(1);
             if(tKey==='forest'){
               p.line(pos.x+size*0.3, pos.y, pos.x+size*0.7, pos.y+size);
@@ -861,16 +892,16 @@
               p.noFill();
               p.curve(pos.x, pos.y+size*0.2, pos.x+size*0.2, pos.y+size*0.4, pos.x+size*0.6, pos.y+size*0.6, pos.x+size, pos.y+size*0.8);
             } else if(tKey==='rock'){
-              p.fill(terrain.texture); p.noStroke();
+              p.fill(cellType.texture); p.noStroke();
               p.triangle(pos.x+size*0.2,pos.y+size*0.8,pos.x+size*0.5,pos.y+size*0.2,pos.x+size*0.8,pos.y+size*0.9);
             } else if(tKey==='wetland'){
-              p.noFill(); p.stroke(terrain.texture);
+              p.noFill(); p.stroke(cellType.texture);
               p.ellipse(pos.x+size*0.4,pos.y+size*0.6,size*0.4,size*0.25);
             } else if(tKey==='sand'){
-              p.noFill(); p.stroke(terrain.texture);
+              p.noFill(); p.stroke(cellType.texture);
               p.line(pos.x+size*0.2,pos.y+size*0.7,pos.x+size*0.8,pos.y+size*0.65);
             } else if(tKey==='shrub'){
-              p.noStroke(); p.fill(terrain.texture);
+              p.noStroke(); p.fill(cellType.texture);
               p.circle(pos.x+size*0.3,pos.y+size*0.4,size*0.2);
               p.circle(pos.x+size*0.6,pos.y+size*0.5,size*0.25);
             }
@@ -998,24 +1029,31 @@
       };
       p.mouseReleased = () => { if(pan.active) renderOnce('pan'); pan.active=false; };
 
-      document.getElementById('resetView').addEventListener('click', ()=>{
-        state.view.scale = 1;
-        recenterView();
-        syncZoomSlider();
-        renderOnce('reset');
-      });
-      document.getElementById('startBtn').addEventListener('click', ()=> { state.running=true; startSimLoop(); });
-      document.getElementById('stopBtn').addEventListener('click', ()=> { stopSimLoop(); renderOnce('stop'); });
-      document.getElementById('panicBtn').addEventListener('click', ()=>{
-        document.querySelectorAll('.backdrop').forEach(el=>el.classList.remove('active'));
-        document.querySelectorAll('.widget').forEach(el=>el.style.pointerEvents='auto');
-        widgetManager.panicReset();
-        state.view = { scale:1, offsetX:0, offsetY:0 };
-        recenterView();
-        syncZoomSlider();
-        stopSimLoop();
-        renderOnce('panic');
-      });
+      const resetViewBtn = document.getElementById('resetView');
+      if(resetViewBtn){
+        resetViewBtn.addEventListener('click', ()=>{
+          state.view.scale = 1;
+          recenterView();
+          syncZoomSlider();
+          renderOnce('reset');
+        });
+      }
+      if(startBtn){ startBtn.addEventListener('click', ()=> { state.running=true; startSimLoop(); }); }
+      if(stopBtn){ stopBtn.addEventListener('click', ()=> { stopSimLoop(); renderOnce('stop'); }); }
+      if(stepBtn){ stepBtn.addEventListener('click', ()=> { stopSimLoop(); stepSim(); renderOnce('step'); }); }
+      if(panicBtn){
+        panicBtn.addEventListener('click', ()=>{
+          document.querySelectorAll('.backdrop').forEach(el=>el.classList.remove('active'));
+          document.querySelectorAll('.widget').forEach(el=>el.style.pointerEvents='auto');
+          widgetManager.panicReset();
+          state.view = { scale:1, offsetX:0, offsetY:0 };
+          recenterView();
+          syncZoomSlider();
+          stopSimLoop();
+          drawErrored = false;
+          renderOnce('panic');
+        });
+      }
     };
 
     function stepSim(){
