@@ -136,6 +136,9 @@
     .legend-swatch{width:16px; height:16px; border-radius:4px; border:1px solid #d9e2f3;}
     .legend-swatch.circle{border-radius:50%;}
     .legend-swatch.tri{width:0; height:0; border-left:9px solid transparent; border-right:9px solid transparent; border-top:16px solid #d9e2f3; border-radius:0; border:0;}
+    .legend-animals{display:grid; gap:6px;}
+    .legend-species{display:flex; align-items:center; gap:8px; color:#dce6f3; font-size:13px;}
+    .legend-species .label{color:#9fb0c3; font-size:12px;}
     .floating-toolbar{position:absolute; inset:auto 16px 16px auto; display:flex; flex-direction:column; gap:8px; z-index:20; align-items:flex-end; pointer-events:none;}
     .toolbar-row{display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;}
     .toolbar-card{background:rgba(12,18,26,0.92); border:1px solid #1f2a37; border-radius:14px; padding:10px; box-shadow:0 12px 34px rgba(0,0,0,0.45); pointer-events:auto; min-width:240px;}
@@ -185,11 +188,10 @@
         </div>
         <div class="overlay-switch" role="group" aria-label="表示モード">
           <span class="label">表示モード</span>
-          <button class="overlay-btn active" data-mode="life">生物</button>
-          <button class="overlay-btn" data-mode="terrain">地形</button>
-          <button class="overlay-btn" data-mode="plant">植物量</button>
-          <button class="overlay-btn" data-mode="temp">気温</button>
-          <button class="overlay-btn" data-mode="rain">雨量/水分</button>
+          <button class="overlay-btn active" data-mode="fauna">動物レイヤー</button>
+          <button class="overlay-btn" data-mode="soil">土壌レイヤー</button>
+          <button class="overlay-btn" data-mode="flora">植生レイヤー</button>
+          <button class="overlay-btn" data-mode="climate">気象/環境レイヤー</button>
         </div>
       </div>
       <div class="canvas-wrap">
@@ -242,10 +244,12 @@
         </div>
         <div class="legend-card" id="legendCard">
           <div class="legend-title">凡例</div>
-          <div class="legend-row"><span class="legend-swatch" style="background:linear-gradient(90deg,#244d31,#4f9f6d);"></span><span>草（バイオマス濃淡）</span></div>
-          <div class="legend-row"><span class="legend-swatch circle" style="background:rgb(70,180,255);"></span><span>草食</span></div>
-          <div class="legend-row"><span class="legend-swatch tri" style="border-top-color:rgb(240,160,80);"></span><span>肉食</span></div>
-          <div class="legend-row tiny">地形・天候は「表示モード」で切替</div>
+          <div class="legend-row"><span class="legend-swatch" style="background:linear-gradient(90deg,#21402a,#4f9f6d);"></span><span>植生（草量と林床）</span></div>
+          <div class="legend-row"><span class="legend-swatch" style="background:linear-gradient(90deg,#18324d,#2f6896);"></span><span>土壌/河川のレイヤー</span></div>
+          <div class="legend-row"><span class="legend-swatch" style="background:linear-gradient(90deg,#1f3452,#4e7ac7);"></span><span>気象・環境（降雨/疾患リスク）</span></div>
+          <div class="legend-row tiny">レイヤーは「表示モード」で切替（動物・土壌・植生・気象）</div>
+          <div class="legend-title" style="margin-top:6px;">動物</div>
+          <div id="legendAnimals" class="legend-animals"></div>
         </div>
         <div class="floating-toolbar">
           <div class="toolbar-card">
@@ -687,6 +691,11 @@ let biomass = new Float32Array(N);
 let grassTone = new Uint8Array(N); // 草の濃淡（決定論）
 let terrain = new Uint8Array(N);
 let terrainPattern = new Uint32Array(N);
+let soilHeight = new Float32Array(N);
+let moistureBias = new Float32Array(N);
+let climateLayer = new Float32Array(N);
+let densityLayer = new Float32Array(N);
+let diseasePressure = new Float32Array(N);
 
 // 動物
 let animals = {};
@@ -705,7 +714,7 @@ let herbReproAttempts = 0;
 let herbReproSuccess = 0;
 let carnReproAttempts = 0;
 let carnReproSuccess = 0;
-let overlayMode = 'life';
+let overlayMode = 'fauna';
 let hudCollapsed = false;
 let hudOffset = {x:12,y:12};
 let p5Instance = null;
@@ -916,6 +925,22 @@ function drawTriangle(p, cx, cy, size){
   const h = (Math.sqrt(3) / 2) * size;
   p.triangle(cx, cy - h / 2, cx - size / 2, cy + h / 2, cx + size / 2, cy + h / 2);
 }
+function drawGenerationLabel(p, cx, cy, gen, color){
+  if(!gen) return;
+  p.push();
+  p.textAlign(p.CENTER, p.CENTER);
+  p.textSize(Math.max(9, cellSize * 0.32));
+  p.fill(8, 10, 14, 200);
+  p.text(String(gen), cx + 0.8, cy + 0.8);
+  if(color){
+    if(Array.isArray(color)) p.fill(...color, 240);
+    else p.fill(color);
+  } else {
+    p.fill(235);
+  }
+  p.text(String(gen), cx, cy);
+  p.pop();
+}
 function drawLegend(p){
   const x = 12; const y = 12; const w = 240; const h = 60 + SPECIES_DEFS.length * 22;
   p.noStroke();
@@ -952,6 +977,33 @@ function drawLegend(p){
 }
 function speciesColor(sp){
   return `rgb(${sp.color.join(',')})`;
+}
+function buildLegendAnimals(){
+  const wrap = el('legendAnimals');
+  if(!wrap) return;
+  wrap.innerHTML = '';
+  for(const sp of SPECIES_DEFS){
+    const row = document.createElement('div');
+    row.className = 'legend-species';
+    const sw = document.createElement('span');
+    sw.className = 'legend-swatch';
+    if(sp.shape === 'triangle'){
+      sw.classList.add('tri');
+      sw.style.borderTopColor = speciesColor(sp);
+    } else {
+      sw.classList.add('circle');
+      sw.style.background = speciesColor(sp);
+    }
+    row.appendChild(sw);
+    const label = document.createElement('span');
+    label.textContent = sp.nameJP;
+    row.appendChild(label);
+    const meta = document.createElement('span');
+    meta.className = 'label';
+    meta.textContent = sp.diet === 'herbivore' ? '草食' : '肉食';
+    row.appendChild(meta);
+    wrap.appendChild(row);
+  }
 }
 function drawTerrainPattern(p, x, y, t, pat){
   const baseX = x * cellSize;
@@ -996,23 +1048,42 @@ function updateGrassToneMap(seedStr){
   }
 }
 function updateTerrainMap(seedStr){
-  for(let i=0;i<N;i++){
-    const h = hash32FromString(`${seedStr}:terrain:${i}`);
-    terrainPattern[i] = hash32FromString(`${seedStr}:terrain:${i}:pat`);
-    const roll = (h % 1000) / 1000;
-    const river = clampFloat(P.riverRatio, 0, 0.6);
-    const rock = clampFloat(P.rockRatio, 0, 0.5);
-    const forestBase = clampFloat(P.forestRatio, 0, 0.6);
-    const remainder = Math.max(0, 1 - (river + rock + forestBase));
-    const forest = clampFloat(forestBase + remainder * 0.25, 0, 0.8);
-    if(roll < river){
-      terrain[i] = TERRAIN.RIVER;
-    } else if(roll < river + rock){
-      terrain[i] = TERRAIN.ROCK;
-    } else if(roll < river + rock + forest){
-      terrain[i] = TERRAIN.FOREST;
-    } else {
-      terrain[i] = TERRAIN.GRASSLAND;
+  const riverSeed = `${seedStr}:river`;
+  const ridgeSeed = `${seedStr}:ridge`;
+  const moistSeed = `${seedStr}:moist`;
+  const riverBands = Math.max(1, Math.round(1 + P.riverRatio * 3));
+  const riverWidth = 0.9 + P.riverRatio * 2.5;
+  const riverAmp = 8 + P.riverRatio * 25;
+  for(let y=0;y<GRID;y++){
+    for(let x=0;x<GRID;x++){
+      const idx = y * GRID + x;
+      const ridge = fbmNoise(x, y, ridgeSeed);
+      const moist = fbmNoise(x, y, moistSeed);
+      let riverDist = 999;
+      for(let r=0;r<riverBands;r++){
+        const bandOffset = valueNoise(r, 0, riverSeed);
+        const phase = valueNoise(r, 1, riverSeed) * Math.PI * 2;
+        const center = (GRID * (0.12 + (r + 0.3) / (riverBands + 0.4))) + Math.sin((x / GRID) * Math.PI * 1.3 + phase) * riverAmp;
+        riverDist = Math.min(riverDist, Math.abs(y - center) - bandOffset * 1.5);
+      }
+      const nearRiver = clampFloat(1 - (riverDist / Math.max(1, riverWidth)), 0, 1);
+      soilHeight[idx] = ridge;
+      moistureBias[idx] = clampFloat(moist + nearRiver * 0.45, 0, 2);
+      terrainPattern[idx] = hash32FromString(`${seedStr}:terrain:${idx}:pat`);
+
+      const riverChance = nearRiver * 0.9;
+      const rockChance = Math.pow(ridge, 1.4) + valueNoise(x, y, `${seedStr}:rock`) * 0.18;
+      const forestChance = moistureBias[idx] * 0.8 + (ridge < 0.45 ? 0.05 : 0);
+
+      if(riverChance > 0.55){
+        terrain[idx] = TERRAIN.RIVER;
+      } else if(rockChance > 0.72 + P.rockRatio * 0.4){
+        terrain[idx] = TERRAIN.ROCK;
+      } else if(forestChance > 0.58){
+        terrain[idx] = TERRAIN.FOREST;
+      } else {
+        terrain[idx] = TERRAIN.GRASSLAND;
+      }
     }
   }
 }
@@ -1251,12 +1322,36 @@ function deterministicNoise(step, key){
   return (h / 4294967296);
 }
 
-function getSeasonName(day){
-  const d = day % 365;
-  if(d < 80) return '冬';
-  if(d < 172) return '春';
-  if(d < 264) return '夏';
-  return '秋';
+function valueNoise(x, y, seedStr){
+  const h = hash32FromString(`${seedStr}:${x}:${y}`);
+  return (h >>> 0) / 4294967296;
+}
+
+function fbmNoise(x, y, seedStr){
+  let sum = 0;
+  let amp = 1;
+  let freq = 0.06;
+  for(let i=0;i<3;i++){
+    sum += amp * valueNoise(Math.floor(x * freq), Math.floor(y * freq), `${seedStr}:oct${i}`);
+    freq *= 2;
+    amp *= 0.55;
+  }
+  return sum / 1.55;
+}
+
+function getSeasonName(temperature, rainfall){
+  const tempDelta = temperature - P.avgTemp;
+  const rainRatio = rainfall / Math.max(1, P.avgRain);
+  if(tempDelta <= -6 && rainRatio > 1.2) return '冷たい雨季';
+  if(tempDelta <= -6) return '冬';
+  if(tempDelta >= 8 && rainRatio > 1.1) return '蒸し暑い雨季';
+  if(tempDelta >= 8) return '夏';
+  if(rainRatio >= 1.25) return '雨季';
+  if(rainRatio <= 0.65 && tempDelta > 2) return '乾いた夏';
+  if(rainRatio <= 0.65) return '乾季';
+  if(tempDelta > 2) return '晩春';
+  if(tempDelta < -2) return '秋';
+  return '春';
 }
 
 function getWeatherForStep(step){
@@ -1269,8 +1364,47 @@ function getWeatherForStep(step){
   const rainNoise = (deterministicNoise(step, 'rain') - 0.5) * 36 * noiseLevel;
   const temperature = baseTemp + tempNoise;
   const rainfall = Math.max(0, baseRain + rainNoise);
-  const season = getSeasonName(day);
+  const season = getSeasonName(temperature, rainfall);
   return {season, temperature, rainfall};
+}
+
+function updateClimateLayer(){
+  const rainNorm = clampFloat(weatherState.rainfall / Math.max(30, P.avgRain), 0, 2);
+  const tempStress = Math.abs(weatherState.temperature - P.avgTemp) / Math.max(1, P.tempAmp * 1.1);
+  for(let i=0;i<N;i++){
+    const t = terrain[i];
+    const terrainBonus = t === TERRAIN.RIVER ? 0.55 : (t === TERRAIN.FOREST ? 0.25 : 0);
+    const slopeShade = soilHeight[i] > 0.75 ? 0.08 : 0;
+    climateLayer[i] = clampFloat(rainNorm + terrainBonus + moistureBias[i] * 0.35 + slopeShade - tempStress * 0.3, 0, 2.2);
+  }
+}
+
+function updateDensityLayer(){
+  densityLayer.fill(0);
+  diseasePressure.fill(0);
+  for(const sp of SPECIES_DEFS){
+    const list = animals[sp.id] || [];
+    const weight = sp.diet === 'carnivore' ? 1.2 : 1;
+    for(const a of list){
+      if(!a.alive) continue;
+      densityLayer[a.y * GRID + a.x] += weight;
+    }
+  }
+  for(let y=0;y<GRID;y++){
+    for(let x=0;x<GRID;x++){
+      let acc = 0; let count = 0;
+      for(let dy=-1;dy<=1;dy++){
+        for(let dx=-1;dx<=1;dx++){
+          const nx = x + dx; const ny = y + dy;
+          if(nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) continue;
+          acc += densityLayer[ny * GRID + nx];
+          count++;
+        }
+      }
+      const localDensity = count > 0 ? acc / count : 0;
+      diseasePressure[y * GRID + x] = clampFloat(localDensity * 0.6 + climateLayer[y * GRID + x] * 0.4, 0, 3);
+    }
+  }
 }
 
 function terrainGrowthMultiplier(t){
@@ -1289,6 +1423,44 @@ function terrainMoveCost(t){
 function terrainPassable(t){
   if(t === TERRAIN.RIVER) return false;
   return true;
+}
+
+function reproductionSeasonMultiplier(){
+  if(weatherState.season.includes('雨')) return 1.15;
+  if(weatherState.season.includes('夏')) return 1.05;
+  if(weatherState.season.includes('冬')) return 0.65;
+  if(weatherState.season.includes('乾')) return 0.75;
+  return 1;
+}
+
+function findMateNear(list, origin, radius){
+  for(const cand of list){
+    if(!cand.alive || cand.sex !== 'M') continue;
+    const dx = Math.abs(cand.x - origin.x);
+    const dy = Math.abs(cand.y - origin.y);
+    if(dx <= radius && dy <= radius) return cand;
+  }
+  return null;
+}
+
+function chooseBirthCell(mother, preferShelter){
+  let best = {x:mother.x, y:mother.y, score:-Infinity};
+  for(let dy=-1;dy<=1;dy++){
+    for(let dx=-1;dx<=1;dx++){
+      const nx = (mother.x + dx + GRID) % GRID;
+      const ny = (mother.y + dy + GRID) % GRID;
+      const idx = ny * GRID + nx;
+      const terrainScore = terrain[idx] === TERRAIN.RIVER ? 1 : (terrain[idx] === TERRAIN.FOREST ? 0.65 : 0.2);
+      const plantScore = clampFloat(biomass[idx] / Math.max(1, P.plantK), 0, 1);
+      const shelter = preferShelter ? terrainScore * 1.25 : terrainScore;
+      const health = diseasePressure[idx] < 1 ? 0.25 : 0;
+      const score = shelter + plantScore + health;
+      if(score > best.score){
+        best = {x:nx, y:ny, score};
+      }
+    }
+  }
+  return {x: best.x, y: best.y};
 }
 
 /* ========= 初期化 ========= */
@@ -1326,6 +1498,7 @@ function resetSim(){
   endReason = '';
   peakCounts = {grass:0, herb:0, carn:0};
   weatherState = getWeatherForStep(step);
+  updateClimateLayer();
 
   // 草をランダム配置（重複を避けて指定数を確保）
   let gPlaced = 0;
@@ -1343,7 +1516,7 @@ function resetSim(){
     const traits = getSpeciesTraits(sp);
     for(let i=0;i<setting.init;i++){
       const baseEnergy = Math.max(6, Math.floor(traits.reproduction * 0.5));
-      animals[sp.id].push({x: randInt(GRID), y: randInt(GRID), energy: baseEnergy + randInt(8), alive:true, age:0, speciesId: sp.id});
+      animals[sp.id].push({x: randInt(GRID), y: randInt(GRID), energy: baseEnergy + randInt(8), alive:true, age:0, speciesId: sp.id, sex: rng() < 0.55 ? 'F' : 'M', generation:1});
     }
   }
 
@@ -1353,11 +1526,12 @@ function resetSim(){
     const traits = getSpeciesTraits(sp);
     for(let i=0;i<setting.init;i++){
       const baseEnergy = Math.max(8, Math.floor(traits.reproduction * 0.4));
-      animals[sp.id].push({x: randInt(GRID), y: randInt(GRID), energy: baseEnergy + randInt(10), alive:true, age:0, speciesId: sp.id});
+      animals[sp.id].push({x: randInt(GRID), y: randInt(GRID), energy: baseEnergy + randInt(10), alive:true, age:0, speciesId: sp.id, sex: rng() < 0.55 ? 'F' : 'M', generation:1});
     }
   }
 
   peakCounts = getCounts();
+  updateDensityLayer();
   resetChart();
   // ログ初回（チャート初期点を残す）
   pushLog();
@@ -1371,6 +1545,7 @@ function tick(){
   step++;
 
   weatherState = getWeatherForStep(step);
+  updateClimateLayer();
 
   if(step >= P.maxSteps){
     applyEndCondition('最大ステップ到達');
@@ -1434,14 +1609,22 @@ function tick(){
         continue;
       }
 
-      if(h.energy >= traits.reproduction){
+      const seasonFactor = reproductionSeasonMultiplier();
+      if(h.sex === 'F' && h.energy >= traits.reproduction * Math.max(0.7, 1 / seasonFactor)){
+        const mate = findMateNear(list, h, 2);
         herbReproAttempts++;
-        if(competitionReproPass(herbAliveCount, P.herbK)){
+        if(mate && competitionReproPass(herbAliveCount, P.herbK)){
           herbReproSuccess++;
-          const childEnergy = Math.floor(h.energy / 2);
-          h.energy = h.energy - childEnergy;
-          list.push({x:h.x, y:h.y, energy: childEnergy, alive:true, age:0, speciesId: sp.id});
-          herbAliveCount++;
+          const brood = Math.max(1, Math.round(seasonFactor + (terrain[idx] === TERRAIN.FOREST ? 0.3 : 0)));
+          const energyForKids = Math.floor(h.energy * 0.55);
+          const childEnergy = Math.max(4, Math.floor(energyForKids / brood));
+          h.energy = Math.max(2, h.energy - childEnergy * brood);
+          const preferShelter = weatherState.rainfall > P.avgRain || terrain[idx] === TERRAIN.FOREST;
+          for(let b=0;b<brood;b++){
+            const nest = chooseBirthCell(h, preferShelter);
+            list.push({x:nest.x, y:nest.y, energy: childEnergy, alive:true, age:0, speciesId: sp.id, sex: rng() < 0.55 ? 'F' : 'M', generation: (h.generation || 1) + 1});
+            herbAliveCount++;
+          }
         }
       }
     }
@@ -1508,14 +1691,22 @@ function tick(){
         continue;
       }
 
-      if(c.energy >= traits.reproduction){
+      const seasonFactor = reproductionSeasonMultiplier();
+      if(c.sex === 'F' && c.energy >= traits.reproduction * Math.max(0.75, 1 / seasonFactor)){
+        const mate = findMateNear(list, c, 3);
         carnReproAttempts++;
-        if(competitionReproPass(carnAliveCount, P.carnK)){
+        if(mate && competitionReproPass(carnAliveCount, P.carnK)){
           carnReproSuccess++;
-          const childEnergy = Math.floor(c.energy / 2);
-          c.energy = c.energy - childEnergy;
-          list.push({x:c.x, y:c.y, energy: childEnergy, alive:true, age:0, speciesId: sp.id});
-          carnAliveCount++;
+          const brood = (seasonFactor > 1.05 && rng() < 0.35) ? 2 : 1;
+          const energyForKids = Math.floor(c.energy * 0.52);
+          const childEnergy = Math.max(6, Math.floor(energyForKids / brood));
+          c.energy = Math.max(3, c.energy - childEnergy * brood);
+          const preferShelter = terrain[idx] === TERRAIN.FOREST || weatherState.season.includes('雨');
+          for(let b=0;b<brood;b++){
+            const den = chooseBirthCell(c, preferShelter);
+            list.push({x:den.x, y:den.y, energy: childEnergy, alive:true, age:0, speciesId: sp.id, sex: rng() < 0.52 ? 'F' : 'M', generation: (c.generation || 1) + 1});
+            carnAliveCount++;
+          }
         }
       }
     }
@@ -1530,6 +1721,7 @@ function tick(){
 
   // 6) ログ
   if(step % logEvery === 0) pushLog();
+  updateDensityLayer();
 
   // 7) 終了チェック
   const counts = getCounts();
@@ -1856,7 +2048,7 @@ new p5((p)=>{
         const bio = biomass[idx];
         const pat = terrainPattern[idx];
 
-        if(overlayMode === 'terrain'){
+        if(overlayMode === 'soil' || overlayMode === 'terrain'){
           const colorMap = {
             [TERRAIN.GRASSLAND]: [40, 92, 58],
             [TERRAIN.ROCK]: [110, 116, 124],
@@ -1867,26 +2059,21 @@ new p5((p)=>{
           p.fill(base[0], base[1], base[2]);
           p.rect(x*cellSize, y*cellSize, cellSize, cellSize);
           drawTerrainPattern(p, x, y, t, pat);
-        } else if(overlayMode === 'plant'){
+        } else if(overlayMode === 'flora' || overlayMode === 'plant'){
           const ratio = clampFloat(bio / Math.max(1, P.plantK), 0, 1.2);
           const r = 30 + ratio * 50;
           const g = 70 + ratio * 150;
           const b = 40 + ratio * 60;
           p.fill(r, g, b, 220);
           p.rect(x*cellSize, y*cellSize, cellSize, cellSize);
-        } else if(overlayMode === 'temp'){
-          const tNorm = clampFloat((weatherState.temperature + 5) / 40, 0, 1);
-          const r = 40 + 200 * tNorm;
-          const g = 80 + 80 * Math.cos(Math.PI * tNorm);
-          const b = 200 - 180 * tNorm;
-          p.fill(r, g, b, 210);
-          p.rect(x*cellSize, y*cellSize, cellSize, cellSize);
-        } else if(overlayMode === 'rain'){
-          const rNorm = clampFloat(weatherState.rainfall / 140, 0, 1.2);
-          const r = 40 + 40 * (1 - rNorm);
-          const g = 100 + 80 * rNorm;
-          const b = 140 + 80 * rNorm;
-          p.fill(r, g, b, 210);
+        } else if(overlayMode === 'climate' || overlayMode === 'temp' || overlayMode === 'rain'){
+          const humid = climateLayer[idx];
+          const hazard = diseasePressure[idx];
+          const blend = clampFloat((humid * 0.6 + hazard * 0.8) / 3, 0, 1.2);
+          const r = 40 + 120 * blend + hazard * 30;
+          const g = 90 + 100 * (humid / 2.2);
+          const b = 120 + 90 * (1 - Math.abs(0.6 - blend));
+          p.fill(r, g, b, 215);
           p.rect(x*cellSize, y*cellSize, cellSize, cellSize);
         } else {
           let base = [32, 70, 50];
@@ -1927,7 +2114,10 @@ new p5((p)=>{
       for(const h of list){
         if(!h.alive) continue;
         const size = getEnergySize(h.energy, cellSize*0.60, traits.reproduction);
-        p.circle((h.x+0.5)*cellSize, (h.y+0.5)*cellSize, size);
+        const cx = (h.x+0.5)*cellSize;
+        const cy = (h.y+0.5)*cellSize;
+        p.circle(cx, cy, size);
+        drawGenerationLabel(p, cx, cy, h.generation || 1, [230, 240, 250]);
       }
       p.pop();
     }
@@ -1947,7 +2137,10 @@ new p5((p)=>{
       for(const c of list){
         if(!c.alive) continue;
         const size = getEnergySize(c.energy, cellSize*0.70, traits.reproduction);
-        drawTriangle(p, (c.x+0.5)*cellSize, (c.y+0.5)*cellSize, size);
+        const cx = (c.x+0.5)*cellSize;
+        const cy = (c.y+0.5)*cellSize;
+        drawTriangle(p, cx, cy, size);
+        drawGenerationLabel(p, cx, cy, c.generation || 1, [250, 220, 235]);
       }
       p.pop();
     }
@@ -2040,7 +2233,7 @@ el('inSeed').addEventListener('change', ()=>{ resetSim(); });
 document.querySelectorAll('.overlay-btn').forEach(btn => {
   btn.addEventListener('click', ()=>{
     document.querySelectorAll('.overlay-btn').forEach(b=>b.classList.remove('active'));
-    overlayMode = btn.dataset.mode || 'life';
+    overlayMode = btn.dataset.mode || 'fauna';
     btn.classList.add('active');
   });
 });
@@ -2082,6 +2275,7 @@ el('selEnvPreset').addEventListener('change', ()=>{
 });
 
 // 初期化
+buildLegendAnimals();
 buildSpeciesControls();
 updateSpeciesSettingsFromUI();
 updateActiveSpeciesLists();
