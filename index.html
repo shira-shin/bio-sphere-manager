@@ -304,6 +304,11 @@
             <div class="tiny" id="outCarnTerritory">-</div>
           </div>
           <div class="hud-item">
+            <div class="label">肉食イベント/step</div>
+            <div class="value" id="outCarnEvents">捕食0 / 飢餓0 / 老衰0</div>
+            <div class="tiny">直近1ステップ</div>
+          </div>
+          <div class="hud-item">
             <div class="label">スコア</div>
             <div class="value" id="outScore">0</div>
             <div class="tiny" id="outScoreDetail">生存・多様性・安定度</div>
@@ -550,11 +555,11 @@
                 </div>
                 <div class="ctrl">
                   <label>肉食：捕食エネルギー<div class="help">草食を食べたときの獲得量</div></label>
-                  <input id="inCarnGain" type="number" min="1" max="80" value="22" />
+                  <input id="inCarnGain" type="number" min="1" max="80" value="32" />
                 </div>
                 <div class="ctrl">
                   <label>肉食：繁殖閾値<div class="help">エネルギーが閾値以上なら繁殖試行</div></label>
-                  <input id="inCarnRepro" type="number" min="5" max="120" value="45" />
+                  <input id="inCarnRepro" type="number" min="5" max="120" value="38" />
                 </div>
               </div>
               <div class="grid2">
@@ -941,12 +946,14 @@ let mapScale = 1.25;
 let canvasSize = Math.round(BASE_CANVAS * mapScale);
 let cellSize = canvasSize / GRID;
 const N = GRID * GRID;
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 const SCORE_BIO_BONUS = 150;
 const SCORE_STABILITY_BASE = 220;
 const MAX_STABILITY_SAMPLES = 160;
 const EFFECT_LIFETIME = 22;
 const DEATH_MARK_LIFETIME = 26;
+const HUNT_RADIUS = 4;
+const CARN_METABOLISM_SCALE = 0.9;
 
 const TERRAIN = {
   GRASSLAND: 0,
@@ -1067,8 +1074,8 @@ const PRESETS = {
     values: {
       initGrass: 1400,
       species: {herb_a: 62, herb_b: 34, carn_a: 12, carn_b: 6},
-      grassGrowthRate: 0.02, plantK: 10, herbGain: 12, carnGain: 22,
-      herbRepro: 30, carnRepro: 46, herbMaxAge: 140, carnMaxAge: 170,
+      grassGrowthRate: 0.02, plantK: 10, herbGain: 12, carnGain: 32,
+      herbRepro: 30, carnRepro: 40, herbMaxAge: 140, carnMaxAge: 170,
       climateIntensity: 1.05, terrainMix: 0.32,
       endCondition: 'animalExtinct', maxSteps: 3000, logEvery: 5
     }
@@ -1078,8 +1085,8 @@ const PRESETS = {
     values: {
       initGrass: 1320,
       species: {herb_a: 70, herb_b: 28, carn_a: 10, carn_b: 5},
-      grassGrowthRate: 0.021, plantK: 11, herbGain: 13, carnGain: 21,
-      herbRepro: 29, carnRepro: 44, herbMaxAge: 135, carnMaxAge: 165,
+      grassGrowthRate: 0.021, plantK: 11, herbGain: 13, carnGain: 30,
+      herbRepro: 29, carnRepro: 38, herbMaxAge: 135, carnMaxAge: 168,
       climateIntensity: 1.0, terrainMix: 0.52,
       endCondition: 'animalExtinct', maxSteps: 2800, logEvery: 5
     }
@@ -1089,8 +1096,8 @@ const PRESETS = {
     values: {
       initGrass: 720,
       species: {herb_a: 40, herb_b: 20, carn_a: 9, carn_b: 6},
-      grassGrowthRate: 0.011, plantK: 7, herbGain: 11, carnGain: 20,
-      herbRepro: 31, carnRepro: 48, herbMaxAge: 120, carnMaxAge: 160,
+      grassGrowthRate: 0.011, plantK: 7, herbGain: 11, carnGain: 28,
+      herbRepro: 31, carnRepro: 40, herbMaxAge: 120, carnMaxAge: 168,
       climateIntensity: 0.82, terrainMix: 0.46,
       endCondition: 'anyExtinct', maxSteps: 2200, logEvery: 4
     }
@@ -1100,8 +1107,8 @@ const PRESETS = {
     values: {
       initGrass: 1250,
       species: {herb_a: 55, herb_b: 35, carn_a: 11, carn_b: 7},
-      grassGrowthRate: 0.018, plantK: 8, herbGain: 12, carnGain: 22,
-      herbRepro: 28, carnRepro: 45, herbMaxAge: 130, carnMaxAge: 170,
+      grassGrowthRate: 0.018, plantK: 8, herbGain: 12, carnGain: 32,
+      herbRepro: 28, carnRepro: 40, herbMaxAge: 130, carnMaxAge: 172,
       climateIntensity: 1.0, terrainMix: 0.30,
       endCondition: 'animalExtinct', maxSteps: 2600, logEvery: 5
     }
@@ -1111,8 +1118,8 @@ const PRESETS = {
     values: {
       initGrass: 620,
       species: {herb_a: 38, herb_b: 22, carn_a: 9, carn_b: 7},
-      grassGrowthRate: 0.009, plantK: 7, herbGain: 11, carnGain: 20,
-      herbRepro: 30, carnRepro: 48, herbMaxAge: 120, carnMaxAge: 165,
+      grassGrowthRate: 0.009, plantK: 7, herbGain: 11, carnGain: 28,
+      herbRepro: 30, carnRepro: 40, herbMaxAge: 120, carnMaxAge: 170,
       climateIntensity: 0.9, terrainMix: 0.28,
       endCondition: 'anyExtinct', maxSteps: 1800, logEvery: 4
     }
@@ -1145,8 +1152,8 @@ let P = {
   plantK: 8,
   herbGain: 12,
   herbRepro: 28,
-  carnGain: 22,
-  carnRepro: 45,
+  carnGain: 32,
+  carnRepro: 38,
   metabolism: 1,
   herbMaxAge: 120,
   carnMaxAge: 160,
@@ -1173,6 +1180,8 @@ let deathCarnStarve = 0;
 let deathHerbEaten = 0;
 let deathHerbAge = 0;
 let deathCarnAge = 0;
+let stepCarnStats = {predation:0, starve:0, age:0};
+let lastCarnStepStats = {predation:0, starve:0, age:0};
 
 // 気候・季節
 let weatherState = {season:'－', temperature:0, rainfall:0};
@@ -1945,6 +1954,8 @@ function homeBiasScore(x, y, origin){
 function moveTerrainAware(a, peers, opts={}){
   const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
   let best = {dir:null, score:-Infinity, cost: terrainMoveCost(terrain[a.y * GRID + a.x])};
+  const target = opts.target;
+  const currentDist = target ? torusDistance(a.x, a.y, target.x, target.y) : null;
   for(const d of dirs){
     const nx = (a.x + d[0] + GRID) % GRID;
     const ny = (a.y + d[1] + GRID) % GRID;
@@ -1953,8 +1964,9 @@ function moveTerrainAware(a, peers, opts={}){
     const base = -terrainMoveCost(t) * 0.1;
     const social = opts.social ? cohesionScore(nx, ny, a, peers) : 0;
     const home = opts.territorial ? homeBiasScore(nx, ny, a) : 0;
+    const pursuit = target ? (currentDist - torusDistance(nx, ny, target.x, target.y)) * 0.9 : 0;
     const spice = rng() * 0.12;
-    const score = base + social + home + spice;
+    const score = base + social + home + pursuit + spice;
     if(score > best.score){
       best = {dir:d, score, cost: terrainMoveCost(t), nx, ny};
     }
@@ -1965,6 +1977,25 @@ function moveTerrainAware(a, peers, opts={}){
     return best.cost;
   }
   return best.cost;
+}
+
+function findNearestHerbivoreTarget(x, y, radius){
+  let nearest = null;
+  for(let dy=-radius; dy<=radius; dy++){
+    for(let dx=-radius; dx<=radius; dx++){
+      if(dx === 0 && dy === 0) continue;
+      const nx = (x + dx + GRID) % GRID;
+      const ny = (y + dy + GRID) % GRID;
+      const dist = torusDistance(x, y, nx, ny);
+      if(dist > radius) continue;
+      const idx = ny * GRID + nx;
+      if(herbivoreAt[idx].length === 0) continue;
+      if(!nearest || dist < nearest.dist){
+        nearest = {x:nx, y:ny, dist};
+      }
+    }
+  }
+  return nearest;
 }
 
 function findMateNear(list, origin, radius){
@@ -2046,6 +2077,8 @@ function resetSim(){
   deathCarnAge = 0;
   deathHerbConflict = 0;
   deathCarnConflict = 0;
+  stepCarnStats = {predation:0, starve:0, age:0};
+  lastCarnStepStats = {predation:0, starve:0, age:0};
   herbReproAttempts = 0;
   herbReproSuccess = 0;
   carnReproAttempts = 0;
@@ -2086,7 +2119,7 @@ function resetSim(){
     const setting = speciesSettings[sp.id] || {enabled:true, init:0};
     const traits = getSpeciesTraits(sp);
     for(let i=0;i<setting.init;i++){
-      const baseEnergy = Math.max(8, Math.floor(traits.reproduction * 0.4));
+      const baseEnergy = Math.max(10, Math.floor(traits.reproduction * 0.6));
       const famId = nextFamilyId++;
       const packId = nextPackId++;
       const spawnX = randInt(GRID);
@@ -2108,6 +2141,7 @@ function randInt(n){ return Math.floor(rng()*n); }
 function tick(){
   if(endReason) return;
   step++;
+  stepCarnStats = {predation:0, starve:0, age:0};
 
   weatherState = getWeatherForStep(step);
   updateClimateLayer();
@@ -2249,11 +2283,13 @@ function tick(){
         c.alive = false;
         carnAliveCount--;
         deathCarnAge++;
+        stepCarnStats.age++;
         spawnEffect('death', c.x, c.y);
         continue;
       }
 
-      const moveCost = moveTerrainAware(c, list, {social:true, territorial:true});
+      const huntTarget = findNearestHerbivoreTarget(c.x, c.y, HUNT_RADIUS);
+      const moveCost = moveTerrainAware(c, list, {social:true, territorial:true, target: huntTarget});
 
       const idx = c.y * GRID + c.x;
       const rivals = carnivoreAt[idx];
@@ -2282,6 +2318,7 @@ function tick(){
             prey.alive = false;
             deathHerbEaten++;
             c.energy += traits.gain * affinity.gain;
+            stepCarnStats.predation++;
             herbAliveCount--;
             spawnEffect('predation', c.x, c.y);
           }
@@ -2291,14 +2328,17 @@ function tick(){
       const carnExtraCost = competitionExtraCost(carnAliveCount, P.carnK);
       const weatherCost = Math.max(0, Math.abs(weatherState.temperature - P.avgTemp) * 0.04);
       if(cellList.length === 0){
-        c.energy -= (traits.metabolism * affinity.metabolism + carnExtraCost + moveCost + weatherCost);
+        const metabolicCost = traits.metabolism * affinity.metabolism * CARN_METABOLISM_SCALE;
+        c.energy -= (metabolicCost + carnExtraCost + moveCost + weatherCost);
       } else {
-        c.energy -= (carnExtraCost + moveCost + weatherCost);
+        const metabolicCost = traits.metabolism * affinity.metabolism * CARN_METABOLISM_SCALE * 0.5;
+        c.energy -= (carnExtraCost + moveCost + weatherCost + metabolicCost);
       }
       if(c.energy <= 0){
         c.alive = false;
         carnAliveCount--;
         deathCarnStarve++;
+        stepCarnStats.starve++;
         spawnEffect('death', c.x, c.y);
         continue;
       }
@@ -2310,7 +2350,7 @@ function tick(){
         if(mate && competitionReproPass(carnAliveCount, P.carnK)){
           carnReproSuccess++;
           const brood = (seasonFactor > 1.05 && rng() < 0.35) ? 2 : 1;
-          const energyForKids = Math.floor(c.energy * 0.52);
+          const energyForKids = Math.floor(c.energy * 0.46);
           const childEnergy = Math.max(6, Math.floor(energyForKids / brood));
           c.energy = Math.max(3, c.energy - childEnergy * brood);
           const preferShelter = terrain[idx] === TERRAIN.FOREST || weatherState.season.includes('雨');
@@ -2331,6 +2371,7 @@ function tick(){
     }
   }
 
+  lastCarnStepStats = {...stepCarnStats};
   // 6) ログ
   if(step % logEvery === 0) pushLog();
   updateDensityLayer();
@@ -2464,6 +2505,9 @@ function pushLog(){
     death_carn_starve: deathCarnStarve,
     death_herb_age: deathHerbAge,
     death_carn_age: deathCarnAge,
+    carn_predation_step: lastCarnStepStats.predation,
+    carn_starve_step: lastCarnStepStats.starve,
+    carn_age_step: lastCarnStepStats.age,
     death_herb_conflict: deathHerbConflict,
     death_carn_conflict: deathCarnConflict,
     herb_K: P.herbK,
@@ -2542,6 +2586,7 @@ function refreshUI(){
   const demo = getDemography();
   el('outHerbSex').textContent = `${demo.herbM}:${demo.herbF}`;
   el('outCarnSex').textContent = `${demo.carnM}:${demo.carnF}`;
+  el('outCarnEvents').textContent = `捕食${lastCarnStepStats.predation} / 飢餓${lastCarnStepStats.starve} / 老衰${lastCarnStepStats.age}`;
   el('outHerbGroup').textContent = `${demo.herbFamilies}家系 / 群${demo.herbPacks}`;
   el('outCarnTerritory').textContent = `群${demo.carnPacks} / 衝突${deathCarnConflict}`;
 }
