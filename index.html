@@ -195,6 +195,16 @@
     .quick-controls .mini{padding:6px 8px; font-size:13px;}
     .tiny{font-size:12px; color:#8ea7c4;}
     .grid3{display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap:12px;}
+    .startup-banner{position:fixed; inset:auto 12px 12px 12px; z-index:40; display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:12px; border:1px solid #28405d; background:rgba(14,22,34,0.9); box-shadow:0 10px 30px rgba(0,0,0,0.45); font-size:13px; line-height:1.4;}
+    .startup-banner .status{display:flex; gap:8px; flex-wrap:wrap;}
+    .startup-banner .pill{padding:4px 8px; border-radius:10px; border:1px solid #28405d; background:#132235; display:inline-flex; align-items:center; gap:6px;}
+    .startup-banner .pill.ok{border-color:#1f6c3a; background:#12301d;}
+    .startup-banner .pill.ng{border-color:#6c1f2a; background:#301219;}
+    .startup-banner .close-btn{border-radius:50%; width:26px; height:26px; display:grid; place-items:center; padding:0;}
+    .startup-banner.hidden{display:none;}
+    .debug-panel{position:fixed; bottom:12px; right:12px; z-index:42; background:rgba(16,24,36,0.92); color:#e6edf3; border:1px solid #2a3a52; border-radius:12px; padding:10px; font-size:12px; min-width:220px; box-shadow:0 12px 32px rgba(0,0,0,0.45); display:none;}
+    .debug-panel.active{display:block;}
+    .error-modal{display:none;}
     @media (max-width: 1100px){
       .floating-settings{position:fixed; right:14px; bottom:14px;}
       .canvas-wrap{padding:10px; min-height:60vh;}
@@ -350,6 +360,21 @@
       <div class="note">同じseed・同じ初期パラメータなら挙動が再現されます（Math.randomは未使用）。</div>
     </div>
   </div>
+
+  <div id="startupBanner" class="startup-banner hidden" role="status" aria-live="polite">
+    <div class="status" id="startupStatus"></div>
+    <button id="btnDismissStartup" class="ghost close-btn" aria-label="閉じる">×</button>
+  </div>
+
+  <div class="modal-backdrop error-modal" id="errorModal" role="alertdialog" aria-modal="true">
+    <div class="modal">
+      <h3>初期化エラー</h3>
+      <div class="kv"><div class="label">内容</div><div class="value mono" id="errorMessage">-</div></div>
+      <div class="actions"><button id="btnCloseError" class="primary">閉じる</button></div>
+    </div>
+  </div>
+
+  <div id="debugPanel" class="debug-panel" aria-live="polite"></div>
 
   <div class="floating-settings">
     <button id="btnOpenSettings" class="fab primary">⚙ 設定</button>
@@ -680,6 +705,115 @@ function renderDependencyWarning(missing){
   document.body.appendChild(div);
 }
 
+function bindClick(id, handler){
+  const target = el(id);
+  if(!target){
+    console.warn(`[ui] missing element: ${id}`);
+    return false;
+  }
+  target.addEventListener('click', handler);
+  return true;
+}
+
+function activateOverlay(el){
+  if(!el) return;
+  const id = el.id || `overlay-${Date.now()}`;
+  overlayState.activeIds.add(id);
+  el.classList.add('active');
+  el.style.display = 'flex';
+  el.style.pointerEvents = 'auto';
+}
+function deactivateOverlay(el){
+  if(!el) return;
+  const id = el.id || '';
+  overlayState.activeIds.delete(id);
+  el.classList.remove('active');
+  el.style.display = 'none';
+  el.style.pointerEvents = 'none';
+}
+
+function overlaySafetySweep(){
+  document.querySelectorAll('.modal-backdrop').forEach(el=>{
+    const id = el.id || '';
+    const shouldBeActive = overlayState.activeIds.has(id);
+    const isVisible = getComputedStyle(el).display !== 'none';
+    if(!shouldBeActive && isVisible){
+      deactivateOverlay(el);
+    }
+  });
+  if(overlayState.dragShield && !overlayState.activeIds.has('dragShield')){
+    clearDragShield('safety');
+  }
+}
+
+function createDragShield(){
+  clearDragShield();
+  const shield = document.createElement('div');
+  shield.id = 'dragShield';
+  shield.style.cssText = 'position:fixed;inset:0;z-index:35;pointer-events:auto;background:transparent;';
+  document.body.appendChild(shield);
+  overlayState.dragShield = shield;
+  overlayState.activeIds.add('dragShield');
+  overlayState.dragShieldTimer = setTimeout(()=>clearDragShield('timeout'), 1500);
+}
+function clearDragShield(reason){
+  if(overlayState.dragShieldTimer){
+    clearTimeout(overlayState.dragShieldTimer);
+    overlayState.dragShieldTimer = null;
+  }
+  if(overlayState.dragShield?.parentNode){
+    overlayState.dragShield.remove();
+  }
+  overlayState.dragShield = null;
+  overlayState.activeIds.delete('dragShield');
+  if(reason && debugMode) console.debug(`[overlay] drag shield cleared: ${reason}`);
+}
+['blur','pointercancel'].forEach(ev=>window.addEventListener(ev, ()=>clearDragShield(ev)));
+window.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') clearDragShield('esc'); });
+setInterval(overlaySafetySweep, 2000);
+
+function showError(message){
+  const modal = el('errorModal');
+  if(!modal) return;
+  const msgEl = el('errorMessage');
+  if(msgEl) msgEl.textContent = message;
+  activateOverlay(modal);
+}
+
+function updateStartupBanner(){
+  const banner = el('startupBanner');
+  const statusEl = el('startupStatus');
+  if(!banner || !statusEl) return;
+  const rows = [
+    {key:'deps', label:'p5 / Chart'},
+    {key:'canvas', label:'Canvas'},
+    {key:'chart', label:'グラフ'},
+    {key:'handlers', label:'UI操作'},
+  ];
+  const failed = rows.filter(r => !startupChecks[r.key]);
+  statusEl.innerHTML = rows.map(r=>`<span class="pill ${startupChecks[r.key] ? 'ok' : 'ng'}">${startupChecks[r.key] ? '✓' : '×'} ${r.label}</span>`).join('');
+  banner.classList.remove('hidden');
+  if(failed.length){
+    const reason = failed.map(f=>f.label).join(', ');
+    showError(`初期化に失敗: ${reason}`);
+  }
+}
+
+function enableDebugPanel(){
+  const panel = el('debugPanel');
+  if(!panel) return;
+  panel.classList.add('active');
+  document.addEventListener('pointermove', (e)=>{
+    const elmt = document.elementFromPoint(e.clientX, e.clientY);
+    const tag = elmt ? `${elmt.tagName.toLowerCase()}${elmt.id ? '#'+elmt.id : ''}${elmt.className ? '.'+String(elmt.className).split(' ').join('.') : ''}` : 'なし';
+    const visibleOverlays = Array.from(document.querySelectorAll('.modal-backdrop')).filter(m=>getComputedStyle(m).display !== 'none');
+    let overlayText = 'なし';
+    if(overlayState.dragShield) overlayText = 'dragShield';
+    else if(visibleOverlays.length) overlayText = visibleOverlays.map(o=>o.id || 'overlay').join(',');
+    panel.innerHTML = `カーソル: (${Math.round(e.clientX)}, ${Math.round(e.clientY)})<br>要素: ${tag}<br>オーバーレイ: ${overlayText}`;
+  });
+}
+
 function checkDependencies(){
   const missing = [];
   if(typeof window.p5 === 'undefined') missing.push('p5.js');
@@ -692,6 +826,20 @@ function checkDependencies(){
 }
 
 const depsReady = checkDependencies();
+const searchParams = new URLSearchParams(location.search);
+const debugMode = searchParams.get('debug') === '1';
+const startupChecks = {
+  deps: depsReady,
+  canvas: false,
+  chart: false,
+  handlers: false,
+};
+
+const overlayState = {
+  activeIds: new Set(),
+  dragShield: null,
+  dragShieldTimer: null,
+};
 
 /* ========= シミュレーション設定 ========= */
 const GRID = 50;
@@ -2158,10 +2306,10 @@ function showEndModal(counts){
   el('modalDeaths').textContent = `草食:飢餓${deathHerbStarve} 捕食${deathHerbEaten} 老衰${deathHerbAge} 衝突${deathHerbConflict} / 肉食:飢餓${deathCarnStarve} 老衰${deathCarnAge} 衝突${deathCarnConflict}`;
   el('modalScore').textContent = `${scoreState.total}`;
   el('modalScoreDetail').textContent = scoreBreakdownText();
-  el('endModal').style.display = 'flex';
+  activateOverlay(el('endModal'));
 }
 function hideEndModal(){
-  el('endModal').style.display = 'none';
+  deactivateOverlay(el('endModal'));
 }
 
 function getCounts(){
@@ -2333,6 +2481,7 @@ function resetChart(){
       }
     }
   });
+  startupChecks.chart = true;
 }
 function pushChartPoint(step, g, h, c){
   if(!depsReady || !chart) return;
@@ -2415,6 +2564,8 @@ new p5((p)=>{
     cnv.parent("p5-container");
     p.frameRate(30);
     p5Instance = p;
+    startupChecks.canvas = true;
+    updateStartupBanner();
   };
 
   p.draw = () => {
@@ -2557,13 +2708,11 @@ const settingsModal = el('settingsModal');
 let modalMaximized = false;
 let modalSavedRect = null;
 function openSettingsModal(){
-  settingsBackdrop.classList.add('active');
-  settingsBackdrop.style.display = 'flex';
+  activateOverlay(settingsBackdrop);
   settingsModal.setAttribute('aria-hidden', 'false');
 }
 function closeSettingsModal(){
-  settingsBackdrop.classList.remove('active');
-  settingsBackdrop.style.display = 'none';
+  deactivateOverlay(settingsBackdrop);
   settingsModal.setAttribute('aria-hidden', 'true');
   if(modalMaximized) toggleModalMaximize();
 }
@@ -2638,6 +2787,7 @@ function initWidget(elmt, defaults){
       drag = {id:e.pointerId, dx: e.clientX - widgetState[id].x, dy: e.clientY - widgetState[id].y};
       elmt.classList.add('dragging');
       bringToFront(elmt);
+      createDragShield();
       bar.setPointerCapture(e.pointerId);
     });
     bar.addEventListener('pointermove', (e)=>{
@@ -2652,6 +2802,7 @@ function initWidget(elmt, defaults){
           drag = null;
           elmt.classList.remove('dragging');
           applyWidgetPosition(id);
+          clearDragShield(ev);
         }
       });
     });
@@ -2686,41 +2837,47 @@ window.addEventListener('resize', ()=>{
 });
 
 /* ========= ボタン配線 ========= */
-el('btnStart').addEventListener('click', ()=>{
+const handlerFlags = [];
+handlerFlags.push(bindClick('btnStart', ()=>{
   if(endReason){
     resetSim();
   }
   running = !running;
-  el('btnStart').textContent = running ? '停止' : '開始';
+  const btn = el('btnStart');
+  if(btn) btn.textContent = running ? '停止' : '開始';
   refreshUI();
-});
-el('btnStep').addEventListener('click', ()=>{
+}));
+handlerFlags.push(bindClick('btnStep', ()=>{
   if(!running) tick();
   refreshUI();
-});
-el('btnReset').addEventListener('click', ()=>{
-  el('btnStart').textContent = '開始';
+}));
+handlerFlags.push(bindClick('btnReset', ()=>{
+  const btn = el('btnStart');
+  if(btn) btn.textContent = '開始';
   resetSim();
-});
-el('btnCSV').addEventListener('click', downloadCSV);
-el('btnOpenSettings').addEventListener('click', openSettingsModal);
+}));
+handlerFlags.push(bindClick('btnCSV', downloadCSV));
+handlerFlags.push(bindClick('btnOpenSettings', openSettingsModal));
 const inlineDrawerBtn = el('btnOpenDrawerInline');
 if(inlineDrawerBtn) inlineDrawerBtn.addEventListener('click', openSettingsModal);
 const forceEndBtn = el('btnForceEnd');
 if(forceEndBtn) forceEndBtn.addEventListener('click', ()=>{ if(!endReason) applyEndCondition('強制終了'); });
-el('btnCloseSettings').addEventListener('click', closeSettingsModal);
+handlerFlags.push(bindClick('btnCloseSettings', closeSettingsModal));
 const btnMax = el('btnSettingsMax');
 if(btnMax) btnMax.addEventListener('click', toggleModalMaximize);
-el('btnCopyResult').addEventListener('click', copyResult);
+handlerFlags.push(bindClick('btnCopyResult', copyResult));
 const btnCopyScore = el('btnCopyScore');
 if(btnCopyScore) btnCopyScore.addEventListener('click', copyScoreShare);
-el('btnModalReset').addEventListener('click', ()=>{ hideEndModal(); el('btnStart').textContent = '開始'; resetSim(); });
-el('btnModalCSV').addEventListener('click', downloadCSV);
-el('btnModalCopy').addEventListener('click', copyResult);
+handlerFlags.push(bindClick('btnModalReset', ()=>{ hideEndModal(); const btn = el('btnStart'); if(btn) btn.textContent = '開始'; resetSim(); }));
+handlerFlags.push(bindClick('btnModalCSV', downloadCSV));
+handlerFlags.push(bindClick('btnModalCopy', copyResult));
 const btnModalCopyScore = el('btnModalCopyScore');
 if(btnModalCopyScore) btnModalCopyScore.addEventListener('click', copyScoreShare);
-el('btnApplyScenario').addEventListener('click', ()=>{
-  const key = el('selScenario').value;
+handlerFlags.push(bindClick('btnCloseError', ()=>deactivateOverlay(el('errorModal'))));
+handlerFlags.push(bindClick('btnDismissStartup', ()=>{ const banner = el('startupBanner'); if(banner) banner.classList.add('hidden'); }));
+bindClick('btnApplyScenario', ()=>{
+  const sel = el('selScenario');
+  const key = sel ? sel.value : '';
   if(!key) return;
   applyPresetToUI(key);
   resetSim();
@@ -2730,6 +2887,8 @@ el('btnApplyScenario').addEventListener('click', ()=>{
   }
   refreshUI();
 });
+startupChecks.handlers = handlerFlags.every(Boolean);
+updateStartupBanner();
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', ()=>{
@@ -2759,6 +2918,8 @@ el('btnApplyEnvironment').addEventListener('click', ()=>{
   applyEnvironmentPreset(key);
   resetSim();
 });
+if(debugMode) enableDebugPanel();
+overlaySafetySweep();
 setupWidgets();
 const hudEl = el('hud');
 el('btnHudToggle').addEventListener('click', ()=>{
@@ -2784,6 +2945,7 @@ updateSpeciesSettingsFromUI();
 updateActiveSpeciesLists();
 readParamsFromUI();
 resetSim();
+updateStartupBanner();
 </script>
 </body>
 </html>
