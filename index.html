@@ -1458,8 +1458,8 @@ function updateTerrainMap(seedStr){
   for(let y=0;y<GRID;y++){
     for(let x=0;x<GRID;x++){
       const idx = y * GRID + x;
-      const ridge = fbmNoise(x, y, ridgeSeed);
-      const moist = fbmNoise(x, y, moistSeed);
+        const ridge = fbmNoise(x, y, ridgeSeed);
+        const moistNoise = fbmNoise(x, y, moistSeed);
       let riverDist = 999;
       for(let r=0;r<riverBands;r++){
         const bandOffset = valueNoise(r, 0, riverSeed);
@@ -1469,7 +1469,7 @@ function updateTerrainMap(seedStr){
       }
       const nearRiver = clampFloat(1 - (riverDist / Math.max(1, riverWidth)), 0, 1);
       soilHeight[idx] = ridge;
-      moistureBias[idx] = clampFloat(moist + nearRiver * 0.45, 0, 2);
+        moistureBias[idx] = clampFloat(moistNoise + nearRiver * 0.45, 0, 2);
       terrainPattern[idx] = hash32FromString(`${seedStr}:terrain:${idx}:pat`);
 
       const riverChance = nearRiver * 0.9;
