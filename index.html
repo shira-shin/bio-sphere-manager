@@ -1,3562 +1,971 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Bio-Sphere Manager デモ</title>
-
-  <!-- CDN：p5.js（描画） / Chart.js（グラフ） -->
   <script src="https://cdn.jsdelivr.net/npm/p5@latest/lib/p5.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@latest/dist/chart.umd.min.js"></script>
-
   <style>
     :root { color-scheme: dark; }
-    #uiRoot{position:fixed; inset:0; pointer-events:none; z-index:24;}
+    *{box-sizing:border-box;}
     body{
       margin:0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      background:#0b0f14; color:#e6edf3; line-height:1.5;
+      background:radial-gradient(circle at 20% 20%, rgba(90,162,247,0.08), transparent 40%), #060a0f;
+      color:#e6edf3; line-height:1.5;
       font-size: clamp(16px, 1.6vw, 19px);
       letter-spacing:0.02em;
+      overflow:hidden;
     }
     header{
-      padding:16px 18px; border-bottom:1px solid #17202b;
+      padding:16px 18px; border-bottom:1px solid #101826;
       background: linear-gradient(180deg, #0f1620, #0b0f14);
-      position: sticky; top:0; z-index:10;
+      position: sticky; top:0; z-index:8;
+      box-shadow:0 12px 34px rgba(0,0,0,0.35);
     }
     header .title{font-size:22px; font-weight:800;}
     header .sub{font-size:13px; color:#9fb0c3; margin-top:6px;}
-    .layout{display:none;}
-    .card{
-      border:1px solid #1f2a37; border-radius:16px; background:#0f1620;
-      box-shadow: 0 10px 30px rgba(0,0,0,.35);
-    }
-    .card h2{margin:0; font-size:15px; color:#9fb0c3; font-weight:700; padding:16px 16px 0; letter-spacing:0.2px;}
-    .pad{padding:16px;}
-    .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
-    button{
-      background:#132235; color:#e6edf3; border:1px solid #243244;
-      border-radius:10px; padding:10px 12px; cursor:pointer; min-height:34px;
-    }
-    button:hover{background:#162a42;}
-    .speed-btn.active{background:#1f3c5d; border-color:#2d5f87;}
-    button.primary{background:#1b3554; border-color:#2a466b;}
-    button.danger{background:#3a1620; border-color:#5a2430;}
-    input[type="number"], input[type="text"], select{
-      width: 170px; padding:9px 10px; border-radius:10px;
-      border:1px solid #243244; background:#0b1220; color:#e6edf3; min-height:34px;
-    }
-    input[type="range"]{accent-color:#5aa2f7;}
-    .kv{display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center;}
-    .kv .label{color:#9fb0c3; font-size:12px;}
-    .kv .value{font-variant-numeric: tabular-nums;}
-    .grid2{display:grid; grid-template-columns: 1fr 1fr; gap:12px;}
-    .ctrl{
-      display:grid; grid-template-columns: 1fr auto; gap:12px;
-      align-items:center; margin-top:6px;
-    }
-    .ctrl label{font-size:13px; color:#c3d5eb;}
-    .ctrl input[type="range"]{width: 260px;}
-    #p5-container{position:relative; min-height:68vh; min-width:100%;}
-    canvas{display:block; border-radius:16px; width:100%; height:auto; box-shadow:0 14px 38px rgba(0,0,0,0.45);}
-    .note{font-size:12px; color:#9fb0c3; line-height:1.6;}
-    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;}
-    .section{
-      border:1px solid #223247; border-radius:12px; margin-top:12px; overflow:hidden;
-    }
-    .section summary{
-      cursor:pointer; padding:12px 14px; font-weight:700; color:#c3d5eb; list-style:none; user-select:none;
-      background:linear-gradient(90deg, rgba(34,50,71,0.4), rgba(34,50,71,0.1));
-    }
+
+    #appRoot{position:relative; height:calc(100vh - 90px); overflow:hidden;}
+    #p5-container{position:relative; height:100%;}
+    canvas{display:block; border-radius:18px; width:100% !important; height:100% !important; box-shadow:0 18px 46px rgba(0,0,0,0.55);}    
+
+    /* Widget system */
+    .widget{position:fixed; z-index:12; border-radius:14px; border:1px solid #223247; background:rgba(12,18,26,0.94); box-shadow:0 12px 34px rgba(0,0,0,0.45); min-width:240px; pointer-events:auto; color:#dce6f3;}
+    .widget-header{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; background:linear-gradient(180deg, rgba(26,42,60,0.95), rgba(15,24,36,0.95)); border-bottom:1px solid #1f2a37; cursor:grab; user-select:none;}
+    .widget.dragging .widget-header{cursor:grabbing;}
+    .widget-title{font-weight:800; font-size:14px; letter-spacing:0.04em;}
+    .widget-controls{display:flex; gap:6px; margin-left:auto;}
+    .widget-controls button{padding:6px 8px; min-height:28px; border-radius:10px; border:1px solid #2a3a52; background:#132235; color:#dce6f3; cursor:pointer;}
+    .widget-controls button:hover{background:#1c2e48;}
+    .widget-body{padding:10px 12px; max-height:70vh; overflow:auto;}
+    .widget.is-minimized .widget-body{display:none;}
+    .widget.is-minimized{min-height:48px; width:260px;}
+    .widget.is-maximized{width:90vw; height:90vh; max-width:92vw; max-height:92vh; box-shadow:0 16px 42px rgba(0,0,0,0.55); inset:5vh auto auto 5vw;}
+    .widget.is-maximized .widget-body{max-height:calc(90vh - 70px); overflow:auto;}
+    .widget.is-maximized .widget-header{cursor:default;}
+
+    .widget-dock{position:fixed; left:12px; bottom:12px; right:12px; display:flex; justify-content:space-between; gap:12px; z-index:11; pointer-events:none;}
+    .dock-col{display:flex; gap:8px; flex-wrap:wrap; pointer-events:auto;}
+    .dock-chip{border-radius:12px; padding:8px 12px; border:1px solid #2a3a52; background:#0d1420; color:#c9d6e2; cursor:pointer; box-shadow:0 8px 24px rgba(0,0,0,0.35);}    
+
+    .chip{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid #2a3a52; background:#132235; font-size:12px; color:#9fb0c3;}
+    .btn{background:#132235; border:1px solid #243244; border-radius:10px; padding:10px 12px; color:#e6edf3; cursor:pointer;}
+    .btn:hover{background:#1a2e46;}
+    .btn.primary{background:#1b3554; border-color:#2a466b;}
+    .btn.danger{background:#3a1620; border-color:#5a2430;}
+
+    .hud-grid{display:grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap:10px;}
+    .hud-item{border:1px solid #223247; border-radius:12px; padding:8px 10px; background:rgba(17,24,38,0.9);}    
+    .hud-item .label{font-size:12px; color:#9fb0c3; margin-bottom:6px; letter-spacing:0.05em;}
+    .hud-item .value{font-size:20px; font-weight:800;}
+
+    .legend-grid{display:grid; gap:10px; grid-template-columns: repeat(auto-fit, minmax(140px,1fr));}
+    .legend-row{display:flex; align-items:center; gap:8px;}
+    .legend-swatch{width:16px; height:16px; border-radius:4px; border:1px solid #d9e2f3;}
+
+    .section{border:1px solid #223247; border-radius:12px; margin-top:12px; overflow:hidden;}
+    .section summary{cursor:pointer; padding:12px 14px; font-weight:700; color:#c3d5eb; list-style:none; user-select:none; background:linear-gradient(90deg, rgba(34,50,71,0.4), rgba(34,50,71,0.1));}
     .section[open] summary{border-bottom:1px solid #223247;}
     .section summary::-webkit-details-marker{display:none;}
     .section .section-body{padding:14px; display:grid; gap:14px;}
-    .help{font-size:11px; color:#7ea0c4;}
-    .preset-row{display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;}
-    .badge-warning{color:#f5d97a; background:#4a3810; border:1px solid #8f6d1f; padding:2px 6px; border-radius:8px; font-size:11px;}
-    .canvas-wrap{position:relative; border-radius:18px; padding:12px; background:radial-gradient(circle at 30% 20%, rgba(70,120,200,0.08), transparent 42%), linear-gradient(180deg, rgba(16,24,36,0.9), rgba(8,12,18,0.96)); box-shadow:inset 0 0 0 1px rgba(255,255,255,0.02), 0 16px 46px rgba(0,0,0,0.55); min-height:72vh;}
-    .canvas-hud{min-width:260px; max-width:380px; background:rgba(8,12,18,0.78); backdrop-filter: blur(8px); display:grid; gap:8px;}
-    .canvas-hud.is-minimized .hud-grid,.canvas-hud.is-minimized .hud-top{display:none;}
-    .canvas-hud.is-minimized{min-width:200px;}
-    .hud-top{display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:space-between;}
-    .hud-status{display:grid; gap:4px;}
-    .hud-status .label{font-size:12px; color:#9fb0c3;}
-    .hud-pill{padding:8px 12px; border-radius:999px; border:1px solid #2a3a52; font-weight:800; background:#132235; min-width:120px; text-align:center; letter-spacing:0.05em;}
-    .hud-meta{font-size:13px; color:#c3d5eb; font-variant-numeric: tabular-nums;}
-    .hud-grid{display:grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap:10px;}
-    .hud-item{border:1px solid #223247; border-radius:12px; padding:10px 12px; background:rgba(17,24,38,0.9);}
-    .hud-item .label{font-size:12px; color:#9fb0c3; margin-bottom:6px; letter-spacing:0.05em;}
-    .hud-item .value{font-size:24px; font-weight:800; font-variant-numeric: tabular-nums; line-height:1.2;}
-    .kpi-grid{display:grid; grid-template-columns: repeat(auto-fit, minmax(120px,1fr)); gap:8px;}
-    .kpi-item{border:1px solid #223247; border-radius:12px; padding:10px; background:#111826; display:grid; gap:6px;}
-    .kpi-item .value{font-size:22px; font-weight:800;}
-    .tabs{display:flex; gap:8px; border-bottom:1px solid #1f2a37; padding:0 4px 8px; margin-bottom:8px; flex-wrap:wrap;}
-    .tab-btn{padding:8px 12px; border-radius:10px; border:1px solid #1f2a37; background:#0f1a2a; color:#c9d6e2; cursor:pointer; min-width:92px; text-align:center;}
-    .tab-btn.active{background:#1b3554; border-color:#2a466b; color:#e6edf3;}
-    .tab-panel{display:none;}
-    .tab-panel.active{display:block;}
-    .card-section{border:1px solid #223247; border-radius:12px; padding:14px; background:#0f1824; margin-top:10px;}
-    .stack{display:grid; gap:12px;}
-    .panel-note{margin:4px 0 0; font-size:12px; color:#8ea7c4;}
-    .species-list{display:grid; gap:8px;}
-    .species-row{display:grid; grid-template-columns: auto 1fr 150px; align-items:center; gap:10px; padding:10px; border:1px solid #223247; border-radius:10px; background:#0f1824;}
-    .species-head{display:flex; align-items:center; gap:8px; font-weight:700; color:#e6edf3;}
-    .species-pill{display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; border:1px solid #2a3a52; background:#132235; font-size:12px;}
-    .species-shape{width:18px; height:18px; display:inline-block; border:2px solid #e6edf3; border-radius:50%;}
-    .species-shape.triangle{width:0; height:0; border-left:10px solid transparent; border-right:10px solid transparent; border-top:18px solid #e6edf3; border-radius:0; border:0;}
-    .species-controls{display:flex; gap:10px; align-items:center; justify-content:flex-end;}
-    .modal-backdrop{
-      position:fixed; inset:0; background:rgba(8,12,18,0.72); display:none; align-items:center; justify-content:center; z-index:30; pointer-events:none;
-    }
-    .modal-backdrop.active{display:flex; pointer-events:auto;}
-    .modal{
-      background:#0f1620; border:1px solid #2a3a52; border-radius:14px; padding:16px; width:420px; box-shadow:0 20px 60px rgba(0,0,0,0.55);
-    }
-    .modal h3{margin:0 0 10px; color:#dce6f3;}
-    .modal .kv{grid-template-columns: 140px 1fr;}
-    .modal .actions{display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;}
-    .controls-top{display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;}
-    .settings-toggle{display:flex; align-items:center; gap:10px; justify-content:flex-end;}
-    .ghost{background:transparent; border-color:#2a3a52; color:#c9d6e2;}
-    .chip{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid #2a3a52; background:#132235; font-size:12px; color:#9fb0c3;}
-    .settings-backdrop{align-items:center; justify-content:center; padding:24px;}
-    .settings-modal{ 
-      position:fixed;
-      top:50%; left:50%;
-      transform:translate(-50%,-50%);
-      min-width: min(520px, 92vw);
-      max-width: 90vw;
-      width: 640px;
-      max-height: 90vh;
-      resize: both;
-      overflow: hidden;
-      font-size:16px;
-      line-height:1.65;
-    }
-    .settings-modal.max{top:5vh; left:5vw; transform:none; width:90vw; height:90vh;}
-    .settings-modal .modal-body{overflow:auto; max-height: calc(90vh - 150px); padding:4px 6px 10px; display:grid; gap:16px;}
-    .settings-modal .modal-header{display:flex; align-items:center; justify-content:space-between; gap:12px; padding-bottom:10px; border-bottom:1px solid #1f2a37;}
-    .settings-modal .modal-title{font-size:19px; font-weight:800; display:flex; align-items:center; gap:8px;}
-    .settings-modal .modal-actions{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
-    .modal-tabs{display:flex; gap:10px; padding:14px 0 12px; position:sticky; top:0; background:linear-gradient(180deg, #0f1620 60%, rgba(15,22,32,0.9)); z-index:2;}
-    .modal-tabs .tab-btn{flex:1; min-width:120px;}
-    .tab-panel{display:none; padding-bottom:12px;}
-    .tab-panel.active{display:block;}
-    .settings-modal .section{margin-top:12px;}
-    .settings-modal .section-body{gap:16px;}
-    .settings-modal .ctrl{grid-template-columns: minmax(240px, 1fr) minmax(180px, auto); gap:14px; align-items:flex-start;}
-    .settings-modal .ctrl label{line-height:1.6;}
-    .settings-modal .ctrl input[type="range"]{width: 320px; max-width:100%;}
-    .settings-modal input[type="number"], .settings-modal input[type="text"], .settings-modal select{width: 200px; max-width:100%; font-size:16px;}
-    .settings-modal .grid3{grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:14px;}
-    .settings-modal .grid2{grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:14px;}
-    @media (max-width: 900px){
-      .settings-modal .ctrl{grid-template-columns: 1fr;}
-    }
-    .widget{position:fixed; z-index:12; border-radius:14px; border:1px solid #223247; background:rgba(12,18,26,0.92); box-shadow:0 12px 34px rgba(0,0,0,0.45); padding:0; overflow:hidden; min-width:220px; pointer-events:auto;}
-    .widget .widget-bar{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; cursor:grab; background:linear-gradient(180deg, rgba(26,42,60,0.95), rgba(15,24,36,0.95)); border-bottom:1px solid #1f2a37;}
-    .widget.dragging .widget-bar{cursor:grabbing;}
-    .widget .widget-title{font-weight:800; font-size:14px; letter-spacing:0.04em; color:#dce6f3;}
-    .widget .widget-actions{display:flex; gap:6px;}
-    .widget .widget-actions button{padding:6px 8px; min-height:28px;}
-    .widget .widget-body{padding:10px 12px;}
-    .widget.is-minimized{min-height:48px;}
-    .widget.is-minimized .widget-body{display:none;}
-    .widget.is-maximized{width:90vw; height:90vh; max-width:92vw; max-height:92vh; box-shadow:0 16px 42px rgba(0,0,0,0.55);}
-    .widget.is-maximized .widget-body{max-height:calc(90vh - 70px); overflow:auto;}
-    .widget.is-maximized .widget-bar{cursor:default;}
-    body.is-widget-dragging, body.is-widget-dragging *{user-select:none !important;}
-    .stage{max-width:1600px; margin:0 auto; padding:18px; display:grid; gap:14px;}
-    .map-area{display:grid; gap:10px;}
-    .map-head{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;}
-    .overlay-switch{display:flex; gap:6px; align-items:center; flex-wrap:wrap;}
-    .overlay-switch .label{font-size:13px; color:#9fb0c3;}
-    .overlay-btn{padding:8px 10px; border-radius:12px; border:1px solid #1f2a37; background:#0f1a2a; color:#c9d6e2; cursor:pointer; font-size:13px;}
-    .overlay-btn.active{background:#1b3554; border-color:#2a466b; color:#e6edf3; box-shadow:0 0 0 1px rgba(90,162,247,0.4);}
-    .legend-card{background:rgba(10,16,24,0.9); border:1px solid #223247; border-radius:12px; padding:10px 12px; display:grid; gap:6px; min-width:210px; font-size:13px;}
-    .legend-title{font-weight:700; color:#dce6f3;}
-    .legend-row{display:flex; align-items:center; gap:8px; color:#c9d6e2;}
-    .legend-swatch{width:16px; height:16px; border-radius:4px; border:1px solid #d9e2f3;}
-    .legend-swatch.circle{border-radius:50%;}
-    .legend-swatch.tri{width:0; height:0; border-left:9px solid transparent; border-right:9px solid transparent; border-top:16px solid #d9e2f3; border-radius:0; border:0;}
-    .legend-animals{display:grid; gap:6px;}
-    .legend-species{display:flex; align-items:center; gap:8px; color:#dce6f3; font-size:13px;}
-    .legend-species .label{color:#9fb0c3; font-size:12px;}
-    .legend-note{color:#8ea7c4; font-size:12px;}
-    .gen-card{min-width:240px;}
-    .gen-row{display:flex; gap:6px; align-items:center; justify-content:space-between; border:1px solid #1f2a37; padding:6px 8px; border-radius:10px; background:rgba(17,24,38,0.82);}
-    .gen-name{display:flex; gap:6px; align-items:center; font-weight:700;}
-    .gen-chip{display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; border:1px solid #2a3a52; background:#132235; font-size:11px; color:#9fb0c3;}
-    .gen-values{display:flex; gap:6px; align-items:center; flex-wrap:wrap; font-size:12px;}
-    .floating-toolbar{position:absolute; inset:auto 16px 16px auto; display:flex; flex-direction:column; gap:8px; z-index:20; align-items:flex-end; pointer-events:none;}
-    .toolbar-row{display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;}
-    .toolbar-card{background:rgba(12,18,26,0.92); border:1px solid #1f2a37; border-radius:14px; padding:10px; box-shadow:0 12px 34px rgba(0,0,0,0.45); pointer-events:auto; min-width:240px;}
+
     .floating-settings{position:fixed; right:18px; bottom:20px; z-index:25;}
-    .floating-controls-title{font-size:12px; color:#8ea7c4; margin-bottom:6px;}
     .fab{border-radius:999px; padding:12px 18px; font-weight:700; box-shadow:0 12px 32px rgba(0,0,0,0.45);}
-    .hud-grid{grid-template-columns: repeat(auto-fit, minmax(120px,1fr));}
-    .hud-item .value{font-size:20px;}
-    .hud-item{padding:8px 10px;}
-    .hud-meta{font-size:12px;}
-    .hud-pill{padding:6px 10px;}
-    .hud-header{display:flex; justify-content:space-between; gap:8px; align-items:center;}
-    .hud-actions{display:flex; gap:6px;}
-    .badge{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; background:#12263a; border:1px solid #20354e; color:#9fb0c3; font-size:12px;}
-    .compact-note{font-size:13px; color:#8ea7c4;}
-    .map-status{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
-    .map-hint{font-size:13px; color:#8ea7c4;}
-    .pill-note{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid #223247; background:rgba(14,22,32,0.86); font-size:12px; color:#9fb0c3;}
-    .quick-controls{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
-    .quick-controls button{padding:8px 10px;}
-    .quick-controls .mini{padding:6px 8px; font-size:13px;}
-    .tiny{font-size:12px; color:#8ea7c4;}
-    .grid3{display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap:12px;}
-    .startup-banner{position:fixed; inset:auto 12px 12px 12px; z-index:40; display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:12px; border:1px solid #28405d; background:rgba(14,22,34,0.9); box-shadow:0 10px 30px rgba(0,0,0,0.45); font-size:13px; line-height:1.4;}
-    .startup-banner .status{display:flex; gap:8px; flex-wrap:wrap;}
-    .startup-banner .pill{padding:4px 8px; border-radius:10px; border:1px solid #28405d; background:#132235; display:inline-flex; align-items:center; gap:6px;}
-    .startup-banner .pill.ok{border-color:#1f6c3a; background:#12301d;}
-    .startup-banner .pill.ng{border-color:#6c1f2a; background:#301219;}
-    .startup-banner .close-btn{border-radius:50%; width:26px; height:26px; display:grid; place-items:center; padding:0;}
-    .startup-banner.hidden{display:none;}
-    .debug-panel{position:fixed; bottom:12px; right:12px; z-index:42; background:rgba(16,24,36,0.92); color:#e6edf3; border:1px solid #2a3a52; border-radius:12px; padding:10px; font-size:12px; min-width:220px; box-shadow:0 12px 32px rgba(0,0,0,0.45); display:none;}
-    .debug-panel.active{display:block;}
-    .error-modal{display:none;}
-    @media (max-width: 1100px){
-      .floating-settings{position:fixed; right:14px; bottom:14px;}
-      .canvas-wrap{padding:10px; min-height:60vh;}
-      #p5-container{min-height:520px;}
-    }
+
+    .backdrop{position:fixed; inset:0; background:rgba(8,12,18,0.72); display:none; align-items:center; justify-content:center; z-index:22; pointer-events:none;}
+    .backdrop.active{display:flex; pointer-events:auto;}
+    .hidden{display:none!important;}
   </style>
 </head>
-
 <body>
   <header>
-    <div class="title">Bio-Sphere Manager デモ</div>
-    <div class="sub">p5.js + Chart.js / GitHub Pages 向け 単一HTML（決定論シード・CSVログ付き）</div>
+    <div class="title">Bio-Sphere Manager</div>
+    <div class="sub">Window Manager refresh + ecology sandbox</div>
   </header>
-
-  <div class="stage">
-    <div class="map-area">
-      <div class="map-head">
-        <div class="map-status">
-          <span class="badge">マップ優先ビュー</span>
-          <span class="compact-note">HUDや凡例はドラッグ&最小化できます。設定は中央モーダルで開閉・リサイズ可能。</span>
-          <span class="pill-note">「全滅まで」モードは長時間になる場合があります</span>
-        </div>
-        <div class="overlay-switch" role="group" aria-label="表示モード">
-          <span class="label">表示モード</span>
-          <button class="overlay-btn active" data-mode="fauna">動物レイヤー</button>
-          <button class="overlay-btn" data-mode="soil">土壌レイヤー</button>
-          <button class="overlay-btn" data-mode="flora">植生レイヤー</button>
-          <button class="overlay-btn" data-mode="climate">気象/環境レイヤー</button>
-        </div>
-      </div>
-      <div class="canvas-wrap">
-        <div id="p5-container"></div>
-        <div class="widget canvas-hud" aria-live="polite" id="hud" data-widget-id="hud">
-          <div class="widget-bar">
-            <div class="widget-title">状態HUD</div>
-            <div class="widget-actions">
-              <button class="ghost widget-maximize" data-ui-action="maximize" data-widget-id="hud" aria-label="最大化/元に戻す">⤢</button>
-              <button class="ghost widget-minimize" data-ui-action="minimize" data-widget-id="hud" aria-label="最小化">▁</button>
-            </div>
-          </div>
-          <div class="widget-body">
-            <div class="hud-header">
-              <div class="hud-status">
-                <div class="label">状態</div>
-                <div class="hud-pill" id="outStatus">停止中</div>
-              </div>
-              <div class="hud-actions"></div>
-            </div>
-            <div class="hud-top">
-              <div class="hud-meta">ステップ <span id="outStep">0</span></div>
-              <div class="hud-meta mono">seed: <span id="outSeed">daily</span></div>
-            </div>
-            <div class="hud-grid">
-              <div class="hud-item">
-                <div class="label">草</div>
-                <div class="value" id="outGrass">0</div>
-              </div>
-              <div class="hud-item">
-                <div class="label">草食</div>
-                <div class="value" id="outHerb">0</div>
-              </div>
-              <div class="hud-item">
-                <div class="label">肉食</div>
-                <div class="value" id="outCarn">0</div>
-              </div>
-              <div class="hud-item">
-                <div class="label">季節</div>
-                <div class="value" id="outSeason">－</div>
-              </div>
-              <div class="hud-item">
-                <div class="label">気温</div>
-                <div class="value" id="outTemp">－</div>
-              </div>
-          <div class="hud-item">
-            <div class="label">雨量</div>
-            <div class="value" id="outRain">－</div>
-          </div>
-          <div class="hud-item">
-            <div class="label">草食の性比 / 群</div>
-            <div class="value" id="outHerbSex">－</div>
-            <div class="tiny" id="outHerbGroup">-</div>
-          </div>
-          <div class="hud-item">
-            <div class="label">肉食の性比 / 縄張り</div>
-            <div class="value" id="outCarnSex">－</div>
-            <div class="tiny" id="outCarnTerritory">-</div>
-          </div>
-          <div class="hud-item">
-            <div class="label">肉食イベント/step</div>
-            <div class="value" id="outCarnEvents">捕食0 / 飢餓0 / 老衰0</div>
-            <div class="tiny">直近1ステップ</div>
-          </div>
-          <div class="hud-item">
-            <div class="label">草食の繁殖</div>
-            <div class="value" id="outHerbMating">試行0 / 成立0</div>
-            <div class="tiny" id="outHerbMatingDetail">空き0 / 相手0 / 低エネ0 | 近傍- 平均E-</div>
-          </div>
-          <div class="hud-item">
-            <div class="label">肉食の繁殖</div>
-            <div class="value" id="outCarnMating">試行0 / 成立0</div>
-            <div class="tiny" id="outCarnMatingDetail">空き0 / 相手0 / 低エネ0 | 近傍- 平均E-</div>
-          </div>
-          <div class="hud-item">
-            <div class="label">速度モード</div>
-            <div class="value" id="outSpeedMode">通常</div>
-            <div class="tiny" id="outSpeedDetail">自動減速: ON</div>
-          </div>
-          <div class="hud-item">
-            <div class="label">スコア</div>
-            <div class="value" id="outScore">0</div>
-            <div class="tiny" id="outScoreDetail">生存・多様性・安定度</div>
-          </div>
-            </div>
-          </div>
-        </div>
-        <div class="widget legend-card" id="legendCard" data-widget-id="legend">
-          <div class="widget-bar">
-            <div class="widget-title">凡例</div>
-            <div class="widget-actions">
-              <button class="ghost widget-maximize" data-ui-action="maximize" data-widget-id="legend" aria-label="最大化/元に戻す">⤢</button>
-              <button class="ghost widget-minimize" data-ui-action="minimize" data-widget-id="legend" aria-label="最小化">▁</button>
-            </div>
-          </div>
-          <div class="widget-body">
-            <div class="legend-row"><span class="legend-swatch" style="background:linear-gradient(90deg,#21402a,#4f9f6d);"></span><span>植生（草量と林床）</span></div>
-            <div class="legend-row"><span class="legend-swatch" style="background:linear-gradient(90deg,#18324d,#2f6896);"></span><span>土壌/河川のレイヤー</span></div>
-            <div class="legend-row"><span class="legend-swatch" style="background:linear-gradient(90deg,#1f3452,#4e7ac7);"></span><span>気象・環境（降雨/疾患リスク）</span></div>
-            <div class="legend-row tiny">レイヤーは「表示モード」で切替（動物・土壌・植生・気象）</div>
-            <div class="legend-title" style="margin-top:6px;">動物</div>
-            <div id="legendAnimals" class="legend-animals"></div>
-          </div>
-        </div>
-        <div class="widget legend-card gen-card" id="generationCard" data-widget-id="generation">
-          <div class="widget-bar">
-            <div class="widget-title">世代サマリ</div>
-            <div class="widget-actions">
-              <button class="ghost widget-maximize" data-ui-action="maximize" data-widget-id="generation" aria-label="最大化/元に戻す">⤢</button>
-              <button class="ghost widget-minimize" data-ui-action="minimize" data-widget-id="generation" aria-label="最小化">▁</button>
-            </div>
-          </div>
-          <div class="widget-body">
-            <div class="legend-row legend-note">世代ごとの生存数（最新ステップ）</div>
-            <div id="generationStats" class="legend-animals"></div>
-          </div>
-        </div>
-        <div class="widget toolbar-card" id="toolbarCard" data-widget-id="toolbar">
-          <div class="widget-bar">
-            <div class="widget-title">クイック操作</div>
-            <div class="widget-actions">
-              <button class="ghost widget-maximize" data-ui-action="maximize" data-widget-id="toolbar" aria-label="最大化/元に戻す">⤢</button>
-              <button class="ghost widget-minimize" data-ui-action="minimize" data-widget-id="toolbar" aria-label="最小化">▁</button>
-            </div>
-          </div>
-          <div class="widget-body">
-            <div class="toolbar-row">
-              <button id="btnStart" class="primary">開始/停止</button>
-              <button id="btnStep">1ステップ</button>
-              <button id="btnReset" class="danger">リセット</button>
-              <button id="btnForceEnd" class="ghost">強制終了</button>
-            </div>
-            <div class="toolbar-row" style="margin-top:4px;">
-              <button id="btnCSV">CSV</button>
-              <label class="tiny">デフォルトシナリオ</label>
-              <select id="selScenario">
-                <option value="">選択</option>
-                <option value="temperate">温帯草原（安定）</option>
-                <option value="forest">森林（湿潤）</option>
-                <option value="arid">乾燥地（省水）</option>
-              </select>
-              <button id="btnApplyScenario" class="primary">適用してリセット</button>
-            </div>
-            <div class="toolbar-row" style="margin-top:4px;">
-              <label class="tiny">速度モード</label>
-              <button id="btnSpeedNormal" class="ghost speed-btn active">通常</button>
-              <button id="btnSpeedTurbo" class="ghost speed-btn">ターボ</button>
-              <label class="note"><input id="chkAutoSlow" type="checkbox" checked /> イベントで自動スローダウン</label>
-            </div>
-            <div class="toolbar-row" style="margin-top:4px;">
-              <button id="btnOpenDrawerInline" class="primary">⚙ 設定を開く</button>
-              <button id="btnUiReset" class="ghost">UIリセット</button>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="note">同じseed・同じ初期パラメータなら挙動が再現されます（Math.randomは未使用）。</div>
-    </div>
+  <div id="appRoot">
+    <div id="p5-container"></div>
   </div>
 
-  <div id="uiRoot" aria-hidden="true"></div>
-
-  <div id="startupBanner" class="startup-banner hidden" role="status" aria-live="polite">
-    <div class="status" id="startupStatus"></div>
-    <button id="btnDismissStartup" class="ghost close-btn" aria-label="閉じる">×</button>
-  </div>
-
-  <div class="modal-backdrop error-modal" id="errorModal" role="alertdialog" aria-modal="true">
-    <div class="modal">
-      <h3>初期化エラー</h3>
-      <div class="kv"><div class="label">内容</div><div class="value mono" id="errorMessage">-</div></div>
-      <div class="kv"><div class="label">位置</div><div class="value mono" id="errorLocation">-</div></div>
-      <div class="kv"><div class="label">詳細</div><div class="value mono" id="errorStack">-</div></div>
-      <div class="actions"><button id="btnCloseError" class="primary">閉じる</button></div>
-    </div>
-  </div>
-
-  <div id="debugPanel" class="debug-panel" aria-live="polite"></div>
-
-  <div class="floating-settings">
-    <button id="btnOpenSettings" class="fab primary">⚙ 設定</button>
-  </div>
-
-  <button id="btnPanic" class="fab danger" style="position:fixed; right:18px; bottom:78px; z-index:50;">Panic</button>
-
-  <div class="modal-backdrop settings-backdrop" id="settingsBackdrop">
-    <div class="modal settings-modal" id="settingsModal" aria-hidden="true" role="dialog">
-      <div class="modal-header">
-        <div class="modal-title">設定モーダル <span class="chip">かんたん/ふつう/研究</span></div>
-        <div class="modal-actions">
-          <button id="btnSettingsMax" class="ghost" data-ui-action="modal-maximize">⤢</button>
-          <button id="btnCloseSettings" class="ghost" data-ui-action="close-settings">閉じる</button>
-        </div>
-      </div>
-      <div class="modal-tabs" role="tablist">
-        <button class="tab-btn active" data-tab="tab-easy">かんたん</button>
-        <button class="tab-btn" data-tab="tab-normal">ふつう</button>
-        <button class="tab-btn" data-tab="tab-research">研究</button>
-      </div>
-      <div class="modal-body">
-        <div id="tab-easy" class="tab-panel active">
-          <details class="section" open>
-            <summary>スターター</summary>
-            <div class="section-body stack">
-              <div class="row">
-                <div>
-                  <label class="note">seed文字列（空欄なら日替わりを使用）</label><br>
-                  <input id="inSeed" type="text" placeholder="例: exp-001" />
-                </div>
-                <label class="note"><input id="chkDaily" type="checkbox" checked /> 日替わりseed</label>
-              </div>
-              <div class="ctrl">
-                <label>描画速度（FPS）<div class="help">高くすると描画が滑らかになります</div></label>
-                <div class="row">
-                  <input id="slFPS" type="range" min="10" max="60" value="30" />
-                  <span class="mono" id="valFPS">30</span>
-                </div>
-              </div>
-              <div class="ctrl">
-                <label>ターボ時の進行速度<div class="help">1フレームあたりのステップ数（通常モードは常に1）</div></label>
-                <input id="inTurboTicks" type="number" min="2" max="20" value="10" />
-              </div>
-              <div class="ctrl">
-                <label>ログ間隔（ステップ）<div class="help">CSV/グラフの更新頻度</div></label>
-                <input id="inLogEvery" type="number" min="1" max="50" value="1" />
-              </div>
-              <div class="ctrl">
-                <label>マップ拡大率<div class="help">1.0〜2.0の間で拡大/縮小</div></label>
-                <div class="row">
-                  <input id="slZoom" type="range" min="1.0" max="2.0" step="0.05" value="1.25" />
-                  <span class="mono" id="valZoom">1.25</span>
-                </div>
-              </div>
-            </div>
-          </details>
-          <details class="section" open>
-            <summary>環境（ざっくり）</summary>
-            <div class="section-body stack">
-              <div class="ctrl">
-                <label>環境モード<div class="help">地形比率と季節カーブをまとめて変更</div></label>
-                <div class="row">
-                  <select id="selEnvPreset">
-                    <option value="temperateEnv">温帯草原（標準）</option>
-                    <option value="riverEnv">河川敷（川多め）</option>
-                    <option value="aridEnv">乾燥地（雨量少）</option>
-                    <option value="monsoonEnv">雨季・乾季（季節変動強）</option>
-                  </select>
-                  <button id="btnApplyEnvironment" class="primary">環境を適用してリセット</button>
-                </div>
-              </div>
-              <div class="grid3">
-                <div class="ctrl">
-                  <label>植物成長係数<div class="help">全体の成長ブースト</div></label>
-                  <input id="inPlantScale" type="number" min="0.2" max="2" step="0.05" value="1" />
-                </div>
-                <div class="ctrl">
-                  <label>土壌の肥沃度（全体係数）</label>
-                  <input id="inSoilRichness" type="number" min="0.2" max="1.5" step="0.05" value="1" />
-                </div>
-                <div class="ctrl">
-                  <label>草の成長率（0〜0.20）</label>
-                  <div class="row">
-                    <input id="slGrass" type="range" min="0" max="0.20" step="0.005" value="0.022" />
-                    <span class="mono" id="valGrass">0.022</span>
-                  </div>
-                </div>
-              </div>
-              <div class="grid3">
-                <div class="ctrl">
-                  <label>川割合<div class="help">0〜0.40くらいを推奨</div></label>
-                  <input id="inRiverRatio" type="number" min="0" max="0.6" step="0.01" value="0.14" />
-                </div>
-                <div class="ctrl">
-                  <label>岩割合<div class="help">河川と同様に植生は生えません</div></label>
-                  <input id="inRockRatio" type="number" min="0" max="0.5" step="0.01" value="0.10" />
-                </div>
-                <div class="ctrl">
-                  <label>森林割合<div class="help">残りから自動配分</div></label>
-                  <input id="inForestRatio" type="number" min="0" max="0.6" step="0.01" value="0.20" />
-                </div>
-              </div>
-            </div>
-          </details>
-          <details class="section" open>
-            <summary>終了・演出</summary>
-            <div class="section-body stack">
-              <div class="ctrl">
-                <label>終了条件<div class="help">指定の種が絶滅したら停止 / 全滅まで走らせる</div></label>
-                <select id="selEndCondition">
-                  <option value="anyExtinct">どれか1種が絶滅したら終了</option>
-                  <option value="animalExtinct">草食か肉食が絶滅したら終了</option>
-                  <option value="totalExtinct">全生物が絶滅するまで</option>
-                </select>
-              </div>
-              <div class="ctrl">
-                <label>最大ステップ<div class="help">上限に達すると終了</div></label>
-                <input id="inMaxSteps" type="number" min="10" max="20000" value="2000" />
-              </div>
-              <div class="ctrl">
-                <label>演出<div class="help">捕食リング・死亡マーカー・♡など視認性のみ</div></label>
-                <label class="note"><input id="chkEffects" type="checkbox" checked /> 演出ON</label>
-              </div>
-            </div>
-          </details>
-        </div>
-
-        <div id="tab-normal" class="tab-panel">
-          <details class="section" open>
-            <summary>個体群</summary>
-            <div class="section-body stack">
-              <div class="grid2">
-                <div class="ctrl">
-                  <label>初期 草 数<div class="help">開始時の草セル数</div></label>
-                  <input id="inInitGrass" type="number" min="0" max="2500" value="1200" />
-                </div>
-              </div>
-              <div class="card-section">
-                <div class="note">種ごとの有効化と初期個体数を設定できます（草食2種・肉食2種）。</div>
-                <div id="speciesList" class="species-list"></div>
-              </div>
-            </div>
-          </details>
-          <details class="section" open>
-            <summary>採食・繁殖パラメータ</summary>
-            <div class="section-body stack">
-              <div class="grid2">
-                <div class="ctrl">
-                  <label>草食：採食エネルギー<div class="help">草1セルを食べたときの獲得量</div></label>
-                  <input id="inHerbGain" type="number" min="1" max="50" value="13" />
-                </div>
-                <div class="ctrl">
-                  <label>草食：繁殖閾値<div class="help">エネルギーが閾値以上なら繁殖試行</div></label>
-                  <input id="inHerbRepro" type="number" min="5" max="100" value="30" />
-                </div>
-                <div class="ctrl">
-                  <label>肉食：捕食エネルギー<div class="help">草食を食べたときの獲得量</div></label>
-                  <input id="inCarnGain" type="number" min="1" max="80" value="34" />
-                </div>
-                <div class="ctrl">
-                  <label>肉食：繁殖閾値<div class="help">エネルギーが閾値以上なら繁殖試行</div></label>
-                  <input id="inCarnRepro" type="number" min="5" max="120" value="42" />
-                </div>
-              </div>
-              <div class="grid2">
-                <div class="ctrl">
-                  <label>草食の寿命[step]<div class="help">寿命を超えると老衰で死亡</div></label>
-                  <input id="inHerbMaxAge" type="number" min="10" max="2000" value="150" />
-                </div>
-                <div class="ctrl">
-                  <label>肉食の寿命[step]<div class="help">寿命を超えると老衰で死亡</div></label>
-                  <input id="inCarnMaxAge" type="number" min="10" max="2000" value="180" />
-                </div>
-              </div>
-            </div>
-          </details>
-        </div>
-
-        <div id="tab-research" class="tab-panel">
-          <details class="section" open>
-            <summary>密度効果・競合</summary>
-            <div class="section-body stack">
-              <div class="row" style="margin-bottom:8px;">
-                <label class="note"><input id="chkCompetition" type="checkbox" checked /> 競合（密度依存）を有効化</label>
-              </div>
-              <div class="grid2">
-                <div class="ctrl">
-                  <label>草食の環境収容力K<div class="help">草食が増えるほど繁殖成功率が低下</div></label>
-                  <input id="inHerbK" type="number" min="1" max="5000" value="420" />
-                </div>
-                <div class="ctrl">
-                  <label>肉食の環境収容力K<div class="help">肉食が増えるほど繁殖成功率が低下</div></label>
-                  <input id="inCarnK" type="number" min="1" max="5000" value="220" />
-                </div>
-              </div>
-              <div class="ctrl">
-                <label>密度コスト係数（代謝追加）<div class="help">個体が密集すると代謝コストが増加</div></label>
-                <input id="inDensityCost" type="number" min="0" max="50" value="6" />
-              </div>
-            </div>
-          </details>
-          <details class="section" open>
-            <summary>環境パラメータ（詳細）</summary>
-            <div class="section-body stack">
-              <div class="grid3">
-                <div class="ctrl">
-                  <label>平均気温（℃）</label>
-                  <input id="inAvgTemp" type="number" min="-10" max="40" step="0.5" value="18" />
-                </div>
-                <div class="ctrl">
-                  <label>年較差（季節振幅）</label>
-                  <input id="inTempAmp" type="number" min="0" max="20" step="0.5" value="12" />
-                </div>
-                <div class="ctrl">
-                  <label>平均雨量</label>
-                  <input id="inAvgRain" type="number" min="0" max="200" step="1" value="80" />
-                </div>
-              </div>
-              <div class="grid3">
-                <div class="ctrl">
-                  <label>雨季振幅</label>
-                  <input id="inRainAmp" type="number" min="0" max="120" step="1" value="45" />
-                </div>
-                <div class="ctrl">
-                  <label>メモ<div class="help">調整後に「環境を適用してリセット」を押すと反映されます</div></label>
-                  <div class="badge">地形・季節パラメータ</div>
-                </div>
-              </div>
-            </div>
-          </details>
-          <details class="section" open>
-            <summary>結果とグラフ</summary>
-            <div class="section-body stack">
-              <div class="kv">
-                <div class="label">終了理由</div><div class="value mono" id="outEndReason">-</div>
-              </div>
-              <div class="kv">
-                <div class="label">総ステップ</div><div class="value mono" id="outTotalStep">0</div>
-              </div>
-              <div class="kv">
-                <div class="label">最終個体数</div><div class="value mono" id="outFinalCounts">草0 / 草食0 / 肉食0</div>
-              </div>
-              <div class="kv">
-                <div class="label">最大個体数</div><div class="value mono" id="outPeakCounts">草0 / 草食0 / 肉食0</div>
-              </div>
-              <div class="kv">
-                <div class="label">死亡内訳</div><div class="value mono" id="outDeaths">草食:飢餓0 捕食0 老衰0 / 肉食:飢餓0 老衰0</div>
-              </div>
-              <div class="row" style="margin-top:10px;">
-                <button id="btnCopyResult">結果をコピー</button>
-                <button id="btnCopyScore" class="primary">スコアをコピー</button>
-              </div>
-              <div class="note">CSV列: schema_version, seed, step, grass_count, herbivore_count, carnivore_count, death_herbivore_starve, death_herbivore_eaten, death_carnivore_starve, death_herbivore_age, death_carnivore_age, births_herbivore, births_carnivore, death_herbivore_conflict, death_carnivore_conflict, herb_K, carn_K, competition_enabled, herb_repro_success_rate, carn_repro_success_rate, biomass_total, temperature, rainfall, season_name, 以降に各species_count列</div>
-              <div class="card" style="border-color:#223247;">
-                <h2 style="padding:12px 12px 0">個体数グラフ</h2>
-                <div class="pad">
-                  <canvas id="chart" height="220"></canvas>
-                </div>
-              </div>
-            </div>
-          </details>
-        </div>
+  <div class="widget" id="hudWidget" style="left:16px; top:96px; width:360px;">
+    <div class="widget-header" data-widget-id="hudWidget">
+      <div class="widget-title">HUD</div>
+      <div class="widget-controls">
+        <button data-ui-action="minimize" data-widget-id="hudWidget">—</button>
+        <button data-ui-action="maximize" data-widget-id="hudWidget">▢</button>
       </div>
     </div>
-  </div>
-  <div class="modal-backdrop" id="endModal">
-    <div class="modal">
-      <h3>シミュレーション終了</h3>
-      <div class="kv">
-        <div class="label">終了理由</div><div class="value mono" id="modalReason">-</div>
-      </div>
-      <div class="kv">
-        <div class="label">総ステップ</div><div class="value mono" id="modalSteps">0</div>
-      </div>
-      <div class="kv">
-        <div class="label">最終個体数</div><div class="value mono" id="modalCounts">草0 / 草食0 / 肉食0</div>
-      </div>
-      <div class="kv">
-        <div class="label">死亡内訳</div><div class="value mono" id="modalDeaths">-</div>
-      </div>
-      <div class="kv">
-        <div class="label">スコア</div><div class="value mono" id="modalScore">0</div>
-      </div>
-      <div class="kv">
-        <div class="label">スコア内訳</div><div class="value mono" id="modalScoreDetail">-</div>
-      </div>
-      <div class="actions">
-        <button id="btnModalReset" class="primary">リセット</button>
-        <button id="btnModalCSV">CSVダウンロード</button>
-        <button id="btnModalCopy">結果をコピー</button>
-        <button id="btnModalCopyScore">スコアをコピー</button>
+    <div class="widget-body">
+      <div class="hud-grid">
+        <div class="hud-item"><div class="label">Population</div><div class="value" id="hudPop">0</div></div>
+        <div class="hud-item"><div class="label">Season</div><div class="value" id="hudSeason">Spring</div></div>
+        <div class="hud-item"><div class="label">Temperature</div><div class="value" id="hudTemp">0℃</div></div>
+        <div class="hud-item"><div class="label">Rain</div><div class="value" id="hudRain">0</div></div>
+        <div class="hud-item"><div class="label">Score</div><div class="value" id="hudScore">0</div></div>
       </div>
     </div>
   </div>
 
-<script>
-/**
- * Bio-Sphere Manager Demo
- * - 単一HTML（GitHub Pages向け）
- * - p5.jsで描画、Chart.jsで個体数推移
- * - 決定論のため seed RNG（Math.randomは使わない）
- * - CSVログ出力（研究・検証用の最低限）
- */
+  <div class="widget" id="summaryWidget" style="left:400px; top:96px; width:320px;">
+    <div class="widget-header" data-widget-id="summaryWidget">
+      <div class="widget-title">Generation Summary</div>
+      <div class="widget-controls">
+        <button data-ui-action="minimize" data-widget-id="summaryWidget">—</button>
+        <button data-ui-action="maximize" data-widget-id="summaryWidget">▢</button>
+      </div>
+    </div>
+    <div class="widget-body">
+      <div id="presetInfo" class="help">Preset: Temperate Forest</div>
+      <div id="genSummary">No data yet.</div>
+    </div>
+  </div>
 
-/* ========= 決定論RNG（Mulberry32） ========= */
-function hash32FromString(str){
-  // 文字列を32bitに潰す（簡易ハッシュ）
-  let h = 2166136261 >>> 0;
-  for(let i=0;i<str.length;i++){
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-function mulberry32(seed){
-  let a = seed >>> 0;
-  return function(){
-    a |= 0; a = (a + 0x6D2B79F5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+  <div class="widget" id="controlsWidget" style="left:16px; top:320px; width:320px;">
+    <div class="widget-header" data-widget-id="controlsWidget">
+      <div class="widget-title">Quick Controls</div>
+      <div class="widget-controls">
+        <button data-ui-action="minimize" data-widget-id="controlsWidget">—</button>
+        <button data-ui-action="maximize" data-widget-id="controlsWidget">▢</button>
+      </div>
+    </div>
+    <div class="widget-body">
+      <div class="row" style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn primary" id="startBtn">Start</button>
+        <button class="btn" id="stopBtn">Stop</button>
+        <button class="btn danger" id="panicBtn">Panic</button>
+      </div>
+      <div class="section">
+        <details open>
+          <summary>Overlay toggles</summary>
+          <div class="section-body">
+            <label><input type="checkbox" id="toggleHearts" checked /> show ♡</label>
+            <label><input type="checkbox" id="toggleFlashes" checked /> show hunts</label>
+          </div>
+        </details>
+      </div>
+      <div class="section">
+        <details open>
+          <summary>Camera</summary>
+          <div class="section-body">
+            <div class="row" style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button class="btn" id="resetView">Reset View</button>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+  </div>
 
-function renderDependencyWarning(missing){
-  const div = document.createElement('div');
-  div.style.cssText = [
-    'position:fixed','inset:16px','z-index:9999','display:flex','align-items:center','justify-content:center',
-    'background:rgba(8,12,18,0.86)','border:1px solid #3a1a28','border-radius:12px','color:#f2dede',
-    'font-weight:700','box-shadow:0 12px 34px rgba(0,0,0,0.45)','padding:18px','text-align:center'
-  ].join(';');
-  div.textContent = `必要なライブラリ(${missing.join(', ')})が読み込めませんでした。ネットワークを確認し、再度読み込んでください。`;
-  document.body.appendChild(div);
-}
+  <div class="widget" id="legendWidget" style="right:16px; top:96px; width:300px;">
+    <div class="widget-header" data-widget-id="legendWidget">
+      <div class="widget-title">Legend</div>
+      <div class="widget-controls">
+        <button data-ui-action="minimize" data-widget-id="legendWidget">—</button>
+        <button data-ui-action="maximize" data-widget-id="legendWidget">▢</button>
+      </div>
+    </div>
+    <div class="widget-body">
+      <div class="legend-grid" id="legendList"></div>
+    </div>
+  </div>
 
-function showFatalError(err){
-  const modal = el('errorModal');
-  if(modal){
-    const msgEl = el('errorMessage');
-    const locEl = el('errorLocation');
-    const stackEl = el('errorStack');
-    const message = err?.message || String(err);
-    const location = err?.filename ? `${err.filename}:${err.lineno || ''}` : (err?.stack?.split('\n')[1] || '-');
-    if(msgEl) msgEl.textContent = message;
-    if(locEl) locEl.textContent = location || '-';
-    if(stackEl) stackEl.textContent = err?.stack || '-';
-    activateOverlay(modal);
-  }
-  lastErrorInfo = err;
-  if(debugMode){
-    console.error('[fatal]', err);
-  }
-}
+  <div class="widget" id="settingsWidget" style="right:16px; top:320px; width:360px;">
+    <div class="widget-header" data-widget-id="settingsWidget">
+      <div class="widget-title">Settings</div>
+      <div class="widget-controls">
+        <button data-ui-action="minimize" data-widget-id="settingsWidget">—</button>
+        <button data-ui-action="maximize" data-widget-id="settingsWidget">▢</button>
+      </div>
+    </div>
+    <div class="widget-body">
+      <div class="section">
+        <details open>
+          <summary>Simulation</summary>
+          <div class="section-body">
+            <div class="row" style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button class="btn" data-preset="temperate">Temperate Forest</button>
+              <button class="btn" data-preset="savanna">Savanna</button>
+              <button class="btn" data-preset="wetland">Wetland</button>
+            </div>
+            <div class="row" style="display:flex; gap:8px; flex-wrap:wrap;">
+              <label><input type="checkbox" id="modeExtinction" /> run until all extinct</label>
+            </div>
+            <div class="section" style="margin-top:8px;">
+              <details open>
+                <summary>Behavior mode (per species)</summary>
+                <div class="section-body" id="behaviorControls" style="display:grid; gap:8px;"></div>
+              </details>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+  </div>
 
-function attachGlobalErrorHandlers(){
-  window.onerror = (message, source, lineno, colno, error)=>{
-    showFatalError({message, filename:source, lineno, colno, stack:error?.stack});
-  };
-  window.onunhandledrejection = (event)=>{
-    const reason = event?.reason || event;
-    showFatalError(reason instanceof Error ? reason : {message:String(reason)});
-  };
-}
+  <div class="widget-dock">
+    <div class="dock-col" id="dockLeft"></div>
+    <div class="dock-col" id="dockRight"></div>
+  </div>
 
-function bindClick(id, handler){
-  const target = el(id);
-  if(!target){
-    console.warn(`[ui] missing element: ${id}`);
-    logDebug(`[ui] missing element: ${id}`);
-    return false;
-  }
-  target.disabled = false;
-  target.addEventListener('click', (e)=>{
-    try {
-      handler(e);
-    } catch(err){
-      showFatalError(err);
-    }
-  });
-  return true;
-}
+  <div class="backdrop" id="modalBackdrop"></div>
 
-function activateOverlay(el){
-  if(!el) return;
-  const id = el.id || `overlay-${Date.now()}`;
-  overlayState.activeIds.add(id);
-  el.classList.add('active');
-  el.style.display = 'flex';
-  el.style.pointerEvents = 'auto';
-}
-function deactivateOverlay(el){
-  if(!el) return;
-  const id = el.id || '';
-  overlayState.activeIds.delete(id);
-  el.classList.remove('active');
-  el.style.display = 'none';
-  el.style.pointerEvents = 'none';
-}
+  <script>
+    /* Window manager */
+    const widgetManager = (() => {
+      const widgets = new Map();
+      const dockLeft = document.getElementById('dockLeft');
+      const dockRight = document.getElementById('dockRight');
+      let dragging = null;
 
-function overlaySafetySweep(){
-  document.querySelectorAll('.modal-backdrop').forEach(el=>{
-    const id = el.id || '';
-    const shouldBeActive = overlayState.activeIds.has(id);
-    const isVisible = getComputedStyle(el).display !== 'none';
-    if(!shouldBeActive && isVisible){
-      deactivateOverlay(el);
-    }
-  });
-  if(overlayState.dragShield && !overlayState.activeIds.has('dragShield')){
-    clearDragShield('safety');
-  }
-}
+      const register = (id) => {
+        const el = document.getElementById(id);
+        if(!el) return;
+        widgets.set(id, { el, docked:false });
+      };
 
-function describeElementForLog(el){
-  if(!el) return 'なし';
-  const st = getComputedStyle(el);
-  const classText = el.className ? '.' + String(el.className).split(/\s+/).filter(Boolean).join('.') : '';
-  return `${el.tagName.toLowerCase()}${el.id ? '#'+el.id : ''}${classText} pe:${st.pointerEvents} op:${st.opacity} pos:${st.position} z:${st.zIndex}`;
-}
+      const minimize = (id) => {
+        const entry = widgets.get(id); if(!entry) return;
+        const { el } = entry;
+        if(el.classList.contains('is-minimized')) return restoreFromDock(id);
+        el.classList.add('is-minimized');
+        const dockTarget = el.classList.contains('dock-right') ? dockRight : dockLeft;
+        const chip = document.createElement('button');
+        chip.className = 'dock-chip';
+        chip.textContent = el.querySelector('.widget-title').textContent;
+        chip.dataset.widgetId = id;
+        dockTarget.appendChild(chip);
+        entry.dockedChip = chip;
+        entry.prevStyle = { left: el.style.left, top: el.style.top };
+        el.style.left = '-9999px'; el.style.top = '-9999px';
+      };
 
-function startUiDiagnostics(){
-  if(!uiDiagMode) return;
-  document.addEventListener('click', (event)=>{
-    const actionEl = event.target?.closest?.('[data-ui-action]');
-    const pointEl = document.elementFromPoint(event.clientX, event.clientY);
-    const path = event.composedPath ? event.composedPath().slice(0,6).map(describeElementForLog) : [];
-    console.debug('[ui-diag] click', {
-      at: {x: event.clientX, y: event.clientY},
-      elementFromPoint: describeElementForLog(pointEl),
-      actionEl: describeElementForLog(actionEl),
-      path,
-    });
-    if(!actionEl){
-      const stack = document.elementsFromPoint(event.clientX, event.clientY) || [];
-      const cover = stack.find(el=>getComputedStyle(el).pointerEvents !== 'none');
-      if(cover){
-        console.warn('[ui-diag] covering element', describeElementForLog(cover));
-      }
-    }
-  }, true);
-}
+      const restoreFromDock = (id) => {
+        const entry = widgets.get(id); if(!entry) return;
+        const { el, dockedChip, prevStyle } = entry;
+        el.classList.remove('is-minimized');
+        if(dockedChip?.parentNode) dockedChip.parentNode.removeChild(dockedChip);
+        if(prevStyle){ el.style.left = prevStyle.left; el.style.top = prevStyle.top; }
+        clampToViewport(el);
+      };
 
-function removeLingeringShields(){
-  document.querySelectorAll('body *').forEach(el=>{
-    const st = getComputedStyle(el);
-    const isFull = st.position === 'fixed' && st.top === '0px' && st.left === '0px' && st.right === '0px' && st.bottom === '0px';
-    const transparent = (st.opacity === '0' || st.backgroundColor === 'rgba(0, 0, 0, 0)');
-    const blocking = st.pointerEvents !== 'none';
-    if(isFull && transparent && blocking && el.id !== 'dragShield'){
-      console.warn('[overlay] removing lingering shield', el.id || el.className || el.tagName);
-      el.remove();
-    }
-  });
-}
+      const maximize = (id) => {
+        const entry = widgets.get(id); if(!entry) return;
+        const { el } = entry;
+        if(el.classList.contains('is-maximized')) return restoreSize(id);
+        entry.restoreRect = {
+          left: el.style.left,
+          top: el.style.top,
+          width: el.style.width,
+          height: el.style.height,
+        };
+        el.classList.add('is-maximized');
+      };
 
-function createDragShield(){
-  clearDragShield();
-  const shield = document.createElement('div');
-  shield.id = 'dragShield';
-  shield.style.cssText = 'position:fixed;inset:0;z-index:35;pointer-events:auto;background:transparent;';
-  document.body.appendChild(shield);
-  overlayState.dragShield = shield;
-  overlayState.activeIds.add('dragShield');
-  overlayState.dragShieldTimer = setTimeout(()=>clearDragShield('timeout'), 1500);
-}
-function clearDragShield(reason){
-  if(overlayState.dragShieldTimer){
-    clearTimeout(overlayState.dragShieldTimer);
-    overlayState.dragShieldTimer = null;
-  }
-  if(overlayState.dragShield?.parentNode){
-    overlayState.dragShield.remove();
-  }
-  overlayState.dragShield = null;
-  overlayState.activeIds.delete('dragShield');
-  if(reason && debugMode) console.debug(`[overlay] drag shield cleared: ${reason}`);
-}
-['blur','pointercancel'].forEach(ev=>window.addEventListener(ev, ()=>clearDragShield(ev)));
-window.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') clearDragShield('esc'); });
-setInterval(overlaySafetySweep, 2000);
-
-function showError(message){
-  const modal = el('errorModal');
-  if(!modal) return;
-  const msgEl = el('errorMessage');
-  if(msgEl) msgEl.textContent = message;
-  activateOverlay(modal);
-}
-
-function updateStartupBanner(){
-  const banner = el('startupBanner');
-  const statusEl = el('startupStatus');
-  if(!banner || !statusEl) return;
-  const rows = [
-    {key:'deps', label:'p5 / Chart'},
-    {key:'canvas', label:'Canvas'},
-    {key:'chart', label:'グラフ'},
-    {key:'handlers', label:'UI操作'},
-  ];
-  const failed = rows.filter(r => !startupChecks[r.key]);
-  statusEl.innerHTML = rows.map(r=>`<span class="pill ${startupChecks[r.key] ? 'ok' : 'ng'}">${startupChecks[r.key] ? '✓' : '×'} ${r.label}</span>`).join('');
-  banner.classList.remove('hidden');
-  if(failed.length){
-    const reason = failed.map(f=>f.label).join(', ');
-    showError(`初期化に失敗: ${reason}`);
-  }
-}
-
-function enableDebugPanel(){
-  const panel = el('debugPanel');
-  if(!panel) return;
-  panel.classList.add('active');
-  document.addEventListener('pointermove', (e)=>{
-    const [top] = document.elementsFromPoint(e.clientX, e.clientY) || [];
-    const tag = top ? `${top.tagName.toLowerCase()}${top.id ? '#'+top.id : ''}${top.className ? '.'+String(top.className).split(' ').join('.') : ''}` : 'なし';
-    const visibleOverlays = Array.from(document.querySelectorAll('.modal-backdrop')).filter(m=>getComputedStyle(m).display !== 'none');
-    let overlayText = 'なし';
-    if(overlayState.dragShield) overlayText = 'dragShield';
-    else if(visibleOverlays.length) overlayText = visibleOverlays.map(o=>o.id || 'overlay').join(',');
-    const depText = `p5:${typeof window.p5 !== 'undefined'} / Chart:${typeof window.Chart !== 'undefined'}`;
-    const canvasCount = document.querySelectorAll('canvas').length;
-    const lastErr = lastErrorInfo ? (lastErrorInfo.message || String(lastErrorInfo)) : 'なし';
-    const noteText = debugNotes.slice(-5).join('<br>');
-    panel.innerHTML = `${depText}<br>canvas:${canvasCount}<br>最後のエラー:${lastErr}<br>カーソル: (${Math.round(e.clientX)}, ${Math.round(e.clientY)})<br>要素: ${tag}<br>オーバーレイ: ${overlayText}<br>${noteText}`;
-  });
-}
-
-const debugNotes = [];
-function logDebug(msg){
-  debugNotes.push(msg);
-  if(debugNotes.length > 50) debugNotes.shift();
-  if(debugMode){
-    const panel = el('debugPanel');
-    if(panel){
-      panel.innerHTML = debugNotes.slice(-5).join('<br>');
-    }
-  }
-}
-
-function checkDependencies(){
-  const missing = [];
-  if(typeof window.p5 === 'undefined') missing.push('p5.js');
-  if(typeof window.Chart === 'undefined') missing.push('Chart.js');
-  if(missing.length){
-    renderDependencyWarning(missing);
-    return false;
-  }
-  return true;
-}
-
-const depsReady = checkDependencies();
-const searchParams = new URLSearchParams(location.search);
-const debugMode = searchParams.get('debug') === '1';
-const uiDiagMode = debugMode || searchParams.get('uiDiag') === '1';
-const startupChecks = {
-  deps: depsReady,
-  canvas: false,
-  chart: false,
-  handlers: false,
-};
-
-let lastErrorInfo = null;
-let safeMode = false;
-let safeTicker = null;
-
-const overlayState = {
-  activeIds: new Set(),
-  dragShield: null,
-  dragShieldTimer: null,
-};
-
-/* ========= シミュレーション設定 ========= */
-const GRID = 50;
-const BASE_CANVAS = 900;
-let mapScale = 1.25;
-let canvasSize = Math.round(BASE_CANVAS * mapScale);
-let cellSize = canvasSize / GRID;
-const N = GRID * GRID;
-const SCHEMA_VERSION = 7;
-const SCORE_BIO_BONUS = 150;
-const SCORE_STABILITY_BASE = 220;
-const MAX_STABILITY_SAMPLES = 160;
-const EFFECT_LIFETIME = 22;
-const DEATH_MARK_LIFETIME = 26;
-const HEART_LIFETIME_MIN = 20;
-const HEART_LIFETIME_MAX = 40;
-const HUNT_RADIUS = 5;
-const MATE_SEARCH_RADIUS = 4;
-const MATE_NEIGHBOR_RADIUS = 2;
-const CARN_METABOLISM_SCALE = 0.9;
-const EVENT_SLOWDOWN_WINDOW = 12;
-
-const TERRAIN = {
-  GRASSLAND: 0,
-  ROCK: 1,
-  RIVER: 2,
-  FOREST: 3,
-};
-const TERRAIN_KEYS = Object.keys(TERRAIN);
-
-const SPECIES_DEFS = [
-  {
-    id: 'herb_a',
-    nameJP: 'ハミング草食',
-    color: [70, 180, 255],
-    shape: 'circle',
-    diet: 'herbivore',
-    metabolism: 1,
-    maxAge: 130,
-    gains: {grassDelta: 0},
-    reproDelta: 0,
-    defaultEnabled: true,
-    defaultInit: 50,
-  },
-  {
-    id: 'herb_b',
-    nameJP: 'モグモグ草食',
-    color: [90, 220, 200],
-    shape: 'circle',
-    diet: 'herbivore',
-    metabolism: 1,
-    maxAge: 150,
-    gains: {grassDelta: -2},
-    reproDelta: -4,
-    defaultEnabled: true,
-    defaultInit: 40,
-  },
-  {
-    id: 'carn_a',
-    nameJP: 'シャドウ肉食',
-    color: [240, 90, 170],
-    shape: 'triangle',
-    diet: 'carnivore',
-    metabolism: 1,
-    maxAge: 180,
-    gains: {herbivoreDelta: 0},
-    reproDelta: 0,
-    defaultEnabled: true,
-    defaultInit: 16,
-  },
-  {
-    id: 'carn_b',
-    nameJP: 'ブレード肉食',
-    color: [255, 140, 90],
-    shape: 'triangle',
-    diet: 'carnivore',
-    metabolism: 2,
-    maxAge: 150,
-    gains: {herbivoreDelta: -4},
-    reproDelta: -6,
-    defaultEnabled: true,
-    defaultInit: 10,
-  },
-];
-const SPECIES_MAP = Object.fromEntries(SPECIES_DEFS.map(s=>[s.id, s]));
-
-let rng = mulberry32(1);
-let running = false;
-let step = 0;
-let tickPerFrame = 1;
-let turboTickPerFrame = 10;
-let speedMode = 'normal';
-let autoSlowdownEnabled = true;
-let slowdownUntilStep = 0;
-let statusMessage = '停止中';
-let currentSeed = 'daily:0000-00-00';
-
-// 草バイオマス（0..plantK）
-let biomass = new Float32Array(N);
-let grassTone = new Uint8Array(N); // 草の濃淡（決定論）
-let terrain = new Uint8Array(N);
-let terrainPattern = new Uint32Array(N);
-let soilHeight = new Float32Array(N);
-let moistureBias = new Float32Array(N);
-let soilFertility = new Float32Array(N);
-let climateLayer = new Float32Array(N);
-let densityLayer = new Float32Array(N);
-let diseasePressure = new Float32Array(N);
-
-// 動物
-let animals = {};
-let carnivoreAt = Array.from({length:N}, ()=>[]);
-
-// 作業用：セルごとの草食インデックス（再利用してGCを抑える）
-let herbivoreAt = Array.from({length:N}, ()=>[]);
-
-let speciesSettings = {};
-let activeHerbSpecies = [];
-let activeCarnSpecies = [];
-
-// ログ（CSV出力用）
-let logs = [];
-let logEvery = 1;
-let matingStepStats = null;
-let lastMatingSnapshot = {herb:null, carn:null};
-let herbReproAttempts = 0;
-let herbReproSuccess = 0;
-let carnReproAttempts = 0;
-let carnReproSuccess = 0;
-let deathHerbConflict = 0;
-let deathCarnConflict = 0;
-let nextFamilyId = 1;
-let nextPackId = 1;
-let overlayMode = 'fauna';
-let p5Instance = null;
-let effectsEnabled = true;
-let visualEffects = [];
-let occupancy = new Uint16Array(N);
-let birthsHerbivore = 0;
-let birthsCarnivore = 0;
-let stabilitySeries = [];
-let scoreState = {total:0, base:0, bioBonus:0, biodiversity:0, stability:0};
-
-// プリセット（シナリオ）
-const PRESETS = {
-  temperate: {
-    label: '温帯草原（安定）',
-    values: {
-      initGrass: 1500,
-      species: {herb_a: 62, herb_b: 40, carn_a: 12, carn_b: 7},
-      grassGrowthRate: 0.022, plantK: 11, herbGain: 13, carnGain: 34,
-      herbRepro: 30, carnRepro: 42, herbMaxAge: 160, carnMaxAge: 190,
-      climateIntensity: 1.05, terrainMix: 0.32,
-      endCondition: 'animalExtinct', maxSteps: 3200, logEvery: 4
-    }
-  },
-  forest: {
-    label: '森林（湿潤）',
-    values: {
-      initGrass: 1380,
-      species: {herb_a: 48, herb_b: 52, carn_a: 11, carn_b: 6},
-      grassGrowthRate: 0.021, plantK: 12, herbGain: 13, carnGain: 33,
-      herbRepro: 29, carnRepro: 40, herbMaxAge: 160, carnMaxAge: 188,
-      climateIntensity: 1.1, terrainMix: 0.54,
-      endCondition: 'animalExtinct', maxSteps: 3000, logEvery: 4
-    }
-  },
-  arid: {
-    label: '乾燥地（省水）',
-    values: {
-      initGrass: 900,
-      species: {herb_a: 44, herb_b: 26, carn_a: 9, carn_b: 6},
-      grassGrowthRate: 0.014, plantK: 9, herbGain: 12, carnGain: 30,
-      herbRepro: 31, carnRepro: 42, herbMaxAge: 150, carnMaxAge: 180,
-      climateIntensity: 0.86, terrainMix: 0.44,
-      endCondition: 'anyExtinct', maxSteps: 2400, logEvery: 4
-    }
-  }
-};
-
-const ENV_PRESETS = {
-  temperateEnv: {
-    label: '温帯草原（標準）',
-    env: {river:0.12, rock:0.1, forest:0.18, avgTemp:18, tempAmp:12, avgRain:80, rainAmp:45, plantScale:1, soilRichness:1}
-  },
-  riverEnv: {
-    label: '河川敷（川多め）',
-    env: {river:0.20, rock:0.08, forest:0.20, avgTemp:17, tempAmp:11, avgRain:92, rainAmp:50, plantScale:1.05, soilRichness:1.05}
-  },
-  aridEnv: {
-    label: '乾燥地（雨量少）',
-    env: {river:0.08, rock:0.16, forest:0.14, avgTemp:22, tempAmp:10, avgRain:42, rainAmp:24, plantScale:0.85, soilRichness:0.85}
-  },
-  monsoonEnv: {
-    label: '雨季・乾季（季節変動強）',
-    env: {river:0.16, rock:0.1, forest:0.22, avgTemp:20, tempAmp:14, avgRain:86, rainAmp:70, plantScale:1.1, soilRichness:1}
-  }
-};
-
-// パラメータ（UIから読み込み）
-let P = {
-  initGrass: 1200,
-  grassGrowthRate: 0.022,
-  plantK: 10,
-  herbGain: 13,
-  herbRepro: 30,
-  carnGain: 34,
-  carnRepro: 42,
-  metabolism: 1,
-  herbMaxAge: 150,
-  carnMaxAge: 180,
-  avgTemp: 18,
-  tempAmp: 12,
-  avgRain: 80,
-  rainAmp: 45,
-  riverRatio: 0.12,
-  rockRatio: 0.10,
-  forestRatio: 0.18,
-  plantGrowthScale: 1,
-  soilRichness: 1,
-  endCondition: 'anyExtinct',
-  maxSteps: 2000,
-  competition: true,
-  herbK: 420,
-  carnK: 220,
-  densityCostScale: 6,
-};
-
-// 死因ログ（最低限）
-let deathHerbStarve = 0;
-let deathCarnStarve = 0;
-let deathHerbEaten = 0;
-let deathHerbAge = 0;
-let deathCarnAge = 0;
-let stepCarnStats = {predation:0, starve:0, age:0};
-let lastCarnStepStats = {predation:0, starve:0, age:0};
-
-// 気候・季節
-let weatherState = {season:'－', temperature:0, rainfall:0};
-
-// 結果表示用
-let endReason = '';
-let peakCounts = {grass:0, herb:0, carn:0};
-
-/* ========= UI ========= */
-const el = (id)=>document.getElementById(id);
-
-function todayKey(){
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth()+1).padStart(2,'0');
-  const day = String(d.getDate()).padStart(2,'0');
-  return `${y}-${m}-${day}`;
-}
-
-function getSeedString(){
-  if(el('chkDaily').checked) return `daily:${todayKey()}`;
-  const s = el('inSeed').value.trim();
-  return s ? s : `manual:${todayKey()}`;
-}
-
-function readParamsFromUI(){
-  P.initGrass = clampInt(parseInt(el('inInitGrass').value,10), 0, N);
-  P.grassGrowthRate = clampFloat(parseFloat(el('slGrass').value), 0, 0.2);
-  P.herbGain  = clampInt(parseInt(el('inHerbGain').value,10), 1, 200);
-  P.herbRepro = clampInt(parseInt(el('inHerbRepro').value,10), 2, 500);
-  P.carnGain  = clampInt(parseInt(el('inCarnGain').value,10), 1, 300);
-  P.carnRepro = clampInt(parseInt(el('inCarnRepro').value,10), 2, 800);
-  P.herbMaxAge = clampInt(parseInt(el('inHerbMaxAge').value,10), 10, 2000);
-  P.carnMaxAge = clampInt(parseInt(el('inCarnMaxAge').value,10), 10, 2000);
-  P.avgTemp = clampFloat(parseFloat(el('inAvgTemp').value), -10, 40);
-  P.tempAmp = clampFloat(parseFloat(el('inTempAmp').value), 0, 20);
-  P.avgRain = clampFloat(parseFloat(el('inAvgRain').value), 0, 200);
-  P.rainAmp = clampFloat(parseFloat(el('inRainAmp').value), 0, 120);
-  P.riverRatio = clampFloat(parseFloat(el('inRiverRatio').value), 0, 0.6);
-  P.rockRatio = clampFloat(parseFloat(el('inRockRatio').value), 0, 0.5);
-  P.forestRatio = clampFloat(parseFloat(el('inForestRatio').value), 0, 0.6);
-  P.plantGrowthScale = clampFloat(parseFloat(el('inPlantScale').value), 0.2, 2);
-  P.soilRichness = clampFloat(parseFloat(el('inSoilRichness').value), 0.2, 1.5);
-  const endVal = el('selEndCondition').value;
-  P.endCondition = endVal === 'animalExtinct' ? 'animalExtinct' : (endVal === 'totalExtinct' ? 'totalExtinct' : 'anyExtinct');
-  P.maxSteps = clampInt(parseInt(el('inMaxSteps').value,10), 10, 20000);
-  P.competition = el('chkCompetition').checked;
-  P.herbK = clampInt(parseInt(el('inHerbK').value,10), 1, 10000);
-  P.carnK = clampInt(parseInt(el('inCarnK').value,10), 1, 10000);
-  P.densityCostScale = clampInt(parseInt(el('inDensityCost').value,10), 0, 1000);
-  effectsEnabled = el('chkEffects').checked;
-  logEvery = clampInt(parseInt(el('inLogEvery').value,10), 1, 50);
-
-  const fps = clampInt(parseInt(el('slFPS').value,10), 10, 60);
-  el('valFPS').textContent = fps;
-  tickPerFrame = Math.max(1, Math.round(fps / 30)); // ざっくり（後で精密化可）
-  turboTickPerFrame = clampInt(parseInt(el('inTurboTicks').value,10), 2, 20);
-
-  el('valGrass').textContent = P.grassGrowthRate.toFixed(3);
-  el('valZoom').textContent = mapScale.toFixed(2);
-  el('valFPS').textContent = String(fps);
-  updateZoomFromUI();
-  updateSpeciesSettingsFromUI();
-  updateActiveSpeciesLists();
-  refreshSpeciesTraitLabels();
-}
-function clampInt(v,min,max){ if(Number.isNaN(v)) v=min; return Math.min(max, Math.max(min, v)); }
-function clampFloat(v,min,max){ if(Number.isNaN(v)) v=min; return Math.min(max, Math.max(min, v)); }
-function updateZoomFromUI(){
-  const z = clampFloat(parseFloat(el('slZoom').value), 1, 2);
-  mapScale = z;
-  canvasSize = Math.round(BASE_CANVAS * mapScale);
-  cellSize = canvasSize / GRID;
-  el('valZoom').textContent = mapScale.toFixed(2);
-  if(p5Instance){
-    p5Instance.resizeCanvas(canvasSize, canvasSize);
-  }
-}
-function getEnergySize(energy, baseSize, threshold){
-  const ratio = clampFloat(energy / Math.max(1, threshold), 0, 1.2);
-  return baseSize * (0.75 + ratio * 0.35);
-}
-function drawTriangle(p, cx, cy, size){
-  const h = (Math.sqrt(3) / 2) * size;
-  p.triangle(cx, cy - h / 2, cx - size / 2, cy + h / 2, cx + size / 2, cy + h / 2);
-}
-function drawGenerationLabel(p, cx, cy, gen, color){
-  if(!gen) return;
-  p.push();
-  p.textAlign(p.CENTER, p.CENTER);
-  p.textSize(Math.max(9, cellSize * 0.32));
-  p.fill(8, 10, 14, 200);
-  p.text(String(gen), cx + 0.8, cy + 0.8);
-  if(color){
-    if(Array.isArray(color)) p.fill(...color, 240);
-    else p.fill(color);
-  } else {
-    p.fill(235);
-  }
-  p.text(String(gen), cx, cy);
-  p.pop();
-}
-function drawLegend(p){
-  const x = 12; const y = 12; const w = 240; const h = 60 + SPECIES_DEFS.length * 22;
-  p.noStroke();
-  p.fill(10, 16, 24, 230);
-  p.rect(x, y, w, h, 12);
-  p.textAlign(p.LEFT, p.CENTER);
-  p.textSize(13);
-  p.fill(210);
-  p.text('凡例', x + 12, y + 18);
-
-  // 草
-  p.fill(60, 150, 92);
-  p.rect(x + 12, y + 32, 24, 16, 3);
-  p.fill(215);
-  p.text('草（濃淡で草量）', x + 44, y + 40);
-
-  let offsetY = 60;
-  for(const sp of SPECIES_DEFS){
-    const c = `rgb(${sp.color.join(',')})`;
-    p.stroke(245);
-    p.strokeWeight(2.1);
-    p.fill(...sp.color);
-    if(sp.shape === 'triangle'){
-      drawTriangle(p, x + 24, y + offsetY, 18);
-    } else {
-      p.circle(x + 24, y + offsetY, 16);
-    }
-    drawEffects(p);
-    p.noStroke();
-    p.fill(215);
-    p.text(`${sp.nameJP}（${sp.diet==='herbivore'?'草食':'肉食'}）`, x + 44, y + offsetY);
-    offsetY += 20;
-  }
-}
-function speciesColor(sp){
-  return `rgb(${sp.color.join(',')})`;
-}
-function buildLegendAnimals(){
-  const wrap = el('legendAnimals');
-  if(!wrap) return;
-  wrap.innerHTML = '';
-  for(const sp of SPECIES_DEFS){
-    const row = document.createElement('div');
-    row.className = 'legend-species';
-    const sw = document.createElement('span');
-    sw.className = 'legend-swatch';
-    if(sp.shape === 'triangle'){
-      sw.classList.add('tri');
-      sw.style.borderTopColor = speciesColor(sp);
-    } else {
-      sw.classList.add('circle');
-      sw.style.background = speciesColor(sp);
-    }
-    row.appendChild(sw);
-    const label = document.createElement('span');
-    label.textContent = sp.nameJP;
-    row.appendChild(label);
-    const meta = document.createElement('span');
-    meta.className = 'label';
-    meta.textContent = sp.diet === 'herbivore' ? '草食' : '肉食';
-    row.appendChild(meta);
-    const count = document.createElement('span');
-    count.className = 'label';
-    count.id = `legend-count-${sp.id}`;
-    count.textContent = '0';
-    row.appendChild(count);
-    wrap.appendChild(row);
-  }
-}
-function updateLegendCounts(counts){
-  for(const sp of SPECIES_DEFS){
-    const elCount = el(`legend-count-${sp.id}`);
-    if(elCount){
-      const val = counts.species?.[sp.id] ?? 0;
-      elCount.textContent = `${val}体`;
-    }
-  }
-}
-function terrainAffinityMultiplier(spSetting, idx){
-  const t = terrain[idx];
-  const moisture = moistureBias[idx] ?? 0.7;
-  const ridge = soilHeight[idx] ?? 0.5;
-  const affinity = spSetting?.affinity || 'neutral';
-  let gain = 1, reproduction = 1, metabolism = 1;
-  if(affinity === 'river'){
-    if(t === TERRAIN.RIVER) {gain += 0.14; reproduction -= 0.12;}
-    else reproduction += 0.06;
-    gain += clampFloat((moisture - 0.8) * 0.2, -0.08, 0.12);
-  } else if(affinity === 'forest'){
-    if(t === TERRAIN.FOREST){gain += 0.1; metabolism -= 0.08;}
-    else if(t === TERRAIN.ROCK){gain -= 0.08; reproduction += 0.06;}
-  } else if(affinity === 'upland'){
-    gain += clampFloat((ridge - 0.55) * 0.25, -0.05, 0.14);
-    reproduction += clampFloat((0.45 - ridge) * 0.2, -0.08, 0.1);
-  }
-  return {gain: clampFloat(gain, 0.6, 1.6), reproduction: clampFloat(reproduction, 0.6, 1.5), metabolism: clampFloat(metabolism, 0.75, 1.25)};
-}
-function generationSummary(){
-  const rows = [];
-  for(const sp of SPECIES_DEFS){
-    const list = animals[sp.id] || [];
-    const tally = {};
-    for(const a of list){
-      if(!a.alive) continue;
-      const g = a.generation || 1;
-      tally[g] = (tally[g] || 0) + 1;
-    }
-    const entries = Object.entries(tally).sort((a,b)=>Number(a[0]) - Number(b[0])).slice(0,5);
-    rows.push({sp, entries, total: entries.reduce((s,[,v])=>s+v,0)});
-  }
-  return rows;
-}
-function renderGenerationStats(){
-  const wrap = el('generationStats');
-  if(!wrap) return;
-  wrap.innerHTML = '';
-  for(const row of generationSummary()){
-    const div = document.createElement('div');
-    div.className = 'gen-row';
-    const name = document.createElement('div');
-    name.className = 'gen-name';
-    const sw = document.createElement('span');
-    sw.className = 'legend-swatch';
-    if(row.sp.shape === 'triangle'){
-      sw.classList.add('tri');
-      sw.style.borderTopColor = speciesColor(row.sp);
-    } else {
-      sw.classList.add('circle');
-      sw.style.background = speciesColor(row.sp);
-    }
-    name.append(sw, document.createTextNode(row.sp.nameJP));
-    div.appendChild(name);
-    const vals = document.createElement('div');
-    vals.className = 'gen-values';
-    if(row.entries.length === 0){
-      vals.textContent = '生存個体なし';
-    } else {
-      for(const [g,v] of row.entries){
-        const chip = document.createElement('span');
-        chip.className = 'gen-chip';
-        chip.textContent = `G${g}: ${v}`;
-        vals.appendChild(chip);
-      }
-    }
-    div.appendChild(vals);
-    wrap.appendChild(div);
-  }
-}
-function drawTerrainPattern(p, x, y, t, pat){
-  const baseX = x * cellSize;
-  const baseY = y * cellSize;
-  const seed = pat >>> 0;
-  if(t === TERRAIN.RIVER){
-    p.stroke(140, 200, 255, 130);
-    p.strokeWeight(Math.max(1, cellSize * 0.06));
-    const offset = (seed % 12) * 0.06;
-    p.line(baseX, baseY + offset, baseX + cellSize, baseY + cellSize * 0.28 + offset * 0.02);
-    p.line(baseX, baseY + cellSize * 0.62 + offset * 0.03, baseX + cellSize, baseY + cellSize * 0.96);
-    p.stroke(90, 160, 230, 90);
-    p.line(baseX, baseY + cellSize * 0.4, baseX + cellSize, baseY + cellSize * 0.7);
-  } else if(t === TERRAIN.ROCK){
-    p.stroke(180, 190, 210, 85);
-    p.strokeWeight(Math.max(1, cellSize * 0.05));
-    p.fill(200, 205, 214, 105);
-    const dots = 2 + (seed % 3);
-    for(let i=0;i<dots;i++){
-      const dx = ((seed >> (i*3)) & 7) / 8;
-      const dy = ((seed >> (i*3+2)) & 7) / 8;
-      p.rect(baseX + dx * cellSize, baseY + dy * cellSize, cellSize * 0.18, cellSize * 0.18, 3);
-    }
-  } else if(t === TERRAIN.FOREST){
-    p.stroke(46, 120, 82, 120);
-    p.strokeWeight(Math.max(1, cellSize * 0.06));
-    const stripe = (seed % 4) + 1;
-    const start = (seed % 6) / 12;
-    for(let i=0;i<stripe;i++){
-      const sx = baseX + (start + i * 0.28) * cellSize;
-      p.line(sx, baseY, sx, baseY + cellSize);
-    }
-  } else if(t === TERRAIN.GRASSLAND){
-    p.noStroke();
-    p.fill(120, 180, 120, 35);
-    const diag = (seed % 100) / 100 * cellSize * 0.3;
-    p.rect(baseX + diag, baseY + cellSize * 0.65, cellSize * 0.4, cellSize * 0.12, 3);
-  }
-  p.noStroke();
-}
-function updateGrassToneMap(seedStr){
-  for(let i=0;i<N;i++){
-    const h = hash32FromString(`${seedStr}:${i}`);
-    grassTone[i] = h % 80; // 0-79の明度
-  }
-}
-function updateTerrainMap(seedStr){
-  const riverSeed = `${seedStr}:river`;
-  const ridgeSeed = `${seedStr}:ridge`;
-  const moistSeed = `${seedStr}:moist`;
-  const riverBands = Math.max(1, Math.round(1 + P.riverRatio * 3));
-  const riverWidth = 0.9 + P.riverRatio * 2.5;
-  const riverAmp = 8 + P.riverRatio * 25;
-  for(let y=0;y<GRID;y++){
-    for(let x=0;x<GRID;x++){
-      const idx = y * GRID + x;
-        const ridge = fbmNoise(x, y, ridgeSeed);
-        const moistNoise = fbmNoise(x, y, moistSeed);
-      let riverDist = 999;
-      for(let r=0;r<riverBands;r++){
-        const bandOffset = valueNoise(r, 0, riverSeed);
-        const phase = valueNoise(r, 1, riverSeed) * Math.PI * 2;
-        const center = (GRID * (0.12 + (r + 0.3) / (riverBands + 0.4))) + Math.sin((x / GRID) * Math.PI * 1.3 + phase) * riverAmp;
-        riverDist = Math.min(riverDist, Math.abs(y - center) - bandOffset * 1.5);
-      }
-      const nearRiver = clampFloat(1 - (riverDist / Math.max(1, riverWidth)), 0, 1);
-      soilHeight[idx] = ridge;
-        moistureBias[idx] = clampFloat(moistNoise + nearRiver * 0.45, 0, 2);
-      terrainPattern[idx] = hash32FromString(`${seedStr}:terrain:${idx}:pat`);
-
-      const riverChance = nearRiver * 0.9;
-      const rockChance = Math.pow(ridge, 1.4) + valueNoise(x, y, `${seedStr}:rock`) * 0.18;
-      const forestChance = moistureBias[idx] * 0.8 + (ridge < 0.45 ? 0.05 : 0);
-
-      if(riverChance > 0.55){
-        terrain[idx] = TERRAIN.RIVER;
-      } else if(rockChance > 0.72 + P.rockRatio * 0.4){
-        terrain[idx] = TERRAIN.ROCK;
-      } else if(forestChance > 0.58){
-        terrain[idx] = TERRAIN.FOREST;
-      } else {
-        terrain[idx] = TERRAIN.GRASSLAND;
-      }
-
-      let fertilityBase = 1;
-      const slopePenalty = soilHeight[idx] > 0.72 ? 0.2 : 0;
-      const moist = moistureBias[idx];
-      if(terrain[idx] === TERRAIN.RIVER || terrain[idx] === TERRAIN.ROCK){
-        fertilityBase = 0;
-      } else if(terrain[idx] === TERRAIN.FOREST){
-        fertilityBase = 0.8 + moist * 0.12 - slopePenalty * 0.5;
-      } else {
-        fertilityBase = 0.6 + moist * 0.2 - slopePenalty;
-      }
-      fertilityBase = clampFloat(fertilityBase, 0.4, 1.2);
-      soilFertility[idx] = clampFloat(fertilityBase * P.soilRichness, 0, 1.5);
-    }
-  }
-}
-function spawnEffect(type, x, y){
-  if(!effectsEnabled) return;
-  if(visualEffects.length > 240) visualEffects.shift();
-  visualEffects.push({type, x, y, life: type === 'predation' ? EFFECT_LIFETIME : DEATH_MARK_LIFETIME, max: type === 'predation' ? EFFECT_LIFETIME : DEATH_MARK_LIFETIME});
-}
-function spawnHeartEffect(x, y){
-  if(!effectsEnabled) return;
-  const life = HEART_LIFETIME_MIN + randInt(HEART_LIFETIME_MAX - HEART_LIFETIME_MIN + 1);
-  if(visualEffects.length > 240) visualEffects.shift();
-  visualEffects.push({type:'heart', x, y, life, max: life, float:0});
-}
-
-function triggerEventSlowdown(reason){
-  if(!autoSlowdownEnabled) return;
-  slowdownUntilStep = Math.max(slowdownUntilStep, step + EVENT_SLOWDOWN_WINDOW);
-}
-function drawEffects(p){
-  if(!effectsEnabled){
-    visualEffects = [];
-    return;
-  }
-  const next = [];
-  for(const eff of visualEffects){
-    const progress = eff.life / eff.max;
-    const cx = (eff.x + 0.5) * cellSize;
-    const cy = (eff.y + 0.5) * cellSize;
-    if(eff.type === 'predation'){
-      const radius = cellSize * (0.5 + (1 - progress) * 0.8);
-      p.noFill();
-      p.stroke(255, 180, 120, 120 * progress + 40);
-      p.strokeWeight(Math.max(1, 2.5 * progress));
-      p.circle(cx, cy, radius);
-    } else if(eff.type === 'death'){
-      const alpha = 160 * progress;
-      p.stroke(230, 110, 130, alpha);
-      p.strokeWeight(Math.max(1, cellSize * 0.12));
-      const delta = cellSize * 0.32;
-      p.line(cx - delta, cy - delta, cx + delta, cy + delta);
-      p.line(cx - delta, cy + delta, cx + delta, cy - delta);
-    } else if(eff.type === 'heart'){
-      const alpha = 200 * progress;
-      const floatY = cy - (1 - progress) * cellSize * 0.8;
-      p.noStroke();
-      p.fill(255, 140, 200, alpha);
-      p.textAlign(p.CENTER, p.CENTER);
-      p.textSize(Math.max(14, cellSize * 0.8));
-      p.text('♡', cx, floatY);
-    }
-    eff.life -= 1;
-    if(eff.life > 0) next.push(eff);
-  }
-  p.textAlign(p.LEFT, p.BASELINE);
-  visualEffects = next;
-}
-function scoreBreakdownText(){
-  return `生存${scoreState.base} / 多様性${scoreState.bioBonus} / 安定${scoreState.stability}`;
-}
-function buildScoreShareText(){
-  const counts = getCounts();
-  const lines = [
-    'Bio-Sphere Manager スコア共有',
-    `seed: ${currentSeed}`,
-    `ステップ: ${step}`,
-    `スコア: ${scoreState.total} (${scoreBreakdownText()})`,
-    `終了理由: ${endReason || '進行中'}`,
-    `個体数: 草${counts.grass} 草食${counts.herb} 肉食${counts.carn}`,
-    `種別: ${SPECIES_DEFS.map(sp=>`${sp.nameJP}:${counts.species[sp.id] ?? 0}`).join(' / ')}`
-  ];
-  return lines.join('\n');
-}
-function defaultSpeciesSettings(){
-  const s = {};
-  for(const sp of SPECIES_DEFS){
-    s[sp.id] = {enabled: sp.defaultEnabled !== false, init: sp.defaultInit || 0, gainMult:1, reproMult:1, affinity:'neutral'};
-  }
-  return s;
-}
-function updateSpeciesSettingsFromUI(){
-  for(const sp of SPECIES_DEFS){
-    const chk = el(`chk-${sp.id}`);
-    const inp = el(`inInit-${sp.id}`);
-    const gainInp = el(`inGainMult-${sp.id}`);
-    const reproInp = el(`inReproMult-${sp.id}`);
-    const affinitySel = el(`selAffinity-${sp.id}`);
-    const enabled = chk ? chk.checked : true;
-    const init = inp ? clampInt(parseInt(inp.value,10), 0, 5000) : (sp.defaultInit || 0);
-    const gainMult = gainInp ? clampFloat(parseFloat(gainInp.value), 0.25, 3) : 1;
-    const reproMult = reproInp ? clampFloat(parseFloat(reproInp.value), 0.25, 3) : 1;
-    const affinity = affinitySel ? affinitySel.value : 'neutral';
-    speciesSettings[sp.id] = {enabled, init, gainMult, reproMult, affinity};
-  }
-}
-function applySpeciesSettingsToUI(settings){
-  for(const sp of SPECIES_DEFS){
-    const st = settings[sp.id];
-    if(!st) continue;
-    const chk = el(`chk-${sp.id}`);
-    const inp = el(`inInit-${sp.id}`);
-    const gainInp = el(`inGainMult-${sp.id}`);
-    const reproInp = el(`inReproMult-${sp.id}`);
-    const affinitySel = el(`selAffinity-${sp.id}`);
-    if(chk) chk.checked = !!st.enabled;
-    if(inp) inp.value = st.init;
-    if(gainInp) gainInp.value = st.gainMult ?? 1;
-    if(reproInp) reproInp.value = st.reproMult ?? 1;
-    if(affinitySel) affinitySel.value = st.affinity || 'neutral';
-  }
-  updateSpeciesSettingsFromUI();
-  updateActiveSpeciesLists();
-}
-function updateActiveSpeciesLists(){
-  activeHerbSpecies = SPECIES_DEFS.filter(sp => speciesSettings[sp.id]?.enabled && sp.diet === 'herbivore');
-  activeCarnSpecies = SPECIES_DEFS.filter(sp => speciesSettings[sp.id]?.enabled && sp.diet === 'carnivore');
-}
-function getSpeciesTraits(def){
-  const baseGain = def.diet === 'herbivore' ? P.herbGain : P.carnGain;
-  const baseRepro = def.diet === 'herbivore' ? P.herbRepro : P.carnRepro;
-  const gainDelta = def.gains?.grassDelta ?? def.gains?.herbivoreDelta ?? 0;
-  const st = speciesSettings[def.id] || {};
-  const gainMult = clampFloat(st.gainMult ?? 1, 0.25, 3);
-  const reproMult = clampFloat(st.reproMult ?? 1, 0.25, 3);
-  return {
-    gain: clampInt((baseGain + gainDelta) * gainMult, 1, 800),
-    reproduction: clampInt((baseRepro + (def.reproDelta || 0)) * reproMult, 2, 1200),
-    metabolism: Math.max(0, def.metabolism ?? P.metabolism),
-    maxAge: def.maxAge ?? (def.diet === 'herbivore' ? P.herbMaxAge : P.carnMaxAge),
-  };
-}
-function buildSpeciesControls(){
-  const listEl = el('speciesList');
-  listEl.innerHTML = '';
-  speciesSettings = defaultSpeciesSettings();
-  for(const sp of SPECIES_DEFS){
-    const row = document.createElement('div');
-    row.className = 'species-row';
-
-    const head = document.createElement('div');
-    head.className = 'species-head';
-    const chk = document.createElement('input');
-    chk.type = 'checkbox';
-    chk.id = `chk-${sp.id}`;
-    chk.checked = speciesSettings[sp.id].enabled;
-    chk.addEventListener('change', readParamsFromUI);
-    const pill = document.createElement('span');
-    pill.className = 'species-pill';
-    const shape = document.createElement('span');
-    shape.className = `species-shape${sp.shape === 'triangle' ? ' triangle' : ''}`;
-    if(sp.shape === 'triangle'){
-      shape.style.borderTopColor = speciesColor(sp);
-    } else {
-      shape.style.background = speciesColor(sp);
-    }
-    pill.appendChild(shape);
-    pill.appendChild(document.createTextNode(sp.diet === 'herbivore' ? '草食' : '肉食'));
-    const name = document.createElement('span');
-    name.textContent = sp.nameJP;
-    head.append(chk, pill, name);
-
-    const desc = document.createElement('div');
-    desc.className = 'help';
-    desc.id = `desc-${sp.id}`;
-    const traits = getSpeciesTraits(sp);
-    desc.textContent = `採食/捕食: +${traits.gain} / 代謝: -${traits.metabolism} / 寿命: ${traits.maxAge} / 繁殖閾値: ${traits.reproduction}`;
-
-    const controls = document.createElement('div');
-    controls.className = 'species-controls';
-    const lbl = document.createElement('label');
-    lbl.textContent = '初期個体数';
-    lbl.className = 'note';
-    const inp = document.createElement('input');
-    inp.type = 'number';
-    inp.id = `inInit-${sp.id}`;
-    inp.min = '0';
-    inp.max = '5000';
-    inp.value = speciesSettings[sp.id].init;
-    inp.addEventListener('change', readParamsFromUI);
-    const gainLbl = document.createElement('label');
-    gainLbl.textContent = '採食/捕食倍率';
-    gainLbl.className = 'note';
-    const gainInp = document.createElement('input');
-    gainInp.type = 'number';
-    gainInp.step = '0.1';
-    gainInp.min = '0.25';
-    gainInp.max = '3';
-    gainInp.id = `inGainMult-${sp.id}`;
-    gainInp.value = speciesSettings[sp.id].gainMult;
-    gainInp.addEventListener('change', readParamsFromUI);
-    const reproLbl = document.createElement('label');
-    reproLbl.textContent = '繁殖閾値倍率';
-    reproLbl.className = 'note';
-    const reproInp = document.createElement('input');
-    reproInp.type = 'number';
-    reproInp.step = '0.1';
-    reproInp.min = '0.25';
-    reproInp.max = '3';
-    reproInp.id = `inReproMult-${sp.id}`;
-    reproInp.value = speciesSettings[sp.id].reproMult;
-    reproInp.addEventListener('change', readParamsFromUI);
-    const affinityLbl = document.createElement('label');
-    affinityLbl.textContent = '環境適正';
-    affinityLbl.className = 'note';
-    const affinitySel = document.createElement('select');
-    affinitySel.id = `selAffinity-${sp.id}`;
-    ['neutral','river','forest','upland'].forEach(key=>{
-      const opt = document.createElement('option');
-      opt.value = key;
-      opt.textContent = key === 'neutral' ? 'ニュートラル' : key === 'river' ? '水辺好み' : key === 'forest' ? '森林好み' : '尾根好み';
-      affinitySel.appendChild(opt);
-    });
-    affinitySel.value = speciesSettings[sp.id].affinity;
-    affinitySel.addEventListener('change', readParamsFromUI);
-    controls.append(lbl, inp, gainLbl, gainInp, reproLbl, reproInp, affinityLbl, affinitySel);
-
-    row.append(head, desc, controls);
-    listEl.appendChild(row);
-  }
-}
-function refreshSpeciesTraitLabels(){
-  for(const sp of SPECIES_DEFS){
-    const desc = el(`desc-${sp.id}`);
-    if(!desc) continue;
-    const traits = getSpeciesTraits(sp);
-    desc.textContent = `採食/捕食: +${traits.gain} / 代謝: -${traits.metabolism} / 寿命: ${traits.maxAge} / 繁殖閾値: ${traits.reproduction}`;
-  }
-}
-function countAliveFor(list){
-  let total = 0;
-  for(const sp of list){
-    const animalsFor = animals[sp.id] || [];
-    for(const a of animalsFor){ if(a.alive) total++; }
-  }
-  return total;
-}
-function applyPresetToUI(key){
-  const p = PRESETS[key];
-  if(!p) return;
-  const v = p.values;
-  el('inInitGrass').value = v.initGrass;
-  el('slGrass').value     = v.grassGrowthRate;
-  el('inHerbGain').value  = v.herbGain;
-  el('inCarnGain').value  = v.carnGain;
-  el('inHerbRepro').value = v.herbRepro;
-  el('inCarnRepro').value = v.carnRepro;
-  el('inHerbMaxAge').value = v.herbMaxAge;
-  el('inCarnMaxAge').value = v.carnMaxAge;
-  const climateScale = v.climateIntensity ?? 1;
-  const mix = v.terrainMix ?? 0.35;
-  const river = clampFloat(0.08 + mix * 0.24, 0, 0.6);
-  const rock = clampFloat(0.08 + mix * 0.18, 0, 0.5);
-  const forest = clampFloat(0.16 + mix * 0.16, 0, 0.6);
-  el('inAvgTemp').value = (18 * climateScale).toFixed(1);
-  el('inTempAmp').value = (12 * climateScale).toFixed(1);
-  el('inAvgRain').value = Math.round(80 * climateScale);
-  el('inRainAmp').value = Math.round(45 * climateScale);
-  el('inRiverRatio').value = river.toFixed(2);
-  el('inRockRatio').value = rock.toFixed(2);
-  el('inForestRatio').value = forest.toFixed(2);
-  if(v.plantK) P.plantK = v.plantK;
-  const speciesPreset = v.species || {};
-  const nextSpeciesSettings = {};
-  for(const sp of SPECIES_DEFS){
-    const presetCount = speciesPreset[sp.id];
-    const baseSetting = speciesSettings[sp.id] || {enabled: sp.defaultEnabled !== false, init: sp.defaultInit || 0, gainMult:1, reproMult:1, affinity:'neutral'};
-    const init = presetCount !== undefined ? presetCount : baseSetting.init;
-    const enabled = presetCount !== undefined ? presetCount > 0 : baseSetting.enabled;
-    nextSpeciesSettings[sp.id] = {enabled, init, gainMult: baseSetting.gainMult ?? 1, reproMult: baseSetting.reproMult ?? 1, affinity: baseSetting.affinity || 'neutral'};
-  }
-  applySpeciesSettingsToUI(nextSpeciesSettings);
-  if(v.endCondition) el('selEndCondition').value = v.endCondition;
-  if(v.maxSteps) el('inMaxSteps').value = v.maxSteps;
-  if(v.logEvery) el('inLogEvery').value = v.logEvery;
-  readParamsFromUI();
-  statusMessage = `シナリオ: ${p.label} を適用しました`;
-  refreshUI();
-}
-function applyEnvironmentPreset(key){
-  const preset = ENV_PRESETS[key];
-  if(!preset) return;
-  const v = preset.env;
-  el('inRiverRatio').value = v.river;
-  el('inRockRatio').value = v.rock;
-  el('inForestRatio').value = v.forest;
-  el('inAvgTemp').value = v.avgTemp;
-  el('inTempAmp').value = v.tempAmp;
-  el('inAvgRain').value = v.avgRain;
-  el('inRainAmp').value = v.rainAmp;
-  el('inPlantScale').value = v.plantScale;
-  if(v.soilRichness) el('inSoilRichness').value = v.soilRichness;
-  readParamsFromUI();
-  statusMessage = `環境プリセット: ${preset.label} を適用しました`;
-  refreshUI();
-}
-function competitionReproPass(count, k){
-  if(!P.competition) return true;
-  const prob = clampFloat(1 - (count / Math.max(1, k)), 0, 1);
-  return rng() < prob;
-}
-function competitionExtraCost(count, k){
-  if(!P.competition || P.densityCostScale <= 0) return 0;
-  return Math.floor((count / Math.max(1, k)) * P.densityCostScale);
-}
-
-function createMatingStats(){
-  return {attempts:0, success:0, blockedNoSpace:0, blockedNoMate:0, blockedLowEnergy:0, neighborSum:0, energySum:0, samples:0};
-}
-function resetMatingStats(){
-  matingStepStats = {herb: createMatingStats(), carn: createMatingStats()};
-}
-function recordMatingSample(kind, energy, neighbors){
-  if(!matingStepStats) resetMatingStats();
-  const s = matingStepStats[kind];
-  s.samples += 1;
-  s.energySum += energy;
-  s.neighborSum += neighbors;
-}
-function recordMatingAttempt(kind){
-  if(!matingStepStats) resetMatingStats();
-  matingStepStats[kind].attempts += 1;
-}
-function recordMatingSuccess(kind){
-  if(!matingStepStats) resetMatingStats();
-  matingStepStats[kind].success += 1;
-}
-function recordMatingBlocked(kind, reason){
-  if(!matingStepStats) resetMatingStats();
-  const s = matingStepStats[kind];
-  if(reason === 'space') s.blockedNoSpace += 1;
-  else if(reason === 'mate') s.blockedNoMate += 1;
-  else if(reason === 'energy') s.blockedLowEnergy += 1;
-}
-function finalizeMatingSnapshot(){
-  const normalize = (s)=>{
-    const base = s || createMatingStats();
-    const avgNeighbors = base.samples > 0 ? base.neighborSum / base.samples : 0;
-    const avgEnergy = base.samples > 0 ? base.energySum / base.samples : 0;
-    return {...base, avgNeighbors, avgEnergy};
-  };
-  lastMatingSnapshot = {
-    herb: normalize(matingStepStats?.herb),
-    carn: normalize(matingStepStats?.carn),
-  };
-  return lastMatingSnapshot;
-}
-
-function deterministicNoise(step, key){
-  const h = hash32FromString(`${currentSeed}:${key}:${step}`);
-  return (h / 4294967296);
-}
-
-function valueNoise(x, y, seedStr){
-  const h = hash32FromString(`${seedStr}:${x}:${y}`);
-  return (h >>> 0) / 4294967296;
-}
-
-function fbmNoise(x, y, seedStr){
-  let sum = 0;
-  let amp = 1;
-  let freq = 0.06;
-  for(let i=0;i<3;i++){
-    sum += amp * valueNoise(Math.floor(x * freq), Math.floor(y * freq), `${seedStr}:oct${i}`);
-    freq *= 2;
-    amp *= 0.55;
-  }
-  return sum / 1.55;
-}
-
-function getSeasonName(temperature, rainfall){
-  const tempDelta = temperature - P.avgTemp;
-  const rainRatio = rainfall / Math.max(1, P.avgRain);
-  if(tempDelta <= -6 && rainRatio > 1.2) return '冷たい雨季';
-  if(tempDelta <= -6) return '冬';
-  if(tempDelta >= 8 && rainRatio > 1.1) return '蒸し暑い雨季';
-  if(tempDelta >= 8) return '夏';
-  if(rainRatio >= 1.25) return '雨季';
-  if(rainRatio <= 0.65 && tempDelta > 2) return '乾いた夏';
-  if(rainRatio <= 0.65) return '乾季';
-  if(tempDelta > 2) return '晩春';
-  if(tempDelta < -2) return '秋';
-  return '春';
-}
-
-function getWeatherForStep(step){
-  const day = step % 365;
-  const seasonalPhase = (2*Math.PI*day)/365;
-  const baseTemp = P.avgTemp + P.tempAmp * Math.sin(seasonalPhase - 0.8);
-  const baseRain = P.avgRain + P.rainAmp * Math.sin(seasonalPhase + 1.4);
-  const noiseLevel = 0.12;
-  const tempNoise = (deterministicNoise(step, 'temp') - 0.5) * 6 * noiseLevel;
-  const rainNoise = (deterministicNoise(step, 'rain') - 0.5) * 36 * noiseLevel;
-  const temperature = baseTemp + tempNoise;
-  const rainfall = Math.max(0, baseRain + rainNoise);
-  const season = getSeasonName(temperature, rainfall);
-  return {season, temperature, rainfall};
-}
-
-function updateClimateLayer(){
-  const rainNorm = clampFloat(weatherState.rainfall / Math.max(30, P.avgRain), 0, 2);
-  const tempStress = Math.abs(weatherState.temperature - P.avgTemp) / Math.max(1, P.tempAmp * 1.1);
-  for(let i=0;i<N;i++){
-    const t = terrain[i];
-    const terrainBonus = t === TERRAIN.RIVER ? 0.55 : (t === TERRAIN.FOREST ? 0.25 : 0);
-    const slopeShade = soilHeight[i] > 0.75 ? 0.08 : 0;
-    climateLayer[i] = clampFloat(rainNorm + terrainBonus + moistureBias[i] * 0.35 + slopeShade - tempStress * 0.3, 0, 2.2);
-  }
-}
-
-function updateDensityLayer(){
-  densityLayer.fill(0);
-  diseasePressure.fill(0);
-  for(const sp of SPECIES_DEFS){
-    const list = animals[sp.id] || [];
-    const weight = sp.diet === 'carnivore' ? 1.2 : 1;
-    for(const a of list){
-      if(!a.alive) continue;
-      densityLayer[a.y * GRID + a.x] += weight;
-    }
-  }
-  for(let y=0;y<GRID;y++){
-    for(let x=0;x<GRID;x++){
-      let acc = 0; let count = 0;
-      for(let dy=-1;dy<=1;dy++){
-        for(let dx=-1;dx<=1;dx++){
-          const nx = x + dx; const ny = y + dy;
-          if(nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) continue;
-          acc += densityLayer[ny * GRID + nx];
-          count++;
+      const restoreSize = (id) => {
+        const entry = widgets.get(id); if(!entry) return;
+        const { el, restoreRect } = entry;
+        el.classList.remove('is-maximized');
+        if(restoreRect){
+          el.style.left = restoreRect.left;
+          el.style.top = restoreRect.top;
+          el.style.width = restoreRect.width;
+          el.style.height = restoreRect.height;
         }
-      }
-      const localDensity = count > 0 ? acc / count : 0;
-      diseasePressure[y * GRID + x] = clampFloat(localDensity * 0.6 + climateLayer[y * GRID + x] * 0.4, 0, 3);
-    }
-  }
-}
+        clampToViewport(el);
+      };
 
-function terrainGrowthMultiplier(t){
-  if(t === TERRAIN.ROCK || t === TERRAIN.RIVER) return 0;
-  if(t === TERRAIN.FOREST) return 0.8;
-  return 1;
-}
+      const clampToViewport = (el) => {
+        const rect = el.getBoundingClientRect();
+        const vw = window.innerWidth; const vh = window.innerHeight;
+        let left = rect.left; let top = rect.top;
+        left = Math.min(Math.max(left, 8), vw - rect.width - 8);
+        top = Math.min(Math.max(top, 8), vh - rect.height - 8);
+        el.style.left = `${left}px`; el.style.top = `${top}px`;
+      };
 
-function terrainCarryingMultiplier(t){
-  if(t === TERRAIN.ROCK) return 0.2;
-  if(t === TERRAIN.RIVER) return 0;
-  if(t === TERRAIN.FOREST) return 1.25;
-  return 1;
-}
+      const startDrag = (e) => {
+        const header = e.target.closest('.widget-header');
+        if(!header) return;
+        const id = header.dataset.widgetId; const entry = widgets.get(id); if(!entry) return;
+        const el = entry.el;
+        if(el.classList.contains('is-maximized')) return;
+        dragging = { id, startX:e.clientX, startY:e.clientY, rect: el.getBoundingClientRect() };
+        document.body.classList.add('is-widget-dragging');
+        header.setPointerCapture(e.pointerId);
+      };
 
-function localPlantCapacity(idx, t){
-  const climateSuit = clampFloat(climateLayer[idx], 0.6, 1.6);
-  const soil = clampFloat(soilFertility[idx], 0.5, 1.6);
-  return P.plantK * terrainCarryingMultiplier(t) * climateSuit * soil;
-}
+      const doDrag = (e) => {
+        if(!dragging) return;
+        const entry = widgets.get(dragging.id); if(!entry) return;
+        const el = entry.el;
+        const dx = e.clientX - dragging.startX;
+        const dy = e.clientY - dragging.startY;
+        const left = dragging.rect.left + dx;
+        const top = dragging.rect.top + dy;
+        el.style.left = `${left}px`;
+        el.style.top = `${top}px`;
+      };
 
-function terrainMoveCost(t){
-  if(t === TERRAIN.ROCK) return 1;
-  if(t === TERRAIN.RIVER) return 2;
-  if(t === TERRAIN.FOREST) return 0.5;
-  return 0;
-}
-function terrainPassable(t){
-  if(t === TERRAIN.RIVER) return false;
-  return true;
-}
+      const endDrag = (e) => {
+        if(!dragging) return;
+        const entry = widgets.get(dragging.id); if(entry) clampToViewport(entry.el);
+        dragging = null;
+        document.body.classList.remove('is-widget-dragging');
+      };
 
-function reproductionSeasonMultiplier(){
-  if(weatherState.season.includes('雨')) return 1.15;
-  if(weatherState.season.includes('夏')) return 1.05;
-  if(weatherState.season.includes('冬')) return 0.65;
-  if(weatherState.season.includes('乾')) return 0.75;
-  return 1;
-}
+      document.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-ui-action]');
+        if(!btn) return;
+        const id = btn.dataset.widgetId;
+        const action = btn.dataset.uiAction;
+        if(action === 'minimize') minimize(id);
+        if(action === 'maximize') maximize(id);
+        if(action === 'close') restoreFromDock(id);
+      });
 
-function torusDistance(ax, ay, bx, by){
-  const dx = Math.abs(ax - bx);
-  const dy = Math.abs(ay - by);
-  return Math.max(Math.min(dx, GRID - dx), Math.min(dy, GRID - dy));
-}
+      document.addEventListener('click', (e) => {
+        const chip = e.target.closest('.dock-chip');
+        if(!chip) return;
+        restoreFromDock(chip.dataset.widgetId);
+      });
 
-function cohesionScore(targetX, targetY, origin, peers){
-  if(!peers) return 0;
-  let score = 0;
-  for(const peer of peers){
-    if(!peer || !peer.alive || peer === origin) continue;
-    const d = torusDistance(targetX, targetY, peer.x, peer.y);
-    if(d > 4) continue;
-    const kinBonus = (peer.familyId && origin.familyId && peer.familyId === origin.familyId) ? 0.8 : 0.35;
-    const packBonus = (peer.packId && origin.packId && peer.packId === origin.packId) ? 0.4 : 0;
-    score += (kinBonus + packBonus) / (1 + d);
-  }
-  return score;
-}
+      document.addEventListener('pointerdown', startDrag);
+      document.addEventListener('pointermove', doDrag);
+      document.addEventListener('pointerup', endDrag);
 
-function homeBiasScore(x, y, origin){
-  if(origin.homeX == null || origin.homeY == null) return 0;
-  const d = torusDistance(x, y, origin.homeX, origin.homeY);
-  return clampFloat((5 - d) * 0.08, -0.35, 0.6);
-}
+      window.addEventListener('resize', () => widgets.forEach(({el}) => clampToViewport(el)));
 
-function moveTerrainAware(a, peers, opts={}){
-  const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
-  let best = {dir:null, score:-Infinity, cost: terrainMoveCost(terrain[a.y * GRID + a.x])};
-  const target = opts.target;
-  const currentDist = target ? torusDistance(a.x, a.y, target.x, target.y) : null;
-  for(const d of dirs){
-    const nx = (a.x + d[0] + GRID) % GRID;
-    const ny = (a.y + d[1] + GRID) % GRID;
-    const t = terrain[ny * GRID + nx];
-    if(!terrainPassable(t)) continue;
-    const base = -terrainMoveCost(t) * 0.1;
-    const social = opts.social ? cohesionScore(nx, ny, a, peers) : 0;
-    const home = opts.territorial ? homeBiasScore(nx, ny, a) : 0;
-    const pursuit = target ? (currentDist - torusDistance(nx, ny, target.x, target.y)) * 0.9 : 0;
-    const spice = rng() * 0.12;
-    const score = base + social + home + pursuit + spice;
-    if(score > best.score){
-      best = {dir:d, score, cost: terrainMoveCost(t), nx, ny};
-    }
-  }
-  if(best.dir){
-    a.x = best.nx;
-    a.y = best.ny;
-    return best.cost;
-  }
-  return best.cost;
-}
+      return { register, minimize, maximize, restoreSize, restoreFromDock, clampToViewport };
+    })();
 
-function countSameSpeciesNeighbors(list, origin, radius){
-  let count = 0;
-  for(const cand of list){
-    if(cand === origin || !cand.alive) continue;
-    const dist = torusDistance(origin.x, origin.y, cand.x, cand.y);
-    if(dist <= radius) count++;
-  }
-  return count;
-}
+    ['hudWidget','summaryWidget','controlsWidget','legendWidget','settingsWidget'].forEach(widgetManager.register);
 
-function findNearestHerbivoreTarget(x, y, radius){
-  let nearest = null;
-  for(let dy=-radius; dy<=radius; dy++){
-    for(let dx=-radius; dx<=radius; dx++){
-      if(dx === 0 && dy === 0) continue;
-      const nx = (x + dx + GRID) % GRID;
-      const ny = (y + dy + GRID) % GRID;
-      const dist = torusDistance(x, y, nx, ny);
-      if(dist > radius) continue;
-      const idx = ny * GRID + nx;
-      if(herbivoreAt[idx].length === 0) continue;
-      if(!nearest || dist < nearest.dist){
-        nearest = {x:nx, y:ny, dist};
-      }
-    }
-  }
-  return nearest;
-}
+    /* Simulation */
+    const legendList = document.getElementById('legendList');
+    const presetButtons = document.querySelectorAll('[data-preset]');
+    const toggleHearts = document.getElementById('toggleHearts');
+    const toggleFlashes = document.getElementById('toggleFlashes');
+    const extinctionModeCheckbox = document.getElementById('modeExtinction');
+    const behaviorControls = document.getElementById('behaviorControls');
 
-function findMateNear(list, origin, radius){
-  let best = null;
-  for(const cand of list){
-    if(!cand || cand === origin || !cand.alive || cand.sex === origin.sex) continue;
-    if(cand.mateSeeking === false && origin.mateSeeking) continue;
-    const dist = torusDistance(origin.x, origin.y, cand.x, cand.y);
-    if(dist <= radius && (!best || dist < best.dist)){
-      best = {ref: cand, dist};
-    }
-  }
-  return best?.ref || null;
-}
+    const terrainTypes = [
+      { key:'grass', name:'Grassland', color:'#1f6f3f', texture:'#2b8a4f', plantK:0.65, cover:0.1, isWater:false, isRock:false },
+      { key:'forest', name:'Forest', color:'#19341f', texture:'#225028', plantK:0.8, cover:0.4, isWater:false, isRock:false },
+      { key:'shrub', name:'Shrubland', color:'#245c3c', texture:'#2f7a4c', plantK:0.7, cover:0.25, isWater:false, isRock:false },
+      { key:'rock', name:'Rock', color:'#545b63', texture:'#737b84', plantK:0, cover:0.05, isWater:false, isRock:true },
+      { key:'water', name:'Water', color:'#1b3b62', texture:'#27517f', plantK:0, cover:0, isWater:true, isRock:false },
+      { key:'wetland', name:'Wetland', color:'#1f4f58', texture:'#2f7a88', plantK:0.9, cover:0.18, isWater:false, isRock:false },
+      { key:'sand', name:'Sand', color:'#7a623c', texture:'#8b754f', plantK:0.3, cover:0.05, isWater:false, isRock:false },
+    ];
 
-function findEmptyNeighborCell(x, y, maxRadius=1){
-  const dirs = [];
-  for(let r=1;r<=maxRadius;r++){
-    for(let dy=-r;dy<=r;dy++){
-      for(let dx=-r;dx<=r;dx++){
-        if(dx === 0 && dy === 0) continue;
-        if(Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-        dirs.push([dx, dy]);
-      }
-    }
-  }
-  for(let i=dirs.length-1;i>0;i--){
-    const j = Math.floor(rng() * (i + 1));
-    [dirs[i], dirs[j]] = [dirs[j], dirs[i]];
-  }
-  for(const [dx, dy] of dirs){
-    const nx = (x + dx + GRID) % GRID;
-    const ny = (y + dy + GRID) % GRID;
-    const idx = ny * GRID + nx;
-    if(terrain[idx] === TERRAIN.RIVER) continue;
-    if(occupancy[idx] === 0) return {x:nx, y:ny, idx};
-  }
-  return null;
-}
+    const speciesLibrary = {
+      deer:{ name:'Deer-like', diet:'herb', color:'#9be070', outline:'#0d190a', inner:'#d7f7b2', speed:0.6, sociality:0.5, behavior:'herd', metabolism:0.002, satietyDecay:0.003, reproduction: {interval:1400, litter:[1,2]}, vision:4, coverAffinity:0.2 },
+      wolf:{ name:'Wolf-like', diet:'carn', color:'#ff9f70', outline:'#3a1205', inner:'#ffc9a6', speed:0.8, sociality:0.7, behavior:'pack', metabolism:0.0022, satietyDecay:0.003, reproduction: {interval:1800, litter:[2,3]}, vision:5, coverAffinity:-0.1 },
+      zebra:{ name:'Zebra-like', diet:'herb', color:'#d8f0ff', outline:'#101820', inner:'#6dc6ff', speed:0.75, sociality:0.7, behavior:'herd', metabolism:0.002, satietyDecay:0.003, reproduction: {interval:1600, litter:[1,1]}, vision:4, coverAffinity:0 },
+      lion:{ name:'Lion-like', diet:'carn', color:'#f1c56a', outline:'#4e2c05', inner:'#ffe2a6', speed:0.7, sociality:0.6, behavior:'pack', metabolism:0.0024, satietyDecay:0.003, reproduction:{interval:1900, litter:[2,3]}, vision:5, coverAffinity:-0.05 },
+      capybara:{ name:'Wetland herb', diet:'herb', color:'#cdb18a', outline:'#302215', inner:'#f3e3c8', speed:0.45, sociality:0.4, behavior:'den', metabolism:0.0018, satietyDecay:0.0025, reproduction:{interval:1500, litter:[2,4]}, vision:3, coverAffinity:0.25 },
+      otter:{ name:'Otter-like', diet:'carn', color:'#9cc4ff', outline:'#0c1d32', inner:'#d7e7ff', speed:0.6, sociality:0.5, behavior:'ambush', metabolism:0.0021, satietyDecay:0.0028, reproduction:{interval:1600, litter:[1,2]}, vision:4, coverAffinity:0.15 }
+    };
 
-function chooseBirthCell(mother, preferShelter){
-  let best = {x:mother.x, y:mother.y, score:-Infinity};
-  for(let dy=-1;dy<=1;dy++){
-    for(let dx=-1;dx<=1;dx++){
-      const nx = (mother.x + dx + GRID) % GRID;
-      const ny = (mother.y + dy + GRID) % GRID;
-      const idx = ny * GRID + nx;
-      const terrainScore = terrain[idx] === TERRAIN.RIVER ? 1 : (terrain[idx] === TERRAIN.FOREST ? 0.65 : 0.2);
-      const plantScore = clampFloat(biomass[idx] / Math.max(1, P.plantK), 0, 1);
-      const shelter = preferShelter ? terrainScore * 1.25 : terrainScore;
-      const health = diseasePressure[idx] < 1 ? 0.25 : 0;
-      const score = shelter + plantScore + health;
-      if(score > best.score){
-        best = {x:nx, y:ny, score};
-      }
-    }
-  }
-  return {x: best.x, y: best.y};
-}
-
-function resolveIntraspeciesConflict(a, b, carnivore){
-  const aggression = carnivore ? 0.55 : 0.35;
-  const packEdge = (a.packId && b.packId && a.packId !== b.packId) ? 0.12 : 0;
-  const familyEdge = (a.familyId && b.familyId && a.familyId === b.familyId) ? -0.1 : 0;
-  const aScore = a.energy * 0.6 + (a.sex === 'M' ? 6 : 4) + rng()*6;
-  const bScore = b.energy * 0.6 + (b.sex === 'M' ? 6 : 4) + rng()*6 + familyEdge - packEdge;
-  const winner = (aScore + aggression) >= (bScore) ? a : b;
-  const loser = winner === a ? b : a;
-  loser.alive = false;
-  if(carnivore){
-    deathCarnConflict++;
-  } else {
-    deathHerbConflict++;
-  }
-  spawnEffect('death', loser.x, loser.y);
-  return winner;
-}
-
-/* ========= 初期化 ========= */
-function resetSim(){
-  readParamsFromUI();
-
-  currentSeed = getSeedString();
-  const seed32 = hash32FromString(currentSeed);
-  rng = mulberry32(seed32);
-  updateGrassToneMap(currentSeed);
-  updateTerrainMap(currentSeed);
-
-  step = 0;
-  running = false;
-  statusMessage = '停止中';
-  hideEndModal();
-  biomass.fill(0);
-  visualEffects = [];
-  stabilitySeries = [];
-  scoreState = {total:0, base:0, bioBonus:0, biodiversity:0, stability:0};
-  animals = {};
-  for(const sp of SPECIES_DEFS){
-    animals[sp.id] = [];
-  }
-  carnivoreAt = Array.from({length:N}, ()=>[]);
-  logs = [];
-  deathHerbStarve = 0;
-  deathCarnStarve = 0;
-  deathHerbEaten  = 0;
-  deathHerbAge = 0;
-  deathCarnAge = 0;
-  deathHerbConflict = 0;
-  deathCarnConflict = 0;
-  stepCarnStats = {predation:0, starve:0, age:0};
-  lastCarnStepStats = {predation:0, starve:0, age:0};
-  herbReproAttempts = 0;
-  herbReproSuccess = 0;
-  carnReproAttempts = 0;
-  carnReproSuccess = 0;
-  nextFamilyId = 1;
-  nextPackId = 1;
-  birthsHerbivore = 0;
-  birthsCarnivore = 0;
-  endReason = '';
-  peakCounts = {grass:0, herb:0, carn:0};
-  weatherState = getWeatherForStep(step);
-  updateClimateLayer();
-  occupancy.fill(0);
-  resetMatingStats();
-  finalizeMatingSnapshot();
-  slowdownUntilStep = 0;
-
-  // 草をランダム配置（重複を避けて指定数を確保）
-  let gPlaced = 0;
-  while(gPlaced < P.initGrass && gPlaced < N){
-    const idx = Math.floor(rng()*N);
-    if(biomass[idx] <= 0 && terrain[idx] !== TERRAIN.RIVER && terrain[idx] !== TERRAIN.ROCK){
-      biomass[idx] = P.plantK;
-      gPlaced++;
-    }
-  }
-
-  // 草食
-  for(const sp of activeHerbSpecies){
-    const setting = speciesSettings[sp.id] || {enabled:true, init:0};
-    const traits = getSpeciesTraits(sp);
-    for(let i=0;i<setting.init;i++){
-      const baseEnergy = Math.max(6, Math.floor(traits.reproduction * 0.5));
-      const famId = nextFamilyId++;
-      const packId = famId;
-      const spawnX = randInt(GRID);
-      const spawnY = randInt(GRID);
-      animals[sp.id].push({x: spawnX, y: spawnY, energy: baseEnergy + randInt(8), alive:true, age:0, speciesId: sp.id, sex: rng() < 0.5 ? 'F' : 'M', generation:1, familyId: famId, packId, homeX: spawnX, homeY: spawnY});
-      occupancy[spawnY * GRID + spawnX]++;
-    }
-  }
-
-  // 肉食
-  for(const sp of activeCarnSpecies){
-    const setting = speciesSettings[sp.id] || {enabled:true, init:0};
-    const traits = getSpeciesTraits(sp);
-    for(let i=0;i<setting.init;i++){
-      const baseEnergy = Math.max(10, Math.floor(traits.reproduction * 0.6));
-      const famId = nextFamilyId++;
-      const packId = nextPackId++;
-      const spawnX = randInt(GRID);
-      const spawnY = randInt(GRID);
-      animals[sp.id].push({x: spawnX, y: spawnY, energy: baseEnergy + randInt(10), alive:true, age:0, speciesId: sp.id, sex: rng() < 0.5 ? 'F' : 'M', generation:1, familyId: famId, packId, homeX: spawnX, homeY: spawnY});
-      occupancy[spawnY * GRID + spawnX]++;
-    }
-  }
-
-  peakCounts = getCounts();
-  updateDensityLayer();
-  resetChart();
-  // ログ初回（チャート初期点を残す）
-  pushLog();
-  refreshUI();
-}
-function randInt(n){ return Math.floor(rng()*n); }
-
-/* ========= 1ステップ更新 ========= */
-function tick(){
-  if(endReason) return;
-  step++;
-  stepCarnStats = {predation:0, starve:0, age:0};
-  resetMatingStats();
-
-  weatherState = getWeatherForStep(step);
-  updateClimateLayer();
-
-  if(step >= P.maxSteps){
-    applyEndCondition('最大ステップ到達');
-    return;
-  }
-
-  // 1) 草の成長：季節と降水・地形で成長率変動（ロジスティック増殖）
-  const tempComfort = Math.max(8, P.tempAmp * 1.2 + 10);
-  const tempSuit = clampFloat(1 - Math.abs(weatherState.temperature - P.avgTemp) / tempComfort, 0, 1.6);
-  const rainSuit = clampFloat(weatherState.rainfall / Math.max(30, P.avgRain), 0, 1.8);
-  const growthClimate = clampFloat((tempSuit * 0.55) + (rainSuit * 0.45), 0, 1.8);
-  for(let i=0;i<N;i++){
-    const t = terrain[i];
-    if(t === TERRAIN.RIVER || t === TERRAIN.ROCK){
-      biomass[i] = 0;
-      continue;
-    }
-    const terrainMult = terrainGrowthMultiplier(t);
-    const soilFactor = soilFertility[i];
-    const carrying = localPlantCapacity(i, t);
-    const g = P.grassGrowthRate * terrainMult * growthClimate * soilFactor * P.plantGrowthScale;
-    if(g > 0 && carrying > 0){
-      const growth = g * (1 - (biomass[i] / carrying)) * carrying;
-      biomass[i] = clampFloat(biomass[i] + growth, 0, carrying);
-    }
-    if(rainSuit < 0.5){
-      biomass[i] = clampFloat(biomass[i] - (0.12 * (0.5 - rainSuit)), 0, carrying);
-    }
-  }
-
-  let herbAliveCount = countAliveFor(activeHerbSpecies);
-  let carnAliveCount = countAliveFor(activeCarnSpecies);
-
-  occupancy.fill(0);
-  for(const sp of SPECIES_DEFS){
-    const list = animals[sp.id] || [];
-    for(const a of list){
-      if(a.alive){
-        occupancy[a.y * GRID + a.x]++;
-      }
-    }
-  }
-
-  // 2) 草食の行動：移動→採食→代謝→繁殖
-  for(const sp of activeHerbSpecies){
-    const traits = getSpeciesTraits(sp);
-    const spSetting = speciesSettings[sp.id] || {};
-    const list = animals[sp.id] || [];
-    for(const h of list){
-      if(!h.alive) continue;
-
-      const neighborCount = countSameSpeciesNeighbors(list, h, MATE_NEIGHBOR_RADIUS);
-      recordMatingSample('herb', h.energy, neighborCount);
-
-      const prevIdx = h.y * GRID + h.x;
-
-      h.age += 1;
-      if(h.age >= traits.maxAge){
-        h.alive = false;
-        herbAliveCount--;
-        deathHerbAge++;
-        spawnEffect('death', h.x, h.y);
-        occupancy[prevIdx] = Math.max(0, occupancy[prevIdx]-1);
-        continue;
-      }
-
-      const seekingEnergy = h.energy >= Math.max(4, traits.reproduction * 0.7);
-      h.mateSeeking = seekingEnergy;
-      const mateTarget = seekingEnergy ? findMateNear(list, h, MATE_SEARCH_RADIUS) : null;
-      const moveCost = moveTerrainAware(h, list, {social:true, territorial:false, target: mateTarget});
-
-      const currentIdx = h.y * GRID + h.x;
-      if(currentIdx !== prevIdx){
-        occupancy[prevIdx] = Math.max(0, occupancy[prevIdx]-1);
-        occupancy[currentIdx]++;
-      }
-
-      const affinity = terrainAffinityMultiplier(spSetting, currentIdx);
-      if(biomass[currentIdx] > 0){
-        const eat = Math.min(biomass[currentIdx], traits.gain);
-        biomass[currentIdx] -= eat;
-        h.energy += eat * affinity.gain;
-      }
-
-      const herbExtraCost = competitionExtraCost(herbAliveCount, P.herbK);
-      const weatherCost = Math.max(0, Math.abs(weatherState.temperature - P.avgTemp) * 0.05);
-      h.energy -= (traits.metabolism * affinity.metabolism + herbExtraCost + moveCost + weatherCost);
-      if(h.energy <= 0){
-        h.alive = false;
-        herbAliveCount--;
-        deathHerbStarve++;
-        spawnEffect('death', h.x, h.y);
-        occupancy[currentIdx] = Math.max(0, occupancy[currentIdx]-1);
-        continue;
-      }
-
-      const seasonFactor = reproductionSeasonMultiplier();
-      const reproThreshold = traits.reproduction * affinity.reproduction * Math.max(0.7, 1 / seasonFactor);
-      if(h.sex === 'F'){
-        if(h.energy < reproThreshold){
-          recordMatingBlocked('herb', 'energy');
-        } else {
-          herbReproAttempts++;
-          const mate = findMateNear(list, h, MATE_SEARCH_RADIUS);
-          if(!mate){
-            recordMatingBlocked('herb', 'mate');
-          }
-          const birthSpot = mate ? findEmptyNeighborCell(h.x, h.y, 2) : null;
-          if(mate && !birthSpot){
-            recordMatingBlocked('herb', 'space');
-          }
-          if(mate && birthSpot && competitionReproPass(herbAliveCount, P.herbK)){
-            recordMatingSuccess('herb');
-            herbReproSuccess++;
-            const reproCost = Math.max(2, Math.floor(traits.reproduction * 0.35));
-            h.energy = Math.max(1, h.energy - reproCost);
-            mate.energy = Math.max(1, mate.energy - reproCost);
-            const childEnergy = Math.max(4, Math.floor(traits.reproduction * 0.5));
-            const sex = rng() < 0.5 ? 'F' : 'M';
-            list.push({x:birthSpot.x, y:birthSpot.y, energy: childEnergy, alive:true, age:0, speciesId: sp.id, sex, generation: (h.generation || 1) + 1, familyId: h.familyId ?? nextFamilyId++, packId: h.packId ?? h.familyId ?? nextFamilyId++, homeX: h.homeX ?? h.x, homeY: h.homeY ?? h.y});
-            herbAliveCount++;
-            birthsHerbivore++;
-            occupancy[birthSpot.idx]++;
-            spawnHeartEffect(birthSpot.x, birthSpot.y);
-            triggerEventSlowdown('reproduction');
-          }
-        }
-      }
-    }
-  }
-
-  // 3) 草食のセル配置（肉食が捕食するため）
-  for(let i=0;i<N;i++) herbivoreAt[i].length = 0;
-  for(const sp of activeHerbSpecies){
-    const list = animals[sp.id] || [];
-    for(let i=0;i<list.length;i++){
-      const h = list[i];
-      if(!h.alive) continue;
-      const idx = h.y * GRID + h.x;
-      const slot = herbivoreAt[idx];
-      if(slot.length > 0){
-        const rivalRef = slot[0];
-        const rivalList = animals[rivalRef.sid];
-        const rival = rivalList && rivalList[rivalRef.idx];
-        if(rival && rival.alive){
-          const conflictChance = clampFloat(0.02 + (biomass[idx] < P.plantK * 0.25 ? 0.12 : 0) + (herbAliveCount > P.herbK ? 0.08 : 0) + (rival.familyId === h.familyId ? -0.04 : 0), 0.01, 0.35);
-          if(rng() < conflictChance){
-            const winner = resolveIntraspeciesConflict(h, rival, false);
-            herbAliveCount--;
-            occupancy[idx] = Math.max(0, occupancy[idx]-1);
-            if(winner === h){
-              slot[0] = {sid: sp.id, idx: i};
-            } else {
-              slot.length = 0;
-              slot.push(rivalRef);
-              continue;
-            }
-          }
-        }
-      }
-      slot.push({sid: sp.id, idx: i});
-    }
-  }
-
-  // 4) 肉食の行動：移動→捕食→代謝→繁殖
-  for(let i=0;i<N;i++) carnivoreAt[i].length = 0;
-  for(const sp of activeCarnSpecies){
-    const traits = getSpeciesTraits(sp);
-    const spSetting = speciesSettings[sp.id] || {};
-    const list = animals[sp.id] || [];
-    for(const c of list){
-      if(!c.alive) continue;
-
-      const neighborCount = countSameSpeciesNeighbors(list, c, MATE_NEIGHBOR_RADIUS);
-      recordMatingSample('carn', c.energy, neighborCount);
-
-      const prevIdx = c.y * GRID + c.x;
-
-      c.age += 1;
-      if(c.age >= traits.maxAge){
-        c.alive = false;
-        carnAliveCount--;
-        deathCarnAge++;
-        stepCarnStats.age++;
-        spawnEffect('death', c.x, c.y);
-        occupancy[prevIdx] = Math.max(0, occupancy[prevIdx]-1);
-        continue;
-      }
-
-      const huntTarget = findNearestHerbivoreTarget(c.x, c.y, HUNT_RADIUS);
-      const seekingEnergy = c.energy >= Math.max(6, traits.reproduction * 0.7);
-      c.mateSeeking = seekingEnergy;
-      const mateTarget = seekingEnergy ? findMateNear(list, c, MATE_SEARCH_RADIUS) : null;
-      const chosenTarget = huntTarget || mateTarget;
-      const moveCost = moveTerrainAware(c, list, {social:true, territorial:true, target: chosenTarget});
-
-      const idx = c.y * GRID + c.x;
-      if(idx !== prevIdx){
-        occupancy[prevIdx] = Math.max(0, occupancy[prevIdx]-1);
-        occupancy[idx]++;
-      }
-
-      const rivals = carnivoreAt[idx];
-      if(rivals.length > 0){
-        const rival = rivals[0];
-        if(rival && rival.alive){
-          const win = resolveIntraspeciesConflict(c, rival, true);
-          carnAliveCount--;
-          occupancy[idx] = Math.max(0, occupancy[idx]-1);
-          if(win === c){
-            rivals[0] = c;
-          } else {
-            continue;
-          }
-        }
-      } else {
-        rivals.push(c);
-      }
-      const affinity = terrainAffinityMultiplier(spSetting, idx);
-      const cellList = herbivoreAt[idx];
-      if(cellList.length > 0){
-        const preyRef = cellList.pop();
-        if(preyRef){
-          const preyList = animals[preyRef.sid];
-          const prey = preyList && preyList[preyRef.idx];
-          if(prey && prey.alive){
-            prey.alive = false;
-            deathHerbEaten++;
-            c.energy += traits.gain * affinity.gain;
-            stepCarnStats.predation++;
-            herbAliveCount--;
-            spawnEffect('predation', c.x, c.y);
-            triggerEventSlowdown('predation');
-            occupancy[idx] = Math.max(0, occupancy[idx]-1);
-          }
-        }
-      }
-
-      const carnExtraCost = competitionExtraCost(carnAliveCount, P.carnK);
-      const weatherCost = Math.max(0, Math.abs(weatherState.temperature - P.avgTemp) * 0.04);
-      if(cellList.length === 0){
-        const metabolicCost = traits.metabolism * affinity.metabolism * CARN_METABOLISM_SCALE;
-        c.energy -= (metabolicCost + carnExtraCost + moveCost + weatherCost);
-      } else {
-        const metabolicCost = traits.metabolism * affinity.metabolism * CARN_METABOLISM_SCALE * 0.5;
-        c.energy -= (carnExtraCost + moveCost + weatherCost + metabolicCost);
-      }
-      if(c.energy <= 0){
-        c.alive = false;
-        carnAliveCount--;
-        deathCarnStarve++;
-        stepCarnStats.starve++;
-        spawnEffect('death', c.x, c.y);
-        occupancy[idx] = Math.max(0, occupancy[idx]-1);
-        continue;
-      }
-
-        const seasonFactor = reproductionSeasonMultiplier();
-        const reproThreshold = traits.reproduction * affinity.reproduction * Math.max(0.75, 1 / seasonFactor);
-        if(c.sex === 'F'){
-          if(c.energy < reproThreshold){
-            recordMatingBlocked('carn', 'energy');
-          } else {
-            carnReproAttempts++;
-            const mate = findMateNear(list, c, MATE_SEARCH_RADIUS);
-            if(!mate){
-              recordMatingBlocked('carn', 'mate');
-            }
-            const birthSpot = mate ? findEmptyNeighborCell(c.x, c.y, 2) : null;
-            if(mate && !birthSpot){
-              recordMatingBlocked('carn', 'space');
-            }
-            if(mate && birthSpot && competitionReproPass(carnAliveCount, P.carnK)){
-              recordMatingSuccess('carn');
-              carnReproSuccess++;
-              const reproCost = Math.max(3, Math.floor(traits.reproduction * 0.4));
-              c.energy = Math.max(2, c.energy - reproCost);
-              mate.energy = Math.max(2, mate.energy - reproCost);
-              const childEnergy = Math.max(6, Math.floor(traits.reproduction * 0.55));
-              const sex = rng() < 0.5 ? 'F' : 'M';
-              list.push({x:birthSpot.x, y:birthSpot.y, energy: childEnergy, alive:true, age:0, speciesId: sp.id, sex, generation: (c.generation || 1) + 1, familyId: c.familyId ?? nextFamilyId++, packId: c.packId ?? nextPackId++, homeX: c.homeX ?? birthSpot.x, homeY: c.homeY ?? birthSpot.y});
-              carnAliveCount++;
-              birthsCarnivore++;
-              occupancy[birthSpot.idx]++;
-              spawnHeartEffect(birthSpot.x, birthSpot.y);
-              triggerEventSlowdown('reproduction');
-            }
-          }
-        }
-    }
-  }
-
-  // 5) 死体除去（配列を軽く保つ）
-  if(step % 10 === 0){
-    for(const sp of SPECIES_DEFS){
-      if(animals[sp.id]) animals[sp.id] = animals[sp.id].filter(a=>a.alive);
-    }
-  }
-
-  finalizeMatingSnapshot();
-  lastCarnStepStats = {...stepCarnStats};
-  // 6) ログ
-  if(step % logEvery === 0) pushLog();
-  updateDensityLayer();
-
-  // 7) 終了チェック
-  const counts = getCounts();
-  peakCounts.grass = Math.max(peakCounts.grass, counts.grass);
-  peakCounts.herb = Math.max(peakCounts.herb, counts.herb);
-  peakCounts.carn = Math.max(peakCounts.carn, counts.carn);
-  if(autoSlowdownEnabled && (counts.herb <= 5 || counts.carn <= 3)){
-    triggerEventSlowdown('low-pop');
-  }
-  checkEndConditions(counts);
-}
-
-function checkEndConditions(counts){
-  if(endReason) return;
-  const herbRequired = activeHerbSpecies.length > 0;
-  const carnRequired = activeCarnSpecies.length > 0;
-  if(P.endCondition === 'anyExtinct'){
-    if(counts.grass === 0){
-      applyEndCondition('草が絶滅');
-      return;
-    }
-    if(herbRequired && counts.herb === 0){
-      applyEndCondition('草食が絶滅');
-      return;
-    }
-    if(carnRequired && counts.carn === 0){
-      applyEndCondition('肉食が絶滅');
-      return;
-    }
-  } else if(P.endCondition === 'animalExtinct'){
-    if(herbRequired && counts.herb === 0){
-      applyEndCondition('草食が絶滅');
-      return;
-    }
-    if(carnRequired && counts.carn === 0){
-      applyEndCondition('肉食が絶滅');
-      return;
-    }
-  } else if(P.endCondition === 'totalExtinct'){
-    if(counts.grass === 0 && counts.herb === 0 && counts.carn === 0){
-      applyEndCondition('全生物が絶滅');
-      return;
-    }
-  }
-  if(step >= P.maxSteps){
-    applyEndCondition('最大ステップ到達');
-  }
-}
-
-function applyEndCondition(reason){
-  endReason = reason;
-  running = false;
-  statusMessage = `終了：${reason}`;
-  el('btnStart').textContent = '開始';
-  pushLog();
-  refreshUI();
-  const counts = getCounts();
-  showEndModal(counts);
-}
-
-function showEndModal(counts){
-  updateScore(counts, false);
-  el('modalReason').textContent = endReason || '-';
-  el('modalSteps').textContent = String(step);
-  el('modalCounts').textContent = `草${counts.grass} / 草食${counts.herb} / 肉食${counts.carn}`;
-  el('modalDeaths').textContent = `草食:飢餓${deathHerbStarve} 捕食${deathHerbEaten} 老衰${deathHerbAge} 衝突${deathHerbConflict} / 肉食:飢餓${deathCarnStarve} 老衰${deathCarnAge} 衝突${deathCarnConflict}`;
-  el('modalScore').textContent = `${scoreState.total}`;
-  el('modalScoreDetail').textContent = scoreBreakdownText();
-  activateOverlay(el('endModal'));
-}
-function hideEndModal(){
-  deactivateOverlay(el('endModal'));
-}
-
-function getCounts(){
-  let totalBiomass = 0;
-  for(let i=0;i<N;i++) totalBiomass += biomass[i];
-  let hCount = 0;
-  let cCount = 0;
-  const species = {};
-  for(const sp of SPECIES_DEFS){
-    let sCount = 0;
-    const list = animals[sp.id] || [];
-    for(const a of list){ if(a.alive) sCount++; }
-    species[sp.id] = sCount;
-    if(sp.diet === 'herbivore') hCount += sCount; else cCount += sCount;
-  }
-  return {grass: Math.round(totalBiomass), biomassTotal: totalBiomass, herb:hCount, carn:cCount, species};
-}
-
-function getDemography(){
-  let herbM = 0, herbF = 0, carnM = 0, carnF = 0;
-  const herbFamilies = new Set();
-  const carnFamilies = new Set();
-  const herbPacks = new Set();
-  const carnPacks = new Set();
-  for(const sp of SPECIES_DEFS){
-    const list = animals[sp.id] || [];
-    for(const a of list){
-      if(!a.alive) continue;
-      if(a.sex === 'M'){
-        if(sp.diet === 'herbivore') herbM++; else carnM++;
-      } else if(a.sex === 'F') {
-        if(sp.diet === 'herbivore') herbF++; else carnF++;
-      }
-      if(a.familyId){
-        if(sp.diet === 'herbivore') herbFamilies.add(a.familyId); else carnFamilies.add(a.familyId);
-      }
-      if(a.packId){
-        if(sp.diet === 'herbivore') herbPacks.add(a.packId); else carnPacks.add(a.packId);
-      }
-    }
-  }
-  return {herbM, herbF, carnM, carnF, herbFamilies: herbFamilies.size, carnFamilies: carnFamilies.size, herbPacks: herbPacks.size, carnPacks: carnPacks.size};
-}
-
-function pushLog(){
-  const counts = getCounts();
-  updateScore(counts, true);
-  const herbRate = herbReproAttempts > 0 ? herbReproSuccess / herbReproAttempts : '';
-  const carnRate = carnReproAttempts > 0 ? carnReproSuccess / carnReproAttempts : '';
-  const mating = lastMatingSnapshot || finalizeMatingSnapshot();
-  logs.push({
-    schema_version: SCHEMA_VERSION,
-    seed: currentSeed,
-    step,
-    grass: counts.grass,
-    herb: counts.herb,
-    carn: counts.carn,
-    death_herb_starve: deathHerbStarve,
-    death_herb_eaten: deathHerbEaten,
-    death_carn_starve: deathCarnStarve,
-    death_herb_age: deathHerbAge,
-    death_carn_age: deathCarnAge,
-    carn_predation_step: lastCarnStepStats.predation,
-    carn_starve_step: lastCarnStepStats.starve,
-    carn_age_step: lastCarnStepStats.age,
-    death_herb_conflict: deathHerbConflict,
-    death_carn_conflict: deathCarnConflict,
-    herb_mating_attempts: mating.herb?.attempts ?? 0,
-    herb_mating_success: mating.herb?.success ?? 0,
-    herb_blocked_no_space: mating.herb?.blockedNoSpace ?? 0,
-    herb_blocked_no_mate: mating.herb?.blockedNoMate ?? 0,
-    herb_blocked_low_energy: mating.herb?.blockedLowEnergy ?? 0,
-    herb_avg_neighbors: (mating.herb?.avgNeighbors ?? 0).toFixed(2),
-    herb_avg_energy: (mating.herb?.avgEnergy ?? 0).toFixed(2),
-    carn_mating_attempts: mating.carn?.attempts ?? 0,
-    carn_mating_success: mating.carn?.success ?? 0,
-    carn_blocked_no_space: mating.carn?.blockedNoSpace ?? 0,
-    carn_blocked_no_mate: mating.carn?.blockedNoMate ?? 0,
-    carn_blocked_low_energy: mating.carn?.blockedLowEnergy ?? 0,
-    carn_avg_neighbors: (mating.carn?.avgNeighbors ?? 0).toFixed(2),
-    carn_avg_energy: (mating.carn?.avgEnergy ?? 0).toFixed(2),
-    herb_K: P.herbK,
-    carn_K: P.carnK,
-    competition_enabled: P.competition ? 1 : 0,
-    herb_repro_success_rate: herbRate,
-    carn_repro_success_rate: carnRate,
-    births_herbivore: birthsHerbivore,
-    births_carnivore: birthsCarnivore,
-    biomass_total: counts.biomassTotal.toFixed(2),
-    temperature: weatherState.temperature.toFixed(2),
-    rainfall: weatherState.rainfall.toFixed(2),
-    season_name: weatherState.season,
-    species_counts: counts.species,
-  });
-  pushChartPoint(step, counts.grass, counts.herb, counts.carn);
-  herbReproAttempts = 0;
-  herbReproSuccess = 0;
-  carnReproAttempts = 0;
-  carnReproSuccess = 0;
-  birthsHerbivore = 0;
-  birthsCarnivore = 0;
-}
-function updateScore(counts, recordSample){
-  if(recordSample){
-    const signal = counts.herb + counts.carn + counts.grass * 0.02;
-    stabilitySeries.push(signal);
-    if(stabilitySeries.length > MAX_STABILITY_SAMPLES) stabilitySeries.shift();
-  }
-  const biodiversity = Object.values(counts.species).filter(v=>v>0).length;
-  const base = step;
-  const bioBonus = biodiversity * SCORE_BIO_BONUS;
-  let stability = SCORE_STABILITY_BASE;
-  if(stabilitySeries.length > 1){
-    const mean = stabilitySeries.reduce((a,b)=>a+b,0) / stabilitySeries.length;
-    const variance = stabilitySeries.reduce((a,b)=>a+Math.pow(b-mean,2),0) / stabilitySeries.length;
-    stability = Math.max(0, SCORE_STABILITY_BASE - variance * 0.1);
-  }
-  scoreState = {total: Math.round(base + bioBonus + stability), base, bioBonus, biodiversity, stability: Math.round(stability)};
-}
-
-function refreshUI(){
-  const counts = getCounts();
-  updateScore(counts, false);
-  updateLegendCounts(counts);
-  renderGenerationStats();
-  el('outStep').textContent = String(step);
-  el('outSeed').textContent = currentSeed;
-  el('outGrass').textContent = String(counts.grass);
-  el('outHerb').textContent  = String(counts.herb);
-  el('outCarn').textContent  = String(counts.carn);
-  el('outSeason').textContent = weatherState.season;
-  el('outTemp').textContent = `${weatherState.temperature.toFixed(1)}℃`;
-  el('outRain').textContent = `${weatherState.rainfall.toFixed(1)} mm`;
-  const scenarioStatus = statusMessage.startsWith('シナリオ:');
-  if(running){
-    statusMessage = '実行中';
-  } else if(!endReason && !scenarioStatus) {
-    statusMessage = '停止中';
-  }
-  const statusEl = el('outStatus');
-  statusEl.textContent = statusMessage;
-  if(endReason){
-    statusEl.style.background = '#402030';
-    statusEl.style.borderColor = '#6e3b52';
-  } else if(running){
-    statusEl.style.background = '#1f3c5d';
-    statusEl.style.borderColor = '#2d5f87';
-  } else {
-    statusEl.style.background = '#132235';
-    statusEl.style.borderColor = '#2a3a52';
-  }
-  el('outEndReason').textContent = endReason || '-';
-  el('outTotalStep').textContent = String(step);
-  el('outFinalCounts').textContent = `草${counts.grass} / 草食${counts.herb} / 肉食${counts.carn}`;
-  el('outPeakCounts').textContent = `草${peakCounts.grass} / 草食${peakCounts.herb} / 肉食${peakCounts.carn}`;
-  el('outDeaths').textContent = `草食:飢餓${deathHerbStarve} 捕食${deathHerbEaten} 老衰${deathHerbAge} 衝突${deathHerbConflict} / 肉食:飢餓${deathCarnStarve} 老衰${deathCarnAge} 衝突${deathCarnConflict}`;
-  el('outScore').textContent = String(scoreState.total);
-  el('outScoreDetail').textContent = scoreBreakdownText();
-  const demo = getDemography();
-  el('outHerbSex').textContent = `${demo.herbM}:${demo.herbF}`;
-  el('outCarnSex').textContent = `${demo.carnM}:${demo.carnF}`;
-  el('outCarnEvents').textContent = `捕食${lastCarnStepStats.predation} / 飢餓${lastCarnStepStats.starve} / 老衰${lastCarnStepStats.age}`;
-  el('outHerbGroup').textContent = `${demo.herbFamilies}家系 / 群${demo.herbPacks}`;
-  el('outCarnTerritory').textContent = `群${demo.carnPacks} / 衝突${deathCarnConflict}`;
-  const mating = lastMatingSnapshot || finalizeMatingSnapshot();
-  if(mating?.herb){
-    el('outHerbMating').textContent = `試行${mating.herb.attempts} / 成立${mating.herb.success}`;
-    el('outHerbMatingDetail').textContent = `空き${mating.herb.blockedNoSpace} / 相手${mating.herb.blockedNoMate} / 低エネ${mating.herb.blockedLowEnergy} | 近傍${(mating.herb.avgNeighbors ?? 0).toFixed(1)} 平均E${(mating.herb.avgEnergy ?? 0).toFixed(1)}`;
-  }
-  if(mating?.carn){
-    el('outCarnMating').textContent = `試行${mating.carn.attempts} / 成立${mating.carn.success}`;
-    el('outCarnMatingDetail').textContent = `空き${mating.carn.blockedNoSpace} / 相手${mating.carn.blockedNoMate} / 低エネ${mating.carn.blockedLowEnergy} | 近傍${(mating.carn.avgNeighbors ?? 0).toFixed(1)} 平均E${(mating.carn.avgEnergy ?? 0).toFixed(1)}`;
-  }
-  el('outSpeedMode').textContent = speedMode === 'turbo' ? 'ターボ' : '通常';
-  el('outSpeedDetail').textContent = `自動減速: ${autoSlowdownEnabled ? 'ON' : 'OFF'} / step=${speedMode === 'turbo' ? turboTickPerFrame : 1}`;
-}
-
-function updateSpeedButtons(){
-  const normalBtn = el('btnSpeedNormal');
-  const turboBtn = el('btnSpeedTurbo');
-  if(normalBtn) normalBtn.classList.toggle('active', speedMode === 'normal');
-  if(turboBtn) turboBtn.classList.toggle('active', speedMode === 'turbo');
-  const autoSlowChk = el('chkAutoSlow');
-  if(autoSlowChk) autoSlowChk.checked = autoSlowdownEnabled;
-}
-
-/* ========= Chart.js ========= */
-let chart = null;
-function resetChart(){
-  if(!depsReady) return;
-  const chartEl = el('chart');
-  if(!chartEl){
-    logDebug('chart element missing');
-    return;
-  }
-  const ctx = chartEl.getContext('2d');
-  if(chart) chart.destroy();
-  chart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: [],
-      datasets: [
-        {label:'草', data:[], tension:0.2, borderColor:'#3daa65', backgroundColor:'rgba(61,170,101,0.20)'},
-        {label:'草食',  data:[], tension:0.2, borderColor:'#5aa2f7', backgroundColor:'rgba(90,162,247,0.20)'},
-        {label:'肉食',  data:[], tension:0.2, borderColor:'#e45a5a', backgroundColor:'rgba(228,90,90,0.20)'},
-      ]
-    },
-    options: {
-      responsive:true,
-      animation:false,
-      scales: {
-        x: { ticks:{maxTicksLimit:10} },
-        y: { beginAtZero:true }
+    const presets = {
+      temperate: {
+        label:'温帯森林',
+        description:'Four seasons, browse-rich understory, wolves pack up in late winter.',
+        climate:{ temp: [10,18,12,2], rain:[0.22,0.32,0.25,0.16] },
+        animals:[
+          { species:'deer', count:32 },
+          { species:'wolf', count:12 },
+        ],
+        terrain: { forest:0.34, shrub:0.18, wetland:0.08, water:0.08, rock:0.08, sand:0.02 }
       },
-      plugins: {
-        legend: { labels:{ color:'#c9d6e2' } }
+      savanna: {
+        label:'サバンナ',
+        description:'Long dry season, explosive wet growth; lions cooperate around water holes.',
+        climate:{ temp:[24,31,27,19], rain:[0.1,0.32,0.07,0.04] },
+        animals:[
+          { species:'zebra', count:34 },
+          { species:'lion', count:14 },
+        ],
+        terrain: { grass:0.34, shrub:0.2, sand:0.14, water:0.08, rock:0.05, wetland:0.05 }
+      },
+      wetland: {
+        label:'湿地',
+        description:'Expansive marsh with rocky dens; otters ambush along reeds.',
+        climate:{ temp:[18,24,15,9], rain:[0.32,0.44,0.28,0.22] },
+        animals:[
+          { species:'capybara', count:28 },
+          { species:'otter', count:12 },
+        ],
+        terrain: { wetland:0.34, water:0.18, forest:0.16, rock:0.09, grass:0.1, shrub:0.05 }
       }
+    };
+
+    const state = {
+      running:false,
+      season:0,
+      temp:12,
+      rain:0,
+      score:0,
+      animals:[],
+      plants:[],
+      terrain:[],
+      dens: new Set(),
+      reproductionEvents:[],
+      huntEvents:[],
+      view:{ scale:1, offsetX:0, offsetY:0 },
+      gridW:72,
+      gridH:44,
+      tile:18,
+      climate: presets.temperate.climate,
+      endAllExtinct:false,
+    };
+
+    const legendEntries = [
+      ...terrainTypes.map(t=>({label:t.name, color:t.color})),
+      { label:'Herbivore', color:'#9be070' },
+      { label:'Carnivore', color:'#ff9f70' },
+      { label:'Den', color:'#f5d97a' }
+    ];
+
+    function renderLegend(){
+      legendList.innerHTML = '';
+      legendEntries.forEach(t => {
+        const row = document.createElement('div');
+        row.className = 'legend-row';
+        row.innerHTML = `<span class="legend-swatch" style="background:${t.color}"></span><span>${t.label}</span>`;
+        legendList.appendChild(row);
+      });
     }
-  });
-  startupChecks.chart = true;
-}
-function pushChartPoint(step, g, h, c){
-  if(!depsReady || !chart) return;
-  // グラフは重くしないため、ログ間隔でのみ更新（logsと同じタイミング）
-  chart.data.labels.push(step);
-  chart.data.datasets[0].data.push(g);
-  chart.data.datasets[1].data.push(h);
-  chart.data.datasets[2].data.push(c);
+    renderLegend();
 
-  const maxPoints = 300;
-  if(chart.data.labels.length > maxPoints){
-    chart.data.labels.shift();
-    for(const ds of chart.data.datasets) ds.data.shift();
-  }
-  chart.update('none');
-}
+    /* Core sim helpers */
+    const clamp01 = (v) => Math.min(1, Math.max(0, v));
+    const randBetween = (min,max) => min + Math.random()*(max-min);
+    const wrap = (v, max) => (v + max) % max;
 
-/* ========= CSV出力 ========= */
-function downloadCSV(){
-  if(logs.length === 0) return;
-
-  const header = [
-    "schema_version","seed","step",
-    "grass_count","herbivore_count","carnivore_count",
-    "death_herbivore_starve","death_herbivore_eaten","death_carnivore_starve","death_herbivore_age","death_carnivore_age",
-    "births_herbivore","births_carnivore",
-    "herb_mating_attempts","herb_mating_success","herb_blocked_no_space","herb_blocked_no_mate","herb_blocked_low_energy","herb_avg_neighbors","herb_avg_energy",
-    "carn_mating_attempts","carn_mating_success","carn_blocked_no_space","carn_blocked_no_mate","carn_blocked_low_energy","carn_avg_neighbors","carn_avg_energy",
-    "herb_K","carn_K","competition_enabled","herb_repro_success_rate","carn_repro_success_rate",
-    "biomass_total","temperature","rainfall","season_name",
-    ...SPECIES_DEFS.map(sp=>`${sp.id}_count`)
-  ].join(",");
-
-  const rows = logs.map(r => [
-    r.schema_version, JSON.stringify(r.seed), r.step,
-    r.grass, r.herb, r.carn,
-    r.death_herb_starve, r.death_herb_eaten, r.death_carn_starve, r.death_herb_age, r.death_carn_age,
-    r.births_herbivore, r.births_carnivore,
-    r.herb_mating_attempts, r.herb_mating_success, r.herb_blocked_no_space, r.herb_blocked_no_mate, r.herb_blocked_low_energy, r.herb_avg_neighbors, r.herb_avg_energy,
-    r.carn_mating_attempts, r.carn_mating_success, r.carn_blocked_no_space, r.carn_blocked_no_mate, r.carn_blocked_low_energy, r.carn_avg_neighbors, r.carn_avg_energy,
-    r.herb_K, r.carn_K, r.competition_enabled, r.herb_repro_success_rate, r.carn_repro_success_rate,
-    r.biomass_total, r.temperature, r.rainfall, r.season_name,
-    ...SPECIES_DEFS.map(sp=> r.species_counts ? r.species_counts[sp.id] : '')
-  ].join(","));
-
-  const csv = [header, ...rows].join("\n");
-  const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
-  const ts = new Date().toISOString().replace(/[:.]/g,'-');
-  const name = `simulation_log_${ts}.csv`;
-
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-}
-
-function buildResultText(){
-  const counts = getCounts();
-  const lines = [
-    `終了理由: ${endReason || '未終了'}`,
-    `総ステップ: ${step}`,
-    `最終個体数: 草${counts.grass} / 草食${counts.herb} / 肉食${counts.carn}`,
-    `最大個体数: 草${peakCounts.grass} / 草食${peakCounts.herb} / 肉食${peakCounts.carn}`,
-    `死亡内訳: 草食(飢餓${deathHerbStarve} 捕食${deathHerbEaten} 老衰${deathHerbAge} 衝突${deathHerbConflict}) / 肉食(飢餓${deathCarnStarve} 老衰${deathCarnAge} 衝突${deathCarnConflict})`,
-    `スコア: ${scoreState.total} (${scoreBreakdownText()})`,
-    `種別カウント: ${SPECIES_DEFS.map(sp=>`${sp.nameJP}:${counts.species[sp.id] ?? 0}`).join(' / ')}`
-  ];
-  return lines.join('\n');
-}
-function copyResult(){
-  const txt = buildResultText();
-  navigator.clipboard?.writeText(txt);
-}
-function copyScoreShare(){
-  const txt = buildScoreShareText();
-  navigator.clipboard?.writeText(txt);
-}
-
-/* ========= p5.js 描画 ========= */
-function setupP5(){
-if(!depsReady){
-  logDebug('p5 unavailable, skipping main renderer');
-  return;
-}
-new p5((p)=>{
-  p.setup = () => {
-    const cnv = p.createCanvas(canvasSize, canvasSize);
-    cnv.parent("p5-container");
-    p.frameRate(30);
-    p5Instance = p;
-    startupChecks.canvas = true;
-    updateStartupBanner();
-  };
-
-  p.draw = () => {
-    // 速度反映
-    readParamsFromUI();
-
-    // 進行
-    if(running){
-      const shouldSlow = autoSlowdownEnabled && step < slowdownUntilStep;
-      const ticksThisFrame = shouldSlow ? 1 : (speedMode === 'turbo' ? turboTickPerFrame : tickPerFrame);
-      for(let t=0;t<ticksThisFrame;t++) tick();
-      if(!shouldSlow && slowdownUntilStep > 0 && step >= slowdownUntilStep){
-        slowdownUntilStep = 0;
+    function createTerrain(weights){
+      const cumulative = [];
+      let sum = 0;
+      const keys = Object.keys(weights);
+      keys.forEach(k=>{ sum += weights[k]; cumulative.push({key:k, end:sum}); });
+      const total = sum || 1;
+      const arr=[];
+      for(let i=0;i<state.gridW*state.gridH;i++){
+        const r = Math.random()*total;
+        const found = cumulative.find(c=>r<=c.end) || cumulative[cumulative.length-1];
+        arr.push(found.key);
       }
+      return arr;
     }
 
-    // 背景
-    p.background(10, 16, 24);
-
-    // 地形 + 草バイオマス（セル塗り：濃淡＋段階表現）
-    p.noStroke();
-    for(let y=0;y<GRID;y++){
-      for(let x=0;x<GRID;x++){
-        const idx = y*GRID + x;
-        const t = terrain[idx];
-        const tone = grassTone[idx] * 0.4;
-        const bio = biomass[idx];
-        const pat = terrainPattern[idx];
-
-        if(overlayMode === 'soil' || overlayMode === 'terrain'){
-          const colorMap = {
-            [TERRAIN.GRASSLAND]: [40, 92, 58],
-            [TERRAIN.ROCK]: [110, 116, 124],
-            [TERRAIN.RIVER]: [40, 122, 180],
-            [TERRAIN.FOREST]: [30, 96, 66],
-          };
-          const base = colorMap[t] || [44, 84, 62];
-          p.fill(base[0], base[1], base[2]);
-          p.rect(x*cellSize, y*cellSize, cellSize, cellSize);
-          drawTerrainPattern(p, x, y, t, pat);
-        } else if(overlayMode === 'flora' || overlayMode === 'plant'){
-          const ratio = clampFloat(bio / Math.max(1, P.plantK), 0, 1.2);
-          const r = 30 + ratio * 50;
-          const g = 70 + ratio * 150;
-          const b = 40 + ratio * 60;
-          p.fill(r, g, b, 220);
-          p.rect(x*cellSize, y*cellSize, cellSize, cellSize);
-        } else if(overlayMode === 'climate' || overlayMode === 'temp' || overlayMode === 'rain'){
-          const humid = climateLayer[idx];
-          const hazard = diseasePressure[idx];
-          const blend = clampFloat((humid * 0.6 + hazard * 0.8) / 3, 0, 1.2);
-          const r = 40 + 120 * blend + hazard * 30;
-          const g = 90 + 100 * (humid / 2.2);
-          const b = 120 + 90 * (1 - Math.abs(0.6 - blend));
-          p.fill(r, g, b, 215);
-          p.rect(x*cellSize, y*cellSize, cellSize, cellSize);
-        } else {
-          let base = [32, 70, 50];
-          if(t === TERRAIN.ROCK) base = [72, 78, 84];
-          else if(t === TERRAIN.RIVER) base = [38, 90, 140];
-          else if(t === TERRAIN.FOREST) base = [26, 68, 44];
-          p.fill(base[0] + tone*0.08, base[1] + tone*0.12, base[2] + tone*0.10);
-          p.rect(x*cellSize, y*cellSize, cellSize, cellSize);
-          drawTerrainPattern(p, x, y, t, pat);
-          if(bio > 0){
-            const ratio = clampFloat(bio / P.plantK, 0, 1);
-            const r = 40 + tone * 0.15;
-            const g = 120 + tone * 0.9;
-            const b = 66 + tone * 0.32;
-            p.fill(r, g, b, 180);
-            p.rect(x*cellSize, y*cellSize, cellSize, cellSize);
-            if(ratio > 0.5){
-              p.fill(r + 16, g + 10, b + 8, 200);
-              p.rect(x*cellSize, y*cellSize, cellSize, cellSize * (0.35 + ratio*0.4));
-            }
-          }
+    function setupDens(){
+      state.dens.clear();
+      for(let i=0;i<state.terrain.length;i++){
+        const t = terrainTypes.find(tt=>tt.key===state.terrain[i]);
+        if(!t || t.isWater || t.isRock) continue;
+        if(t.key==='rock' || t.key==='forest'){
+          if(Math.random()<0.06) state.dens.add(i);
+        } else if(t.key==='shrub' && Math.random()<0.04){
+          state.dens.add(i);
         }
       }
     }
 
-    // 草食（エネルギーでサイズ変化）
-    for(const sp of activeHerbSpecies){
-      p.push();
-      if(effectsEnabled){
-        p.drawingContext.shadowBlur = 12;
-        p.drawingContext.shadowColor = `rgba(${sp.color[0]},${sp.color[1]},${sp.color[2]},0.55)`;
-      }
-      p.stroke(245);
-      p.strokeWeight(2.2);
-      p.fill(...sp.color);
-      const list = animals[sp.id] || [];
-      const traits = getSpeciesTraits(sp);
-      for(const h of list){
-        if(!h.alive) continue;
-        const size = getEnergySize(h.energy, cellSize*0.60, traits.reproduction);
-        const cx = (h.x+0.5)*cellSize;
-        const cy = (h.y+0.5)*cellSize;
-        p.circle(cx, cy, size);
-        drawGenerationLabel(p, cx, cy, h.generation || 1, [230, 240, 250]);
-      }
-      p.pop();
+    function initPlants(){
+      state.plants = state.terrain.map(t => {
+        const terrain = terrainTypes.find(tt=>tt.key===t);
+        if(terrain.isWater || terrain.isRock) return 0;
+        return randBetween(0.2, terrain.plantK);
+      });
     }
 
-    // 肉食（三角形）：輪郭つき
-    for(const sp of activeCarnSpecies){
-      p.push();
-      if(effectsEnabled){
-        p.drawingContext.shadowBlur = 12;
-        p.drawingContext.shadowColor = `rgba(${sp.color[0]},${sp.color[1]},${sp.color[2]},0.55)`;
-      }
-      p.stroke(245);
-      p.strokeWeight(2.3);
-      p.fill(...sp.color);
-      const list = animals[sp.id] || [];
-      const traits = getSpeciesTraits(sp);
-      for(const c of list){
-        if(!c.alive) continue;
-        const size = getEnergySize(c.energy, cellSize*0.70, traits.reproduction);
-        const cx = (c.x+0.5)*cellSize;
-        const cy = (c.y+0.5)*cellSize;
-        drawTriangle(p, cx, cy, size);
-        drawGenerationLabel(p, cx, cy, c.generation || 1, [250, 220, 235]);
-      }
-      p.pop();
+    function spawnAnimals(animalDefs){
+      state.animals = [];
+      animalDefs.forEach(def => {
+        const sp = speciesLibrary[def.species];
+        if(!sp) return;
+        for(let i=0;i<def.count;i++){
+          state.animals.push(makeAnimal(def.species));
+        }
+      });
     }
 
-    p.noStroke();
-
-    // 格子（薄く）
-    p.stroke(22, 32, 46);
-    p.strokeWeight(1);
-    for(let i=0;i<=GRID;i++){
-      p.line(i*cellSize, 0, i*cellSize, canvasSize);
-      p.line(0, i*cellSize, canvasSize, i*cellSize);
+    function makeAnimal(speciesKey){
+      const sp = speciesLibrary[speciesKey];
+      return {
+        id:crypto.randomUUID(),
+        species: speciesKey,
+        diet: sp.diet,
+        x: Math.random()*state.gridW,
+        y: Math.random()*state.gridH,
+        vx: randBetween(-0.2,0.2),
+        vy: randBetween(-0.2,0.2),
+        energy: 1,
+        satiety: 0.6,
+        age: 0,
+        lastBreed:0,
+      };
     }
 
-    refreshUI();
-  };
-});
-}
+    function applyPreset(key){
+      const preset = presets[key];
+      if(!preset) return;
+      state.climate = preset.climate;
+      state.season = 0; state.score = 0; state.temp = preset.climate.temp[0]; state.rain = preset.climate.rain[0];
+      state.terrain = createTerrain(preset.terrain);
+      setupDens();
+      initPlants();
+      spawnAnimals(preset.animals);
+      renderSummary();
+      updateHUD();
+      const note = preset.description || '';
+      document.getElementById('presetInfo').textContent = `Preset: ${preset.label}${note ? ' — ' + note : ''}`;
+    }
 
-/* ========= 設定モーダル ========= */
-const settingsBackdrop = el('settingsBackdrop');
-const settingsModal = el('settingsModal');
-let modalMaximized = false;
-let modalSavedRect = null;
-function openSettingsModal(){
-  activateOverlay(settingsBackdrop);
-  settingsModal.setAttribute('aria-hidden', 'false');
-}
-function closeSettingsModal(){
-  deactivateOverlay(settingsBackdrop);
-  settingsModal.setAttribute('aria-hidden', 'true');
-  if(modalMaximized) toggleModalMaximize();
-}
-function toggleModalMaximize(){
-  modalMaximized = !modalMaximized;
-  if(modalMaximized){
-    modalSavedRect = {
-      width: settingsModal.style.width,
-      height: settingsModal.style.height,
-      top: settingsModal.style.top,
-      left: settingsModal.style.left,
-      transform: settingsModal.style.transform,
+    presetButtons.forEach(btn => btn.addEventListener('click', ()=>{
+      applyPreset(btn.dataset.preset);
+      state.running = true;
+    }));
+
+    function renderBehaviorControls(){
+      behaviorControls.innerHTML = '';
+      Object.entries(speciesLibrary).forEach(([key, sp]) => {
+        const row = document.createElement('div');
+        row.style.display = 'grid';
+        row.style.gridTemplateColumns = '140px 1fr';
+        row.style.alignItems = 'center';
+        const label = document.createElement('div');
+        label.textContent = sp.name;
+        const select = document.createElement('select');
+        ['herd','pack','ambush','den','wander'].forEach(mode => {
+          const opt = document.createElement('option');
+          opt.value = mode; opt.textContent = mode;
+          if(sp.behavior===mode) opt.selected = true;
+          select.appendChild(opt);
+        });
+        select.addEventListener('change', ()=>{
+          speciesLibrary[key].behavior = select.value;
+        });
+        row.appendChild(label); row.appendChild(select);
+        behaviorControls.appendChild(row);
+      });
+    }
+    renderBehaviorControls();
+
+    const hudEls = {
+      pop: document.getElementById('hudPop'),
+      season: document.getElementById('hudSeason'),
+      temp: document.getElementById('hudTemp'),
+      rain: document.getElementById('hudRain'),
+      score: document.getElementById('hudScore'),
     };
-    settingsModal.classList.add('max');
-    settingsModal.style.width = '90vw';
-    settingsModal.style.height = '90vh';
-    settingsModal.style.top = '5vh';
-    settingsModal.style.left = '5vw';
-    settingsModal.style.transform = 'none';
-  } else {
-    settingsModal.classList.remove('max');
-    if(modalSavedRect){
-      settingsModal.style.width = modalSavedRect.width || '';
-      settingsModal.style.height = modalSavedRect.height || '';
-      settingsModal.style.top = modalSavedRect.top || '50%';
-      settingsModal.style.left = modalSavedRect.left || '50%';
-      settingsModal.style.transform = modalSavedRect.transform || 'translate(-50%,-50%)';
+
+    function updateHUD(){
+      hudEls.pop.textContent = state.animals.length;
+      hudEls.season.textContent = ['Spring','Summer','Autumn','Winter'][state.season%4];
+      hudEls.temp.textContent = `${state.temp.toFixed(1)}℃`;
+      hudEls.rain.textContent = state.rain.toFixed(2);
+      hudEls.score.textContent = state.score.toFixed(0);
     }
-  }
-}
-settingsBackdrop.addEventListener('click', (e)=>{ if(e.target === settingsBackdrop) closeSettingsModal(); });
-window.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') closeSettingsModal(); });
 
-/* ========= ウィジェット ========= */
-let widgetState = {};
-let widgetZ = 30;
-
-function handleUiActionClick(event){
-  const btn = event.target?.closest?.('[data-ui-action]');
-  if(!btn) return;
-  const action = btn.dataset.uiAction;
-  const widgetId = btn.dataset.widgetId || btn.closest('[data-widget-id]')?.dataset.widgetId;
-  if(['minimize','maximize','close-settings','modal-maximize'].includes(action)){
-    event.preventDefault();
-  }
-  if(action === 'minimize' && widgetId) return toggleWidgetMinimize(widgetId);
-  if(action === 'maximize' && widgetId) return toggleWidgetMaximize(widgetId);
-  if(action === 'close-settings') return closeSettingsModal();
-  if(action === 'modal-maximize') return toggleModalMaximize();
-}
-document.addEventListener('click', handleUiActionClick, true);
-
-function widgetDefaults(){
-  return {
-    hud: {x: 18, y: 120, width: 360, minimized:false, maximized:false},
-    legend: {x: Math.max(12, window.innerWidth - 250), y: Math.max(80, window.innerHeight - 280), width: 240, minimized:false, maximized:false},
-    generation: {x: Math.max(12, window.innerWidth - 500), y: 16, width: 240, minimized:false, maximized:false},
-    toolbar: {x: Math.max(12, window.innerWidth - 360), y: Math.max(16, window.innerHeight - 200), width: 360, minimized:false, maximized:false},
-  };
-}
-function applyWidgetPosition(id){
-  const elmt = document.querySelector(`[data-widget-id="${id}"]`);
-  if(!elmt || !widgetState[id]) return;
-  const st = widgetState[id];
-
-  elmt.classList.toggle('is-minimized', !!st.minimized);
-  elmt.classList.toggle('is-maximized', !!st.maximized);
-
-  if(st.maximized){
-    const prevW = st.restore?.width || st.width || elmt.offsetWidth || 280;
-    const prevH = st.restore?.height || elmt.offsetHeight || 180;
-    const maxWidth = Math.min(window.innerWidth * 0.9, Math.max(prevW + 60, window.innerWidth * 0.6));
-    const maxHeight = Math.min(window.innerHeight * 0.9, Math.max(prevH + 80, window.innerHeight * 0.55));
-    const left = Math.max(8, (window.innerWidth - maxWidth) / 2);
-    const top = Math.max(8, (window.innerHeight - maxHeight) / 2);
-    elmt.style.width = `${maxWidth}px`;
-    elmt.style.height = `${maxHeight}px`;
-    elmt.style.left = `${left}px`;
-    elmt.style.top = `${top}px`;
-    elmt.style.transform = 'none';
-    bringToFront(elmt);
-    return;
-  }
-
-  const bodyHeight = st.minimized ? (elmt.querySelector('.widget-bar')?.offsetHeight || 48) : (elmt.offsetHeight || 160);
-  const width = Math.max(220, st.width || elmt.offsetWidth || 260);
-  const maxX = Math.max(6, window.innerWidth - width - 6);
-  const maxY = Math.max(6, window.innerHeight - bodyHeight - 6);
-  st.x = clampFloat(st.x, 6, maxX);
-  st.y = clampFloat(st.y, 6, maxY);
-  elmt.style.left = `${st.x}px`;
-  elmt.style.top = `${st.y}px`;
-  elmt.style.width = `${width}px`;
-  elmt.style.height = '';
-  elmt.style.transform = '';
-}
-function bringToFront(elmt){
-  widgetZ += 1;
-  elmt.style.zIndex = String(20 + widgetZ);
-}
-function toggleWidgetMinimize(id){
-  if(!widgetState[id]) return;
-  widgetState[id].minimized = !widgetState[id].minimized;
-  widgetState[id].maximized = false;
-  applyWidgetPosition(id);
-}
-function toggleWidgetMaximize(id){
-  const elmt = document.querySelector(`[data-widget-id="${id}"]`);
-  if(!elmt || !widgetState[id]) return;
-  const st = widgetState[id];
-  if(st.maximized){
-    const restoreX = Number(elmt.dataset.restoreX || st.restore?.x || st.x || 12);
-    const restoreY = Number(elmt.dataset.restoreY || st.restore?.y || st.y || 12);
-    const restoreW = Number(elmt.dataset.restoreWidth || st.restore?.width || st.width || 260);
-    const restoreH = Number(elmt.dataset.restoreHeight || st.restore?.height || elmt.offsetHeight || 180);
-    st.x = restoreX;
-    st.y = restoreY;
-    st.width = restoreW;
-    st.height = restoreH;
-    st.minimized = st.restore?.minimized || false;
-    st.maximized = false;
-    st.restore = null;
-  } else {
-    const rect = elmt.getBoundingClientRect();
-    st.restore = {x: st.x, y: st.y, width: st.width, height: rect.height, minimized: st.minimized};
-    elmt.dataset.restoreX = String(st.x);
-    elmt.dataset.restoreY = String(st.y);
-    elmt.dataset.restoreWidth = String(st.width || rect.width);
-    elmt.dataset.restoreHeight = String(rect.height);
-    st.maximized = true;
-    st.minimized = false;
-    bringToFront(elmt);
-  }
-  applyWidgetPosition(id);
-}
-function initWidget(elmt, defaults){
-  const id = elmt.dataset.widgetId;
-  widgetState[id] = {...defaults, ...(widgetState[id] || {})};
-  applyWidgetPosition(id);
-  const bar = elmt.querySelector('.widget-bar');
-  let drag = null;
-  if(bar){
-    const endDrag = (reason)=>{
-      if(!drag) return;
-      try{ bar.releasePointerCapture(drag.id); }catch(err){ /* ignore */ }
-      drag = null;
-      elmt.classList.remove('dragging');
-      document.body.classList.remove('is-widget-dragging');
-      applyWidgetPosition(id);
-      clearDragShield(reason);
-    };
-    bar.addEventListener('pointerdown', (e)=>{
-      if(widgetState[id].maximized) return;
-      const rect = elmt.getBoundingClientRect();
-      drag = {id:e.pointerId, dx: e.clientX - rect.left, dy: e.clientY - rect.top};
-      elmt.classList.add('dragging');
-      document.body.classList.add('is-widget-dragging');
-      bringToFront(elmt);
-      createDragShield();
-      try{ bar.setPointerCapture(e.pointerId); }catch(err){ /* ignore */ }
-    });
-    bar.addEventListener('pointermove', (e)=>{
-      if(!drag || drag.id !== e.pointerId) return;
-      widgetState[id].x = e.clientX - drag.dx;
-      widgetState[id].y = e.clientY - drag.dy;
-      applyWidgetPosition(id);
-    });
-    ['pointerup','pointercancel'].forEach(ev=>{
-      bar.addEventListener(ev, (e)=>{ if(drag && drag.id === e.pointerId) endDrag(ev); });
-    });
-  }
-  elmt.addEventListener('pointerdown', ()=>bringToFront(elmt));
-}
-function setupWidgets(){
-  const uiRoot = document.getElementById('uiRoot') || (()=>{ const r = document.createElement('div'); r.id = 'uiRoot'; document.body.appendChild(r); return r; })();
-  const defaults = widgetDefaults();
-  widgetState = {...defaults};
-  widgetZ = 30;
-  document.querySelectorAll('[data-widget-id]').forEach(elmt=>{
-    if(elmt.parentElement !== uiRoot) uiRoot.appendChild(elmt);
-    const defs = defaults[elmt.dataset.widgetId] || {x:12,y:12,minimized:false,maximized:false};
-    widgetState[elmt.dataset.widgetId] = {...defs, ...(widgetState[elmt.dataset.widgetId] || {})};
-    initWidget(elmt, defs);
-  });
-}
-function resetWidgetLayout(){
-  widgetState = widgetDefaults();
-  widgetZ = 30;
-  Object.keys(widgetState).forEach(applyWidgetPosition);
-}
-window.addEventListener('resize', ()=>{
-  Object.keys(widgetState).forEach(applyWidgetPosition);
-});
-
-function init(){
-  startUiDiagnostics();
-  /* ========= ボタン配線 ========= */
-  const handlerFlags = [];
-  handlerFlags.push(bindClick('btnStart', ()=>{
-    if(endReason){
-      resetSim();
+    function renderSummary(){
+      const counts = {};
+      state.animals.forEach(a => { counts[a.species] = (counts[a.species]||0)+1; });
+      const lines = Object.entries(counts).map(([k,v])=>`${speciesLibrary[k]?.name||k}: ${v}`);
+      document.getElementById('genSummary').textContent = lines.join(' / ') || 'No data';
     }
-    running = !running;
-    const btn = el('btnStart');
-    if(btn) btn.textContent = running ? '停止' : '開始';
-    refreshUI();
-  }));
-  handlerFlags.push(bindClick('btnStep', ()=>{
-    if(!running) tick();
-    refreshUI();
-  }));
-  handlerFlags.push(bindClick('btnReset', ()=>{
-    const btn = el('btnStart');
-    if(btn) btn.textContent = '開始';
-    resetSim();
-  }));
-  handlerFlags.push(bindClick('btnCSV', downloadCSV));
-  handlerFlags.push(bindClick('btnSpeedNormal', ()=>{ speedMode = 'normal'; slowdownUntilStep = 0; updateSpeedButtons(); }));
-  handlerFlags.push(bindClick('btnSpeedTurbo', ()=>{ speedMode = 'turbo'; updateSpeedButtons(); }));
-  handlerFlags.push(bindClick('btnOpenSettings', openSettingsModal));
-  const inlineDrawerBtn = el('btnOpenDrawerInline');
-  if(inlineDrawerBtn) inlineDrawerBtn.addEventListener('click', openSettingsModal);
-  else logDebug('btnOpenDrawerInline missing');
-  const forceEndBtn = el('btnForceEnd');
-  if(forceEndBtn) forceEndBtn.addEventListener('click', ()=>{ if(!endReason) applyEndCondition('強制終了'); });
-  else logDebug('btnForceEnd missing');
-  handlerFlags.push(!!el('btnCloseSettings'));
-  if(!el('btnSettingsMax')) logDebug('btnSettingsMax missing');
-  handlerFlags.push(bindClick('btnCopyResult', copyResult));
-  const btnCopyScore = el('btnCopyScore');
-  if(btnCopyScore) btnCopyScore.addEventListener('click', copyScoreShare); else logDebug('btnCopyScore missing');
-  handlerFlags.push(bindClick('btnModalReset', ()=>{ hideEndModal(); const btn = el('btnStart'); if(btn) btn.textContent = '開始'; resetSim(); }));
-  handlerFlags.push(bindClick('btnModalCSV', downloadCSV));
-  handlerFlags.push(bindClick('btnModalCopy', copyResult));
-  const btnModalCopyScore = el('btnModalCopyScore');
-  if(btnModalCopyScore) btnModalCopyScore.addEventListener('click', copyScoreShare); else logDebug('btnModalCopyScore missing');
-  handlerFlags.push(bindClick('btnCloseError', ()=>deactivateOverlay(el('errorModal'))));
-  handlerFlags.push(bindClick('btnDismissStartup', ()=>{ const banner = el('startupBanner'); if(banner) banner.classList.add('hidden'); }));
-  bindClick('btnApplyScenario', ()=>{
-    const sel = el('selScenario');
-    const key = sel ? sel.value : '';
-    if(!key) return;
-    applyPresetToUI(key);
-    resetSim();
-    const preset = PRESETS[key];
-    if(preset){
-      statusMessage = `シナリオ: ${preset.label} を適用しました`;
-    }
-    refreshUI();
-  });
-  const btnPanic = el('btnPanic');
-  if(btnPanic) btnPanic.addEventListener('click', panicRecovery); else logDebug('Panic button missing');
-  startupChecks.handlers = handlerFlags.every(Boolean);
-  updateStartupBanner();
 
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', ()=>{
-      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-      document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
-      btn.classList.add('active');
-      const panel = document.getElementById(btn.dataset.tab);
-      if(panel) panel.classList.add('active');
-    });
-  });
+    /* Simulation */
+    let sketch = (p) => {
+      let pan = { active:false, startX:0, startY:0, originX:0, originY:0 };
 
-  // スライダー表示更新（初期）
-  const slFPS = el('slFPS');
-  if(slFPS) slFPS.addEventListener('input', ()=>{ readParamsFromUI(); }); else logDebug('slFPS missing');
-  const slGrass = el('slGrass');
-  if(slGrass) slGrass.addEventListener('input', ()=>{ readParamsFromUI(); }); else logDebug('slGrass missing');
-  const slZoom = el('slZoom');
-  if(slZoom) slZoom.addEventListener('input', ()=>{ updateZoomFromUI(); }); else logDebug('slZoom missing');
-  const turboInput = el('inTurboTicks');
-  if(turboInput) turboInput.addEventListener('change', ()=>{ readParamsFromUI(); updateSpeedButtons(); }); else logDebug('inTurboTicks missing');
-  const chkDaily = el('chkDaily');
-  if(chkDaily) chkDaily.addEventListener('change', ()=>{ resetSim(); }); else logDebug('chkDaily missing');
-  const inSeed = el('inSeed');
-  if(inSeed) inSeed.addEventListener('change', ()=>{ resetSim(); }); else logDebug('inSeed missing');
-  document.querySelectorAll('.overlay-btn').forEach(btn => {
-    btn.addEventListener('click', ()=>{
-      document.querySelectorAll('.overlay-btn').forEach(b=>b.classList.remove('active'));
-      overlayMode = btn.dataset.mode || 'fauna';
-      btn.classList.add('active');
-    });
-  });
-  const btnEnv = el('btnApplyEnvironment');
-  if(btnEnv){
-    btnEnv.addEventListener('click', ()=>{
-      const key = el('selEnvPreset').value;
-      applyEnvironmentPreset(key);
-      resetSim();
-    });
-  } else {
-    logDebug('btnApplyEnvironment missing');
-  }
-  if(debugMode) enableDebugPanel();
-  overlaySafetySweep();
-  removeLingeringShields();
-  setupWidgets();
-  const uiResetBtn = el('btnUiReset');
-  if(uiResetBtn){
-    uiResetBtn.addEventListener('click', ()=>{
-      resetWidgetLayout();
-      Object.keys(widgetState).forEach(applyWidgetPosition);
-    });
-  }
-  const envPresetSel = el('selEnvPreset');
-  if(envPresetSel){
-    envPresetSel.addEventListener('change', ()=>{
-      const key = el('selEnvPreset').value;
-      applyEnvironmentPreset(key);
-    });
-  }
-  const autoSlowChk = el('chkAutoSlow');
-  if(autoSlowChk){
-    autoSlowChk.addEventListener('change', ()=>{ autoSlowdownEnabled = autoSlowChk.checked; updateSpeedButtons(); });
-  }
+      p.setup = () => {
+        const wrap = document.getElementById('p5-container');
+        const cnv = p.createCanvas(wrap.clientWidth, wrap.clientHeight);
+        cnv.parent('p5-container');
+        applyPreset('temperate');
+      };
 
-  // 初期化
-  setupP5();
-  buildLegendAnimals();
-  buildSpeciesControls();
-  updateSpeciesSettingsFromUI();
-  updateActiveSpeciesLists();
-  readParamsFromUI();
-  updateSpeedButtons();
-  resetSim();
-  updateStartupBanner();
-}
+      p.windowResized = () => {
+        const wrap = document.getElementById('p5-container');
+        p.resizeCanvas(wrap.clientWidth, wrap.clientHeight);
+      };
 
-attachGlobalErrorHandlers();
-if(!depsReady){
-  showFatalError({message:'CDN読み込み失敗', stack:'p5 / Chart の読み込みが確認できません'});
-}
-try {
-  init();
-  if(!depsReady){
-    safeFallback('依存ライブラリ不足');
-  }
-} catch(err){
-  showFatalError(err);
-  safeFallback(err);
-}
+      p.draw = () => {
+        p.background('#05080f');
+        drawTerrain(p);
+        drawPlants(p);
+        drawDens(p);
+        drawAnimals(p);
+        drawEvents(p);
+        if(state.running) stepSim();
+      };
 
-function safeFallback(reason){
-  if(safeMode) return;
-  safeMode = true;
-  logDebug(`Safe Mode: ${reason?.message || reason}`);
-  const container = el('p5-container');
-  removeLingeringShields();
-  if(container && !container.querySelector('canvas')){
-    const c = document.createElement('canvas');
-    c.width = 640; c.height = 640;
-    c.style.borderRadius = '12px';
-    c.style.width = '100%';
-    c.style.background = '#0b1624';
-    container.appendChild(c);
-    const ctx = c.getContext('2d');
-    ctx.fillStyle = '#112030';
-    ctx.fillRect(0,0,c.width,c.height);
-    ctx.fillStyle = '#5aa2f7';
-    ctx.font = '18px sans-serif';
-    ctx.fillText('Safe Mode: 基本盤面のみ', 20, 32);
-  }
-  const btnStart = el('btnStart');
-  const btnStop = btnStart;
-  if(btnStart && !btnStart.dataset.safeBound){
-    btnStart.dataset.safeBound = '1';
-    btnStart.disabled = false;
-    btnStart.addEventListener('click', ()=>{
-      running = !running;
-      btnStart.textContent = running ? '停止' : '開始';
-      if(running && !safeTicker){
-        safeTicker = setInterval(()=>{ /* noop loop to keep button responsive */ }, 500);
-      } else if(!running && safeTicker){
-        clearInterval(safeTicker); safeTicker = null;
+      function worldToScreen(x,y){
+        return {
+          x: x*state.tile*state.view.scale + state.view.offsetX,
+          y: y*state.tile*state.view.scale + state.view.offsetY
+        };
       }
-    });
-  }
-  const btnStep = el('btnStep');
-  if(btnStep) btnStep.addEventListener('click', ()=>{});
-  const btnReset = el('btnReset');
-  if(btnReset) btnReset.addEventListener('click', ()=>{ running=false; if(btnStart) btnStart.textContent='開始'; });
-  startupChecks.canvas = !!container;
-  updateStartupBanner();
-}
 
-function panicRecovery(){
-  document.querySelectorAll('.modal-backdrop').forEach(deactivateOverlay);
-  clearDragShield('panic');
-  removeLingeringShields();
-  document.body.style.pointerEvents = 'auto';
-  const app = document.querySelector('.stage');
-  if(app) app.style.pointerEvents = 'auto';
-}
-</script>
+      function drawTerrain(p){
+        for(let y=0;y<state.gridH;y++){
+          for(let x=0;x<state.gridW;x++){
+            const idx = y*state.gridW+x;
+            const tKey = state.terrain[idx];
+            const terrain = terrainTypes.find(t=>t.key===tKey) || terrainTypes[0];
+            const pos = worldToScreen(x,y);
+            const size = state.tile*state.view.scale;
+            p.noStroke();
+            p.fill(terrain.color);
+            p.rect(pos.x, pos.y, size, size);
+            p.stroke(terrain.texture);
+            p.strokeWeight(1);
+            if(tKey==='forest'){
+              p.line(pos.x+size*0.3, pos.y, pos.x+size*0.7, pos.y+size);
+              p.line(pos.x, pos.y+size*0.4, pos.x+size, pos.y+size*0.6);
+            } else if(tKey==='water'){
+              p.noFill();
+              p.curve(pos.x, pos.y+size*0.2, pos.x+size*0.2, pos.y+size*0.4, pos.x+size*0.6, pos.y+size*0.6, pos.x+size, pos.y+size*0.8);
+            } else if(tKey==='rock'){
+              p.fill(terrain.texture); p.noStroke();
+              p.triangle(pos.x+size*0.2,pos.y+size*0.8,pos.x+size*0.5,pos.y+size*0.2,pos.x+size*0.8,pos.y+size*0.9);
+            } else if(tKey==='wetland'){
+              p.noFill(); p.stroke(terrain.texture);
+              p.ellipse(pos.x+size*0.4,pos.y+size*0.6,size*0.4,size*0.25);
+            } else if(tKey==='sand'){
+              p.noFill(); p.stroke(terrain.texture);
+              p.line(pos.x+size*0.2,pos.y+size*0.7,pos.x+size*0.8,pos.y+size*0.65);
+            } else if(tKey==='shrub'){
+              p.noStroke(); p.fill(terrain.texture);
+              p.circle(pos.x+size*0.3,pos.y+size*0.4,size*0.2);
+              p.circle(pos.x+size*0.6,pos.y+size*0.5,size*0.25);
+            }
+          }
+        }
+      }
+
+      function drawPlants(p){
+        p.noStroke();
+        state.plants.forEach((v,idx)=>{
+          if(v<=0.01) return;
+          const x = idx % state.gridW;
+          const y = Math.floor(idx / state.gridW);
+          const pos = worldToScreen(x,y);
+          const size = state.tile*state.view.scale;
+          p.fill(100,200,120, clamp01(v)*180 + 40);
+          p.circle(pos.x+size/2, pos.y+size/2, Math.max(4, size*0.4*v));
+        });
+      }
+
+      function drawDens(p){
+        p.noStroke();
+        state.dens.forEach(idx => {
+          const x = idx % state.gridW; const y = Math.floor(idx/state.gridW);
+          const pos = worldToScreen(x,y);
+          const size = state.tile*state.view.scale;
+          p.fill('#f5d97a');
+          p.rect(pos.x+size*0.28,pos.y+size*0.28,size*0.44,size*0.44,4);
+        });
+      }
+
+      function drawAnimals(p){
+        state.animals.forEach(a=>{
+          const pos = worldToScreen(a.x,a.y);
+          const size = state.tile*state.view.scale;
+          const sp = speciesLibrary[a.species];
+          if(!sp) return;
+          p.stroke(sp.outline); p.strokeWeight(1.6); p.fill(sp.color);
+          if(sp.diet==='herb'){
+            p.circle(pos.x, pos.y, size*0.72);
+            p.fill(sp.inner); p.noStroke();
+            p.circle(pos.x, pos.y, size*0.3);
+          } else {
+            p.triangle(pos.x-size*0.4,pos.y+size*0.4,pos.x+size*0.4,pos.y+size*0.4,pos.x,pos.y-size*0.5);
+            p.fill(sp.inner); p.noStroke();
+            p.triangle(pos.x-size*0.18,pos.y+size*0.18,pos.x+size*0.18,pos.y+size*0.18,pos.x,pos.y-size*0.24);
+          }
+        });
+      }
+
+      function drawEvents(p){
+        const now = performance.now();
+        state.reproductionEvents = state.reproductionEvents.filter(ev => now-ev.time < 900);
+        state.huntEvents = state.huntEvents.filter(ev => now-ev.time < 480);
+
+        if(toggleHearts.checked){
+          state.reproductionEvents.forEach(ev => {
+            const t = (now-ev.time)/900;
+            const pos = worldToScreen(ev.x, ev.y);
+            p.noStroke(); p.fill(`rgba(255,120,200,${1-t})`);
+            p.textSize(state.tile*state.view.scale*0.8);
+            p.text('♡', pos.x, pos.y);
+          });
+        }
+        if(toggleFlashes.checked){
+          state.huntEvents.forEach(ev => {
+            const t = (now-ev.time)/480;
+            const pos = worldToScreen(ev.x, ev.y);
+            p.noFill(); p.stroke(`rgba(255,180,80,${1-t})`); p.strokeWeight(3);
+            const r = state.tile*state.view.scale*(0.6 + t*0.6);
+            p.circle(pos.x, pos.y, r);
+          });
+        }
+      }
+
+      p.mouseWheel = (event) => {
+        const factor = event.delta > 0 ? 0.92 : 1.08;
+        state.view.scale = Math.min(Math.max(state.view.scale * factor, 0.6), 2.6);
+      };
+
+      p.mousePressed = () => {
+        if(p.mouseButton === p.CENTER || (p.mouseButton === p.LEFT && p.keyIsDown(32))){
+          pan.active = true; pan.startX = p.mouseX; pan.startY = p.mouseY; pan.originX = state.view.offsetX; pan.originY = state.view.offsetY;
+        }
+      };
+      p.mouseDragged = () => {
+        if(pan.active){
+          state.view.offsetX = pan.originX + (p.mouseX - pan.startX);
+          state.view.offsetY = pan.originY + (p.mouseY - pan.startY);
+        }
+      };
+      p.mouseReleased = () => { pan.active=false; };
+
+      document.getElementById('resetView').addEventListener('click', ()=>{
+        state.view = { scale:1, offsetX:0, offsetY:0 };
+      });
+      document.getElementById('startBtn').addEventListener('click', ()=> state.running=true);
+      document.getElementById('stopBtn').addEventListener('click', ()=> state.running=false);
+      document.getElementById('panicBtn').addEventListener('click', ()=>{
+        document.querySelectorAll('.backdrop').forEach(el=>el.classList.remove('active'));
+        document.querySelectorAll('.widget').forEach(el=>{
+          el.classList.remove('is-maximized');
+          widgetManager.clampToViewport(el);
+        });
+        state.view = { scale:1, offsetX:0, offsetY:0 };
+      });
+    };
+
+    function stepSim(){
+      const stepsPerFrame = 2;
+      for(let s=0;s<stepsPerFrame;s++){
+        updateClimate();
+        growPlants();
+        updateAnimals();
+        checkEndCondition();
+      }
+      updateHUD();
+      renderSummary();
+    }
+
+    function updateClimate(){
+      const seasonLength = 2200;
+      state.score += 0.05;
+      state.temp += (state.climate.temp[state.season%4] - state.temp) * 0.002;
+      state.rain += (state.climate.rain[state.season%4] - state.rain) * 0.002;
+      state.score = Math.max(0, state.score);
+      if(state.score > seasonLength){
+        state.season++; state.score = 0;
+      }
+    }
+
+    function growPlants(){
+      state.plants = state.plants.map((v,i)=>{
+        const terrain = terrainTypes.find(t=>t.key===state.terrain[i]);
+        if(!terrain || terrain.isWater || terrain.isRock) return 0;
+        const growth = 0.001 + state.rain*0.002;
+        const K = terrain.plantK;
+        return clamp01(v + growth*v*(K - v));
+      });
+    }
+
+    function updateAnimals(){
+      const preyIndex = new Map();
+      state.animals.forEach((a,i)=>{ if(a.diet==='herb') preyIndex.set(a.id, i); });
+      const alerts = [];
+
+      state.animals.forEach(a => {
+        const sp = speciesLibrary[a.species];
+        if(!sp) return;
+        const hunger = 1 - a.satiety;
+        const satiatedBrake = a.satiety>0.8 ? 0.35 : 1;
+        const speed = (sp.speed + hunger*0.3) * satiatedBrake;
+        if(Math.random() < speed){
+          const dir = chooseDirection(a, sp, alerts);
+          a.vx = dir.x; a.vy = dir.y;
+          a.x = wrap(a.x + a.vx, state.gridW);
+          a.y = wrap(a.y + a.vy, state.gridH);
+        }
+        a.satiety = clamp01(a.satiety - sp.satietyDecay);
+        a.energy = clamp01(a.energy - sp.metabolism + a.satiety*0.0004);
+        a.age += 1;
+        a.lastBreed += 1;
+
+        if(a.diet==='herb') consumePlant(a, sp, hunger);
+        else huntPrey(a, sp, alerts);
+
+        tryReproduce(a, sp);
+      });
+
+      state.animals = state.animals.filter(a => a.energy>0 && a.age<8000);
+    }
+
+    function chooseDirection(a, sp, alerts){
+      let vec = {x: randBetween(-0.3,0.3), y: randBetween(-0.3,0.3)};
+      const neighbors = state.animals.filter(b => b !== a && b.diet===a.diet && dist(a,b)<3);
+      if(sp.behavior==='herd' && neighbors.length){
+        const cohesion = neighbors.reduce((acc,b)=>({x:acc.x+(b.x-a.x), y:acc.y+(b.y-a.y)}), {x:0,y:0});
+        vec.x += cohesion.x/neighbors.length * 0.05;
+        vec.y += cohesion.y/neighbors.length * 0.05;
+      }
+      if(neighbors.length){
+        const separation = neighbors.reduce((acc,b)=>{
+          const d = dist(a,b)+0.01;
+          return {x: acc.x - (b.x-a.x)/(d*d), y: acc.y - (b.y-a.y)/(d*d)};
+        }, {x:0,y:0});
+        vec.x += separation.x * 0.08;
+        vec.y += separation.y * 0.08;
+      }
+      if(sp.diet==='herb'){
+        const food = findFoodPatch(a);
+        if(food){
+          vec.x += (food.x - a.x)*0.04;
+          vec.y += (food.y - a.y)*0.04;
+        }
+      }
+      if(sp.behavior==='pack' && a.diet==='carn' && alerts.length){
+        const signal = alerts.reduce((acc,al)=>({x:acc.x+al.x-a.x, y:acc.y+al.y-a.y}), {x:0,y:0});
+        vec.x += signal.x/alerts.length * 0.03;
+        vec.y += signal.y/alerts.length * 0.03;
+      }
+      if(sp.behavior==='ambush'){
+        vec.x *= 0.35; vec.y *= 0.35;
+      }
+      if(sp.behavior==='wander'){
+        vec.x += randBetween(-0.2,0.2);
+        vec.y += randBetween(-0.2,0.2);
+      }
+      const coverBias = sp.coverAffinity || 0;
+      if(Math.abs(coverBias)>0.01){
+        const best = findNearestCover(a, coverBias>0);
+        if(best) {
+          vec.x += (best.x - a.x)*0.02*coverBias;
+          vec.y += (best.y - a.y)*0.02*coverBias;
+        }
+      }
+      const len = Math.hypot(vec.x, vec.y) || 1;
+      return { x: vec.x/len*0.4, y: vec.y/len*0.4 };
+    }
+
+    function findNearestCover(a, seekDense){
+      let best=null; let bestScore = seekDense? -1: 999;
+      for(let i=0;i<state.terrain.length;i+=12){
+        const t = terrainTypes.find(tt=>tt.key===state.terrain[i]);
+        if(!t) continue;
+        const score = t.cover;
+        const x = (i % state.gridW); const y = Math.floor(i/state.gridW);
+        const d = Math.hypot(a.x-x, a.y-y);
+        if(d>6) continue;
+        if(seekDense && score>bestScore){ bestScore = score; best={x,y}; }
+        if(!seekDense && score<bestScore){ bestScore = score; best={x,y}; }
+      }
+      return best;
+    }
+
+    function consumePlant(a, sp, hunger){
+      const idx = Math.floor(a.y)*state.gridW + Math.floor(a.x);
+      if(idx<0 || idx>=state.plants.length) return;
+      const terrain = terrainTypes.find(t=>t.key===state.terrain[idx]);
+      if(!terrain || terrain.isWater || terrain.isRock) return;
+      let plant = state.plants[idx];
+      if(plant<=0 || hunger<0.2) return;
+      const eat = Math.min(plant, 0.08 + hunger*0.1);
+      plant -= eat;
+      a.satiety = clamp01(a.satiety + eat*0.7);
+      a.energy = clamp01(a.energy + eat*0.2);
+      state.plants[idx] = plant;
+    }
+
+    function huntPrey(a, sp, alerts){
+      const target = findPrey(a, sp);
+      if(!target) return;
+      const d = dist(a, target);
+      alerts.push({x:target.x, y:target.y});
+      if(d < 0.7){
+        const allies = state.animals.filter(b=>b!==a && b.diet==='carn' && dist(b,target)<2).length;
+        const cover = terrainTypes.find(t=>t.key===state.terrain[Math.floor(target.y)*state.gridW + Math.floor(target.x)])?.cover || 0;
+        const success = Math.random() < 0.55 + allies*0.08 - cover*0.25;
+        if(success){
+          a.satiety = clamp01(a.satiety + 0.7/(allies||1));
+          a.energy = clamp01(a.energy + 0.4/(allies||1));
+          state.animals = state.animals.filter(x => x!==target);
+          state.huntEvents.push({x:target.x, y:target.y, time:performance.now()});
+        }
+      } else {
+        a.vx += (target.x - a.x)*0.02; a.vy += (target.y - a.y)*0.02;
+      }
+    }
+
+    function findPrey(a, sp){
+      let best=null; let bestD=999;
+      state.animals.forEach(b => {
+        if(b.diet!=='herb') return;
+        const tile = terrainTypes.find(t=>t.key===state.terrain[Math.floor(b.y)*state.gridW + Math.floor(b.x)]);
+        const cover = tile?.cover || 0;
+        const range = sp.vision * (1 - cover*0.4);
+        const d = dist(a,b);
+        if(d<range && d<bestD){ best=b; bestD=d; }
+      });
+      return best;
+    }
+
+    function tryReproduce(a, sp){
+      if(a.lastBreed < sp.reproduction.interval) return;
+      if(a.satiety < 0.55 || a.energy < 0.5) return;
+      const idx = Math.floor(a.y)*state.gridW + Math.floor(a.x);
+      const nearDen = state.dens.has(idx);
+      const chance = nearDen ? 0.5 : 0.12;
+      if(Math.random() < chance){
+        const litter = Math.round(randBetween(sp.reproduction.litter[0], sp.reproduction.litter[1]));
+        for(let i=0;i<litter;i++) state.animals.push(makeAnimal(a.species));
+        a.lastBreed = 0;
+        a.energy -= 0.2;
+        state.reproductionEvents.push({x:a.x, y:a.y, time:performance.now()});
+      }
+    }
+
+    function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+
+    function checkEndCondition(){
+      if(!extinctionModeCheckbox.checked) return;
+      const animalsLeft = state.animals.length;
+      const plantsLeft = state.plants.some((v,i)=>{
+        const terrain = terrainTypes.find(t=>t.key===state.terrain[i]);
+        if(!terrain || terrain.isWater || terrain.isRock) return false;
+        return v>0.02;
+      });
+      if(animalsLeft===0 && !plantsLeft){
+        state.running=false;
+      }
+    }
+
+    function findFoodPatch(a){
+      let best=null; let bestScore=0;
+      for(let dy=-3; dy<=3; dy++){
+        for(let dx=-3; dx<=3; dx++){
+          const x = wrap(Math.floor(a.x+dx), state.gridW);
+          const y = wrap(Math.floor(a.y+dy), state.gridH);
+          const idx = y*state.gridW + x;
+          const terrain = terrainTypes.find(t=>t.key===state.terrain[idx]);
+          if(!terrain || terrain.isWater || terrain.isRock) continue;
+          const score = state.plants[idx];
+          if(score > bestScore){ bestScore = score; best = {x:a.x+dx, y:a.y+dy}; }
+        }
+      }
+      return best;
+    }
+
+    new p5(sketch);
+  </script>
 </body>
 </html>
