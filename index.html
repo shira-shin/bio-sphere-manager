@@ -487,9 +487,33 @@
     }
     function log(text){ const el=document.createElement('div'); el.textContent=text; logBox.appendChild(el); logBox.scrollTop=logBox.scrollHeight; }
     function initChart(){
-      const ctx=document.getElementById('popChart');
+      const canvas=document.getElementById('popChart');
+      if(!canvas||!window.Chart) return;
+      const ctx=canvas.getContext('2d'); if(!ctx) return;
       if(chart){ chart.destroy(); }
-      chart = new Chart(ctx,{type:'line', data:{labels:[], datasets:[{label:'草食',borderColor:'#9be070',data:[],tension:0.2},{label:'肉食',borderColor:'#ff9f70',data:[],tension:0.2},{label:'植物',borderColor:'#5dc48d',data:[],tension:0.2},{label:'平均水分',borderColor:'#7aa8ff',data:[],yAxisID:'env',tension:0.2},{label:'河川セル',borderColor:'#4da7ff',data:[],yAxisID:'env',tension:0.2}]}, options:{animation:false, scales:{env:{position:'right'}}});
+      const data={
+        labels:[],
+        datasets:[
+          {label:'草食',borderColor:'#9be070',data:[],tension:0.2,yAxisID:'pop'},
+          {label:'肉食',borderColor:'#ff9f70',data:[],tension:0.2,yAxisID:'pop'},
+          {label:'植物',borderColor:'#5dc48d',data:[],tension:0.2,yAxisID:'pop'},
+          {label:'平均水分',borderColor:'#7aa8ff',data:[],yAxisID:'env',tension:0.2},
+          {label:'河川セル',borderColor:'#4da7ff',data:[],yAxisID:'env',tension:0.2}
+        ]
+      };
+      const options={
+        animation:false,
+        responsive:true,
+        maintainAspectRatio:false,
+        plugins:{legend:{display:true,position:'top'},tooltip:{enabled:true}},
+        scales:{
+          pop:{type:'linear',position:'left',beginAtZero:true},
+          env:{type:'linear',position:'right',beginAtZero:true,grid:{drawOnChartArea:false}}
+        }
+      };
+      try{
+        chart = new Chart(ctx,{type:'line', data, options});
+      }catch(e){ console.error('[Chart] init failed', e); chart=null; }
     }
     function updateChart(state){
       if(!chart) return; const latest=state.history[state.history.length-1]; if(!latest) return;
