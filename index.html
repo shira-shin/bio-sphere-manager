@@ -56,9 +56,9 @@
       <div class="panel">
         <h2>操作</h2>
         <div class="row">
-          <button id="startBtn" class="primary">開始</button>
-          <button id="stopBtn">停止</button>
-          <button id="resetBtn" class="danger">リセット</button>
+          <button type="button" data-action="start" class="primary">開始</button>
+          <button type="button" data-action="stop">停止</button>
+          <button type="button" data-action="reset" class="danger">リセット</button>
         </div>
         <div class="row" style="margin-top:8px;">
           <label>速度<select id="speedSelect"><option value="1">x1</option><option value="2">x2</option><option value="4">x4</option></select></label>
@@ -66,7 +66,7 @@
         </div>
         <div class="row" style="margin-top:8px;">
           <label>地形パターン<select id="patternSelect"><option value="meandering_river">蛇行河川</option><option value="delta_wetland">デルタ湿地</option><option value="mountain_valley">山岳渓谷</option></select></label>
-          <button id="regenBtn">地形再生成</button>
+          <button type="button" data-action="regen">地形再生成</button>
         </div>
       </div>
       <div class="panel">
@@ -92,7 +92,7 @@
       <div class="panel">
         <h2>ログ / CSV</h2>
         <div class="row">
-          <button id="downloadCsv">CSV保存</button>
+          <button type="button" data-action="download-csv">CSV保存</button>
           <span class="badge">Chart.js グラフ更新中</span>
         </div>
         <div class="chart-wrap" style="margin-top:8px;">
@@ -477,11 +477,16 @@
   const ui = (()=>{
     let chart=null; const logBox=document.getElementById('logBox');
     function bind(state){
-      document.getElementById('startBtn').onclick=()=>{state.running=true; loop();};
-      document.getElementById('stopBtn').onclick=()=>{state.running=false;};
-      document.getElementById('resetBtn').onclick=()=>{resetSim();};
-      document.getElementById('regenBtn').onclick=()=>{resetSim(false);};
-      document.getElementById('downloadCsv').onclick=()=>downloadCsv(state.history);
+      document.addEventListener('click',(e)=>{
+        const btn = e.target.closest('[data-action]');
+        if(!btn) return;
+        const action = btn.dataset.action;
+        if(action==='start') startSim();
+        if(action==='stop') stopSim();
+        if(action==='reset') resetSim();
+        if(action==='regen') resetSim(false);
+        if(action==='download-csv') downloadCsv(state.history);
+      });
       document.querySelectorAll('input[name="overlay"]').forEach(r=>r.onchange=()=>{state.overlay=r.value; renderer.draw(state);});
       document.getElementById('speedSelect').onchange=(e)=>{state.speed=Number(e.target.value)||1;};
     }
@@ -554,7 +559,30 @@
     ui.clearChart();
     renderer.drawTerrain(state);
     renderer.draw(state);
+    refreshHud(state);
     if(!fullReset){ logMsg('地形を再生成しました'); }
+  }
+
+  function startSim(){
+    if(state.running) return;
+    state.running=true;
+    loop();
+  }
+
+  function stopSim(){
+    state.running=false;
+    cancelAnimationFrame(loopFrame);
+  }
+
+  function refreshHud(currentState, riverCount=null, meanMoist=null){
+    const river = riverCount ?? currentState.cells.filter(c=>c.riverActive).length;
+    const moist = meanMoist ?? (currentState.cells.reduce((s,c)=>s+c.moist,0) / (currentState.cells.length||1));
+    document.getElementById('hudStep').textContent = currentState.step;
+    document.getElementById('hudSeason').textContent = currentState.season;
+    document.getElementById('hudHerb').textContent = currentState.animals.herbivores.length;
+    document.getElementById('hudCarn').textContent = currentState.animals.carnivores.length;
+    document.getElementById('hudRiver').textContent = river;
+    document.getElementById('hudMoist').textContent = moist.toFixed(2);
   }
 
   function loop(){
@@ -575,12 +603,7 @@
       const s = state.shareLogs[state.shareCursor++];
       logMsg(`群れ分配: ${s.size}体に ${s.energy.toFixed(2)} エネルギー共有`);
     }
-    document.getElementById('hudStep').textContent = state.step;
-    document.getElementById('hudSeason').textContent = state.season;
-    document.getElementById('hudHerb').textContent = state.animals.herbivores.length;
-    document.getElementById('hudCarn').textContent = state.animals.carnivores.length;
-    document.getElementById('hudRiver').textContent = riverCount;
-    document.getElementById('hudMoist').textContent = meanMoist.toFixed(2);
+    refreshHud(state, riverCount, meanMoist);
     ui.updateChart(state);
     renderer.draw(state);
     loopFrame=requestAnimationFrame(loop);
