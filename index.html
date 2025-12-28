@@ -1,1616 +1,498 @@
 <!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Bio-Sphere Manager デモ</title>
-  <script src="https://cdn.jsdelivr.net/npm/p5@latest/lib/p5.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@latest/dist/chart.umd.min.js"></script>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:,">
+  <title>Bio-Sphere Manager V2 土台</title>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
-    :root { color-scheme: dark; }
+    :root{color-scheme:dark;}
     *{box-sizing:border-box;}
-    body{
-      margin:0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      background:radial-gradient(circle at 20% 20%, rgba(90,162,247,0.08), transparent 40%), #060a0f;
-      color:#e6edf3; line-height:1.5;
-      font-size: clamp(16px, 1.6vw, 19px);
-      letter-spacing:0.02em;
-      overflow:hidden;
-    }
-    #mapStage{
-      position:fixed; left:0; top:0; right:360px; bottom:0; z-index:1; overflow:hidden;
-      background-color:#05080f;
-      background-image:
-        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px),
-        radial-gradient(circle at 10% 20%, rgba(60,120,200,0.08), transparent 42%);
-      background-size: 48px 48px, 48px 48px, auto;
-      pointer-events:auto;
-    }
-    #canvasHost{position:absolute; inset:12px 12px 12px 12px; border-radius:18px; box-shadow:0 18px 46px rgba(0,0,0,0.55); overflow:hidden; z-index:2;}
+    body{margin:0; font-family:'Noto Sans JP',system-ui,-apple-system,'Segoe UI',sans-serif; background:#05080f; color:#eaf2ff;}
+    header{padding:14px 18px; border-bottom:1px solid #162030; background:linear-gradient(180deg,#0c1420,#0a1018); box-shadow:0 12px 32px rgba(0,0,0,0.35); position:sticky; top:0; z-index:30;}
+    header h1{margin:0; font-size:22px; letter-spacing:0.05em;}
+    header .lead{margin:4px 0 0; font-size:13px; color:#9fb0c3;}
+    main{display:grid; grid-template-columns: 1fr 360px; gap:0; min-height:calc(100vh - 76px);}
+    #mapStage{position:relative; background:radial-gradient(circle at 20% 30%, rgba(80,140,220,0.06), transparent 40%), #060b12; overflow:hidden;}
+    #canvasHost{position:absolute; inset:12px; border-radius:18px; box-shadow:0 16px 40px rgba(0,0,0,0.55); background:#050910; overflow:hidden;}
     #mapStage canvas{display:block; width:100%; height:100%;}
-    .canvas-debug{position:absolute; left:12px; top:12px; padding:8px 10px; border-radius:12px; border:1px solid #30445c; background:rgba(6,10,15,0.72); color:#cfd8e3; font-size:12px; display:flex; gap:8px; align-items:center; z-index:5;}
-    .canvas-debug.off{opacity:0.4;}
-    .canvas-debug .stat{text-shadow:0 2px 8px rgba(0,0,0,0.6);}
-    .canvas-debug .stat.is-error{color:#ff8a8a; font-weight:800;}
-    .canvas-debug button{border:1px solid #30445c; background:#0e1622; color:#cfd8e3; border-radius:8px; padding:4px 8px; cursor:pointer; font-size:11px;}
-    header{
-      padding:16px 18px; border-bottom:1px solid #101826;
-      background: linear-gradient(180deg, #0f1620, #0b0f14);
-      position: sticky; top:0; z-index:12;
-      box-shadow:0 12px 34px rgba(0,0,0,0.35);
-    }
-    header .title{font-size:22px; font-weight:800;}
-    header .sub{font-size:13px; color:#9fb0c3; margin-top:6px;}
-
-    canvas{display:block;}
-
-    /* Widget system */
-    .widget{position:fixed; z-index:10; border-radius:14px; border:1px solid #223247; background:rgba(12,18,26,0.94); box-shadow:0 12px 34px rgba(0,0,0,0.45); min-width:240px; pointer-events:auto; color:#dce6f3; touch-action:none;}
-    .widget-header{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; background:linear-gradient(180deg, rgba(26,42,60,0.95), rgba(15,24,36,0.95)); border-bottom:1px solid #1f2a37; cursor:grab; user-select:none;}
-    .widget.dragging .widget-header{cursor:grabbing;}
-    .widget-title{font-weight:800; font-size:14px; letter-spacing:0.04em;}
-    .widget-controls{display:flex; gap:6px; margin-left:auto;}
-    .widget-controls button{padding:6px 8px; min-height:28px; border-radius:10px; border:1px solid #2a3a52; background:#132235; color:#dce6f3; cursor:pointer;}
-    .widget-controls button:hover{background:#1c2e48;}
-    .widget-body{padding:10px 12px; max-height:70vh; overflow:auto;}
-    .widget.is-minimized .widget-body{display:none;}
-    .widget.is-minimized{height:auto;}
-    .widget.is-maximized{position:fixed; inset:6vh 6vw; width:auto; height:auto; z-index:50; box-shadow:0 16px 42px rgba(0,0,0,0.55);}
-    .widget.is-maximized .widget-body{max-height:calc(88vh - 70px); overflow:auto;}
-    .widget.is-maximized .widget-header{cursor:default;}
-
-    .widget-dock{position:fixed; left:12px; bottom:12px; right:12px; display:flex; justify-content:space-between; gap:12px; z-index:11; pointer-events:none;}
-    .dock-col{display:flex; gap:8px; flex-wrap:wrap; pointer-events:auto;}
-    .dock-chip{border-radius:12px; padding:8px 12px; border:1px solid #2a3a52; background:#0d1420; color:#c9d6e2; cursor:pointer; box-shadow:0 8px 24px rgba(0,0,0,0.35);}
-
-    .chip{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; border:1px solid #2a3a52; background:#132235; font-size:12px; color:#9fb0c3;}
-    .btn{background:#132235; border:1px solid #243244; border-radius:10px; padding:10px 12px; color:#e6edf3; cursor:pointer;}
-    .btn:hover{background:#1a2e46;}
-    .btn.primary{background:#1b3554; border-color:#2a466b;}
-    .btn.danger{background:#3a1620; border-color:#5a2430;}
-
-    .hud-grid{display:grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap:10px;}
-    .hud-item{border:1px solid #223247; border-radius:12px; padding:8px 10px; background:rgba(17,24,38,0.9);}    
-    .hud-item .label{font-size:12px; color:#9fb0c3; margin-bottom:6px; letter-spacing:0.05em;}
-    .hud-item .value{font-size:20px; font-weight:800;}
-
-    .legend-grid{display:grid; gap:10px; grid-template-columns: repeat(auto-fit, minmax(140px,1fr));}
-    .legend-row{display:flex; align-items:center; gap:8px;}
-    .legend-swatch{width:16px; height:16px; border-radius:4px; border:1px solid #d9e2f3;}
-
-    .section{border:1px solid #223247; border-radius:12px; margin-top:12px; overflow:hidden;}
-    .section summary{cursor:pointer; padding:12px 14px; font-weight:700; color:#c3d5eb; list-style:none; user-select:none; background:linear-gradient(90deg, rgba(34,50,71,0.4), rgba(34,50,71,0.1));}
-    .section[open] summary{border-bottom:1px solid #223247;}
-    .section summary::-webkit-details-marker{display:none;}
-    .section .section-body{padding:14px; display:grid; gap:14px;}
-
-    .floating-settings{position:fixed; right:18px; bottom:20px; z-index:25;}
-    .fab{border-radius:999px; padding:12px 18px; font-weight:700; box-shadow:0 12px 32px rgba(0,0,0,0.45);}
-
-    .backdrop{position:fixed; inset:0; background:rgba(8,12,18,0.72); display:none; align-items:center; justify-content:center; z-index:100; pointer-events:none;}
-    .backdrop.active{display:flex; pointer-events:auto;}
-    .modal{background:#0d1420; border:1px solid #30445c; border-radius:14px; padding:18px 20px; min-width:280px; max-width:480px; box-shadow:0 14px 40px rgba(0,0,0,0.55);}
-    .modal h3{margin:0 0 10px 0; font-size:18px;}
-    .modal p{margin:0 0 12px 0; color:#cdd9e5;}
-    .status-badge{position:absolute; left:14px; bottom:14px; background:rgba(30,10,10,0.7); border:1px solid rgba(255,120,120,0.45); color:#ffb0b0; padding:8px 10px; border-radius:10px; font-size:13px; pointer-events:none; z-index:6; box-shadow:0 8px 20px rgba(0,0,0,0.4);}
-    .hidden{display:none!important;}
+    #renderAlert{position:absolute; left:18px; bottom:18px; background:rgba(60,12,12,0.8); border:1px solid rgba(255,120,120,0.4); padding:10px 12px; border-radius:12px; font-weight:700; color:#ffb4b4; z-index:5; display:none;}
+    aside{background:#0b1018; border-left:1px solid #162030; display:flex; flex-direction:column;}
+    .panel{padding:12px 14px; border-bottom:1px solid #162030;}
+    .panel h2{margin:0 0 6px; font-size:16px; letter-spacing:0.04em;}
+    .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+    button, select, input[type="number"], input[type="text"]{border-radius:10px; border:1px solid #243447; background:#111b29; color:#eaf2ff; padding:8px 10px; font-size:14px;}
+    button.primary{background:#1d3b62; border-color:#2a4f80; font-weight:700;}
+    button.danger{background:#3a1823; border-color:#5a2434;}
+    button:disabled{opacity:0.5; cursor:not-allowed;}
+    label{font-size:13px; color:#c6d2e0; display:flex; gap:6px; align-items:center;}
+    details{border:1px solid #1b283a; border-radius:12px; padding:6px 8px; background:#0f1622;}
+    details summary{cursor:pointer; font-weight:700; color:#c9d8ec; list-style:none;}
+    .hud-grid{display:grid; grid-template-columns:repeat(2,minmax(120px,1fr)); gap:8px;}
+    .hud{border:1px solid #1b283a; border-radius:12px; padding:10px 12px; background:#0f1622;}
+    .hud .label{font-size:12px; color:#98abc5;}
+    .hud .value{font-size:20px; font-weight:800;}
+    .chart-wrap{background:#0f1622; border:1px solid #1b283a; border-radius:12px; padding:10px;}
+    .overlay-toggle{display:grid; gap:6px; grid-template-columns: repeat(auto-fit, minmax(120px,1fr));}
+    .log-box{height:120px; overflow:auto; font-size:12px; background:#0b111b; border:1px solid #1b283a; border-radius:10px; padding:8px;}
+    .badge{display:inline-flex; align-items:center; padding:4px 8px; border-radius:999px; background:#122039; border:1px solid #243447; font-size:12px; color:#9fb0c3; gap:6px;}
+    .flex-between{display:flex; justify-content:space-between; align-items:center; gap:12px;}
   </style>
 </head>
 <body>
-  <div id="mapStage">
-    <div id="canvasHost" aria-label="シミュレーションマップ"></div>
-    <div class="canvas-debug" id="canvasDebug">
-      <span class="stat" id="canvasSizeStat">キャンバス: --</span>
-      <span class="stat" id="canvasDprStat">DPR: --</span>
-      <span class="stat" id="canvasRenderStat">最終描画: -- ms</span>
-      <span class="stat" id="canvasTilesStat">タイル数: --</span>
-      <button id="canvasDebugToggle" aria-pressed="true">非表示</button>
-    </div>
-    <div class="status-badge hidden" id="canvasStatus">キャンバス初期化を再試行中...</div>
-  </div>
   <header>
-    <div class="title">Bio-Sphere Manager</div>
-    <div class="sub">ウィンドウ管理リフレッシュ＋生態系サンドボックス</div>
+    <h1>Bio-Sphere Manager V2</h1>
+    <div class="lead">再現性＋観戦性のための新シミュレーション土台</div>
   </header>
-
-  <div class="widget" id="hudWidget" data-widget-id="hudWidget" style="left:16px; top:96px; width:360px;">
-    <div class="widget-header" data-widget-id="hudWidget">
-      <div class="widget-title">状態表示</div>
-      <div class="widget-controls">
-        <button data-action="minimize" data-widget-id="hudWidget">—</button>
-        <button data-action="maximize" data-widget-id="hudWidget">▢</button>
-      </div>
-    </div>
-    <div class="widget-body">
-      <div class="hud-grid">
-        <div class="hud-item"><div class="label">個体数</div><div class="value" id="hudPop">0</div></div>
-        <div class="hud-item"><div class="label">季節</div><div class="value" id="hudSeason">春</div></div>
-        <div class="hud-item"><div class="label">気温</div><div class="value" id="hudTemp">0℃</div></div>
-        <div class="hud-item"><div class="label">降雨</div><div class="value" id="hudRain">0</div></div>
-        <div class="hud-item"><div class="label">スコア</div><div class="value" id="hudScore">0</div></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="widget" id="summaryWidget" data-widget-id="summaryWidget" style="left:400px; top:96px; width:320px;">
-    <div class="widget-header" data-widget-id="summaryWidget">
-      <div class="widget-title">世代サマリ</div>
-      <div class="widget-controls">
-        <button data-action="minimize" data-widget-id="summaryWidget">—</button>
-        <button data-action="maximize" data-widget-id="summaryWidget">▢</button>
-      </div>
-    </div>
-    <div class="widget-body">
-      <div id="presetInfo" class="help">プリセット: 温帯森林</div>
-      <div id="genSummary">まだデータがありません。</div>
-    </div>
-  </div>
-
-  <div class="widget" id="controlsWidget" data-widget-id="controlsWidget" style="left:16px; top:320px; width:320px;">
-    <div class="widget-header" data-widget-id="controlsWidget">
-      <div class="widget-title">クイック操作</div>
-      <div class="widget-controls">
-        <button data-action="minimize" data-widget-id="controlsWidget">—</button>
-        <button data-action="maximize" data-widget-id="controlsWidget">▢</button>
-      </div>
-    </div>
-      <div class="widget-body">
-        <div class="row" style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button class="btn primary" id="startBtn">開始</button>
-          <button class="btn" id="stopBtn">停止</button>
-          <button class="btn" id="stepBtn">1ステップ</button>
-          <button class="btn danger" id="panicBtn">パニック</button>
+  <main>
+    <section id="mapStage" aria-label="シミュレーションマップ">
+      <div id="canvasHost"></div>
+      <div id="renderAlert">描画エラーが発生したため簡易描画に切替えました</div>
+    </section>
+    <aside>
+      <div class="panel">
+        <h2>操作</h2>
+        <div class="row">
+          <button id="startBtn" class="primary">開始</button>
+          <button id="stopBtn">停止</button>
+          <button id="resetBtn" class="danger">リセット</button>
         </div>
-        <div class="row" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; align-items:center;">
-          <label class="chip">速度
-            <select id="speedSelect">
-              <option value="1">x1</option>
-              <option value="2">x2</option>
-              <option value="4">x4</option>
-              <option value="8">x8</option>
-            </select>
-          </label>
-          <label class="chip">ログ間引き
-            <select id="logInterval">
-              <option value="1">毎ステップ</option>
-              <option value="2">x2</option>
-              <option value="4">x4</option>
-              <option value="8">x8</option>
-            </select>
-          </label>
+        <div class="row" style="margin-top:8px;">
+          <label>速度<select id="speedSelect"><option value="1">x1</option><option value="2">x2</option><option value="4">x4</option></select></label>
+          <label>シード<input id="seedInput" type="text" value="bs-demo" /></label>
         </div>
-        <div class="section">
-          <details open>
-            <summary>オーバーレイ切替</summary>
-            <div class="section-body">
-            <label><input type="checkbox" id="toggleHearts" checked /> ♡を表示</label>
-            <label><input type="checkbox" id="toggleFlashes" checked /> 狩りエフェクトを表示</label>
-            <label><input type="checkbox" id="toggleTrails" checked /> 軌跡を表示</label>
-            <label><input type="checkbox" id="toggleVectors" checked /> 速度ベクトルを表示</label>
-          </div>
+        <div class="row" style="margin-top:8px;">
+          <label>地形パターン<select id="patternSelect"><option value="meandering_river">蛇行河川</option><option value="delta_wetland">デルタ湿地</option><option value="mountain_valley">山岳渓谷</option></select></label>
+          <button id="regenBtn">地形再生成</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>環境表示</h2>
+        <div class="overlay-toggle">
+          <label><input type="radio" name="overlay" value="none" checked>ベース</label>
+          <label><input type="radio" name="overlay" value="moist">水分</label>
+          <label><input type="radio" name="overlay" value="river">河川</label>
+          <label><input type="radio" name="overlay" value="plant">植生</label>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>状態</h2>
+        <div class="hud-grid">
+          <div class="hud"><div class="label">ステップ</div><div class="value" id="hudStep">0</div></div>
+          <div class="hud"><div class="label">季節</div><div class="value" id="hudSeason">雨季</div></div>
+          <div class="hud"><div class="label">平均水分</div><div class="value" id="hudMoist">0.00</div></div>
+          <div class="hud"><div class="label">河川セル</div><div class="value" id="hudRiver">0</div></div>
+          <div class="hud"><div class="label">草食</div><div class="value" id="hudHerb">0</div></div>
+          <div class="hud"><div class="label">肉食</div><div class="value" id="hudCarn">0</div></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>ログ / CSV</h2>
+        <div class="row">
+          <button id="downloadCsv">CSV保存</button>
+          <span class="badge">Chart.js グラフ更新中</span>
+        </div>
+        <div class="chart-wrap" style="margin-top:8px;">
+          <canvas id="popChart" height="180"></canvas>
+        </div>
+        <details style="margin-top:10px;">
+          <summary>イベントログ</summary>
+          <div class="log-box" id="logBox"></div>
         </details>
       </div>
-      <div class="section">
-        <details open>
-          <summary>カメラ</summary>
-          <div class="section-body">
-            <div class="row" style="display:flex; gap:8px; flex-wrap:wrap;">
-              <button class="btn" id="resetView">表示リセット</button>
-              <label style="display:flex; gap:6px; align-items:center; font-size:13px; color:#a9b7c6;">
-                ズーム
-                <input id="zoomSlider" type="range" min="0.5" max="2.5" step="0.01" value="1" />
-              </label>
-            </div>
-          </div>
-        </details>
+      <div class="panel">
+        <h2>パラメータ</h2>
+        <div class="row"><label>雨季長<input id="rainyLen" type="number" value="600" min="100"></label><label>乾季長<input id="dryLen" type="number" value="400" min="100"></label></div>
+        <div class="row" style="margin-top:6px;"><label>共有率<input id="shareRate" type="number" min="0" max="1" step="0.05" value="0.6"></label><label>リーダー倍率<input id="leaderBonus" type="number" min="1" max="2" step="0.1" value="1.2"></label></div>
       </div>
-      <div class="section">
-        <details>
-          <summary>編集モード</summary>
-          <div class="section-body" style="display:grid; gap:10px;">
-            <label><input type="checkbox" id="editModeToggle" /> Edit Modeを有効化</label>
-            <label>ブラシ
-              <select id="brushType">
-                <option value="grass">草原</option>
-                <option value="forest">森林</option>
-                <option value="shrub">低木地</option>
-                <option value="water">水域</option>
-                <option value="wetland">湿地</option>
-                <option value="rock">岩地</option>
-                <option value="sand">砂地</option>
-              </select>
-            </label>
-            <label>ブラシ半径
-              <input id="brushRadius" type="range" min="1" max="8" step="1" value="2" />
-            </label>
-            <label><input type="checkbox" id="continuousPaint" checked /> ドラッグで連続描画</label>
-          </div>
-        </details>
-      </div>
-    </div>
-  </div>
-
-  <div class="widget" id="chartWidget" data-widget-id="chartWidget" style="left:360px; top:540px; width:420px;">
-    <div class="widget-header" data-widget-id="chartWidget">
-      <div class="widget-title">指標</div>
-      <div class="widget-controls">
-        <button data-action="minimize" data-widget-id="chartWidget">—</button>
-        <button data-action="maximize" data-widget-id="chartWidget">▢</button>
-      </div>
-    </div>
-    <div class="widget-body">
-      <canvas id="popChart" aria-label="個体数グラフ" height="200"></canvas>
-    </div>
-  </div>
-
-  <div class="widget" id="legendWidget" data-widget-id="legendWidget" style="right:16px; top:96px; width:300px;">
-    <div class="widget-header" data-widget-id="legendWidget">
-      <div class="widget-title">凡例</div>
-      <div class="widget-controls">
-        <button data-action="minimize" data-widget-id="legendWidget">—</button>
-        <button data-action="maximize" data-widget-id="legendWidget">▢</button>
-      </div>
-    </div>
-    <div class="widget-body">
-      <div class="legend-grid" id="legendList"></div>
-    </div>
-  </div>
-
-  <div class="widget" id="settingsWidget" data-widget-id="settingsWidget" style="right:16px; top:320px; width:360px;">
-    <div class="widget-header" data-widget-id="settingsWidget">
-      <div class="widget-title">設定</div>
-      <div class="widget-controls">
-        <button data-action="minimize" data-widget-id="settingsWidget">—</button>
-        <button data-action="maximize" data-widget-id="settingsWidget">▢</button>
-      </div>
-    </div>
-    <div class="widget-body">
-      <div class="section">
-        <details open>
-          <summary>シミュレーション</summary>
-          <div class="section-body">
-            <div class="row" style="display:flex; gap:8px; flex-wrap:wrap;">
-              <button class="btn" data-preset="temperate">温帯森林</button>
-              <button class="btn" data-preset="savanna">サバンナ</button>
-              <button class="btn" data-preset="wetland">湿地</button>
-            </div>
-            <div class="row" style="display:flex; gap:8px; flex-wrap:wrap;">
-              <label><input type="checkbox" id="modeExtinction" /> 全滅まで実行</label>
-            </div>
-            <div class="section" style="margin-top:8px;">
-              <details open>
-                <summary>行動モード（種別ごと）</summary>
-                <div class="section-body" id="behaviorControls" style="display:grid; gap:8px;"></div>
-              </details>
-            </div>
-          </div>
-        </details>
-      </div>
-    </div>
-  </div>
-
-  <div class="widget-dock">
-    <div class="dock-col" id="dockLeft"></div>
-    <div class="dock-col" id="dockRight"></div>
-  </div>
-
-  <div class="backdrop" id="modalBackdrop"></div>
+    </aside>
+  </main>
 
   <script>
-    console.log('[BioSphere] スクリプト初期化開始');
-    /* Window manager */
-    const widgetManager = (() => {
-      const widgets = new Map();
-      const zBase = 20;
-      let zCursor = zBase;
-      let dragging = null;
+  // 乱数生成（mulberry32）
+  function createRng(seedStr){
+    let h=1779033703^seedStr.length; for(let i=0;i<seedStr.length;i++){h=Math.imul(h^seedStr.charCodeAt(i),3432918353); h=h<<13|h>>>19;}
+    return function(){h=Math.imul(h^h>>>16,2246822507); h=Math.imul(h^h>>>13,3266489909); const t=(h^h>>>16)>>>0; return (t>>>0)/4294967296;};
+  }
 
-      const syncButtons = (el, action, active) => {
-        el.querySelectorAll(`[data-action="${action}"]`).forEach(btn => {
-          btn.setAttribute('aria-pressed', active);
-        });
-      };
+  // Perlinノイズ（seed対応）
+  function createPerlin(rng){
+    const grad = [];
+    for(let i=0;i<256;i++){const a=rng()*2*Math.PI; grad.push({x:Math.cos(a),y:Math.sin(a)});} 
+    const perm = new Uint8Array(512);
+    const base = [...Array(256).keys()];
+    for(let i=0;i<256;i++){
+      const j=Math.floor(rng()*base.length);
+      const v=base.splice(j,1)[0]; perm[i]=v; perm[i+256]=v;
+    }
+    const lerp=(a,b,t)=>a+(b-a)*t; const fade=t=>t*t*t*(t*(t*6-15)+10);
+    function dot(ix,iy,x,y){const g=grad[perm[(ix+perm[iy&255])&255]]; return (x-ix)*g.x+(y-iy)*g.y;}
+    function noise(x,y){const ix=Math.floor(x), iy=Math.floor(y); const fx=x-ix, fy=y-iy; const u=fade(fx), v=fade(fy);
+      const n00=dot(ix,iy,x,y), n10=dot(ix+1,iy,x,y), n01=dot(ix,iy+1,x,y), n11=dot(ix+1,iy+1,x,y);
+      return lerp(lerp(n00,n10,u), lerp(n01,n11,u), v)*0.5+0.5; }
+    return {noise};
+  }
 
-      const register = (id) => {
-        const el = document.getElementById(id);
-        if(!el) return;
-        el.dataset.widgetId = id;
-        widgets.set(id, { el, restoreRect:null, z:zCursor++ });
-        el.style.zIndex = widgets.get(id).z;
-        syncButtons(el, 'minimize', false);
-        syncButtons(el, 'maximize', false);
-      };
+  const params = {
+    gridW: 96, gridH: 64,
+    cellSize: 8,
+    herbCount: 60,
+    carnCount: 24,
+    viewRange: 6,
+    packRange: 5,
+    killRadius: 3,
+    reproductionEnergy: 0.9,
+    hydrationDecay: 0.003,
+    baseMetabolism: 0.002,
+    plantGrowth: 0.08,
+    moistRecoverRainy: 0.04,
+    moistLossDry: 0.03,
+    dischargeRainy: 1.1,
+    dischargeDry: 0.45
+  };
 
-      const saveRect = (el) => {
-        const rect = el.getBoundingClientRect();
-        return {
-          left: el.style.left || `${rect.left}px`,
-          top: el.style.top || `${rect.top}px`,
-          width: el.style.width || `${rect.width}px`,
-          height: el.style.height || `${rect.height}px`,
-        };
-      };
-
-      const applyRect = (el, rect) => {
-        if(!rect) return;
-        el.style.left = rect.left;
-        el.style.top = rect.top;
-        el.style.width = rect.width;
-        el.style.height = rect.height;
-      };
-
-      const focus = (id) => {
-        const entry = widgets.get(id); if(!entry) return;
-        entry.z = ++zCursor;
-        entry.el.style.zIndex = entry.z;
-      };
-
-      const minimize = (id) => {
-        const entry = widgets.get(id); if(!entry) return;
-        const { el } = entry;
-        const willMinimize = !el.classList.contains('is-minimized');
-        if(willMinimize && !el.classList.contains('is-maximized')){
-          entry.restoreRect = saveRect(el);
-        }
-        el.classList.toggle('is-minimized', willMinimize);
-        if(willMinimize) el.classList.remove('is-maximized');
-        syncButtons(el, 'minimize', willMinimize);
-        if(!willMinimize) clampToViewport(el);
-      };
-
-      const maximize = (id) => {
-        const entry = widgets.get(id); if(!entry) return;
-        const { el } = entry;
-        if(el.classList.contains('is-maximized')){
-          el.classList.remove('is-maximized');
-          syncButtons(el, 'maximize', false);
-          applyRect(el, entry.restoreRect);
-          clampToViewport(el);
-          return;
-        }
-        entry.restoreRect = saveRect(el);
-        el.classList.add('is-maximized');
-        el.classList.remove('is-minimized');
-        syncButtons(el, 'maximize', true);
-        syncButtons(el, 'minimize', false);
-      };
-
-      const clampToViewport = (el) => {
-        const rect = el.getBoundingClientRect();
-        const vw = window.innerWidth; const vh = window.innerHeight;
-        let left = rect.left; let top = rect.top;
-        left = Math.min(Math.max(left, 8), vw - rect.width - 8);
-        top = Math.min(Math.max(top, 8), vh - rect.height - 8);
-        el.style.left = `${left}px`; el.style.top = `${top}px`;
-      };
-
-      const startDrag = (e) => {
-        const header = e.target.closest('.widget-header');
-        if(!header || e.target.closest('[data-action]')) return;
-        const id = header.dataset.widgetId || header.parentElement?.dataset.widgetId;
-        const entry = widgets.get(id); if(!entry) return;
-        const el = entry.el;
-        if(el.classList.contains('is-maximized')) return;
-        focus(id);
-        const rect = el.getBoundingClientRect();
-        dragging = { id, offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top, pointerId:e.pointerId };
-        header.setPointerCapture(e.pointerId);
-        el.classList.add('dragging');
-      };
-
-      const doDrag = (e) => {
-        if(!dragging || e.pointerId !== dragging.pointerId) return;
-        const entry = widgets.get(dragging.id); if(!entry) return;
-        const el = entry.el;
-        const left = e.clientX - dragging.offsetX;
-        const top = e.clientY - dragging.offsetY;
-        el.style.left = `${left}px`;
-        el.style.top = `${top}px`;
-      };
-
-      const endDrag = (e) => {
-        if(!dragging || (e && e.pointerId !== dragging.pointerId)) { return; }
-        const entry = widgets.get(dragging.id);
-        if(entry){
-          clampToViewport(entry.el);
-          entry.el.classList.remove('dragging');
-        }
-        dragging = null;
-      };
-
-      const cleanupOverlays = () => {
-        document.querySelectorAll('.backdrop').forEach(el=>{
-          el.classList.remove('active');
-          el.style.pointerEvents = 'none';
-        });
-        document.querySelectorAll('.widget').forEach(el=>el.style.pointerEvents='auto');
-        if(typeof mapStage !== 'undefined' && mapStage){ mapStage.style.pointerEvents = 'auto'; }
-        if(typeof canvasHost !== 'undefined' && canvasHost){ canvasHost.style.pointerEvents = 'auto'; }
-      };
-
-      const panicReset = () => {
-        cleanupOverlays();
-        widgets.forEach(({el, restoreRect}) => {
-          el.classList.remove('is-maximized', 'is-minimized', 'dragging');
-          syncButtons(el, 'maximize', false);
-          syncButtons(el, 'minimize', false);
-          applyRect(el, restoreRect);
-          clampToViewport(el);
-        });
-      };
-
-      document.addEventListener('pointerdown', (e)=>{
-        const widget = e.target.closest('.widget');
-        if(widget){
-          focus(widget.dataset.widgetId);
-        }
-        if(e.target.closest('[data-action]')){ e.stopPropagation(); }
-      }, true);
-
-      document.addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-action]');
-        if(!btn) return;
-        const id = btn.dataset.widgetId || btn.closest('.widget')?.dataset.widgetId;
-        const action = btn.dataset.action;
-        if(action === 'minimize') minimize(id);
-        if(action === 'maximize') maximize(id);
-      });
-
-      document.addEventListener('pointerdown', startDrag);
-      document.addEventListener('pointermove', doDrag);
-      document.addEventListener('pointerup', endDrag);
-      document.addEventListener('pointercancel', endDrag);
-
-      window.addEventListener('resize', () => widgets.forEach(({el}) => clampToViewport(el)));
-
-      return { register, minimize, maximize, clampToViewport, panicReset, focus };
-    })();
-
-    ['hudWidget','summaryWidget','controlsWidget','legendWidget','settingsWidget'].forEach(widgetManager.register);
-
-    /* Canvas manager */
-    const mapStage = document.getElementById('mapStage');
-    const canvasHost = document.getElementById('canvasHost');
-    if(!mapStage || !canvasHost){ throw new Error('#mapStage / #canvasHost が見つかりません'); }
-    const canvasDebug = document.getElementById('canvasDebug');
-    const canvasDebugToggle = document.getElementById('canvasDebugToggle');
-    const canvasSizeStat = document.getElementById('canvasSizeStat');
-    const canvasDprStat = document.getElementById('canvasDprStat');
-    const canvasRenderStat = document.getElementById('canvasRenderStat');
-    const canvasTilesStat = document.getElementById('canvasTilesStat');
-    const canvasStatus = document.getElementById('canvasStatus');
-    const modalBackdrop = document.getElementById('modalBackdrop');
-    let pInstance = null;
-    let simFrame = null;
-    let resizeObserver = null;
-    let debugEnabled = true;
-    const query = new URLSearchParams(location.search);
-    if(query.has('debug')){ debugEnabled = query.get('debug') === '1'; }
-    let stageRetry = 0;
-    const maxStageRetry = 10;
-    const renderStats = { lastRenderMs: 0, worldTiles: 0 };
-    let drawErrored = false;
-    let terrainLayer = null;
-    const logicDt = 16;
-    let logicAccumulator = 0;
-    let lastLogicTick = 0;
-
-    /* Simulation */
-    const legendList = document.getElementById('legendList');
-    const presetButtons = document.querySelectorAll('[data-preset]');
-    const toggleHearts = document.getElementById('toggleHearts');
-    const toggleFlashes = document.getElementById('toggleFlashes');
-    const toggleTrails = document.getElementById('toggleTrails');
-    const toggleVectors = document.getElementById('toggleVectors');
-    const startBtn = document.getElementById('startBtn');
-    const stopBtn = document.getElementById('stopBtn');
-    const stepBtn = document.getElementById('stepBtn');
-    const panicBtn = document.getElementById('panicBtn');
-    const speedSelect = document.getElementById('speedSelect');
-    const logIntervalSelect = document.getElementById('logInterval');
-    const extinctionModeCheckbox = document.getElementById('modeExtinction');
-    const behaviorControls = document.getElementById('behaviorControls');
-    const zoomSlider = document.getElementById('zoomSlider');
-    const editModeToggle = document.getElementById('editModeToggle');
-    const brushTypeSelect = document.getElementById('brushType');
-    const brushRadiusSlider = document.getElementById('brushRadius');
-    const continuousPaintToggle = document.getElementById('continuousPaint');
-    const popChartCanvas = document.getElementById('popChart');
-
-    const terrainTypes = [
-      { key:'grass', name:'草原', color:'#1f6f3f', texture:'#2b8a4f', plantK:0.65, cover:0.1, isWater:false, isRock:false },
-      { key:'forest', name:'森林', color:'#19341f', texture:'#225028', plantK:0.8, cover:0.4, isWater:false, isRock:false },
-      { key:'shrub', name:'低木地', color:'#245c3c', texture:'#2f7a4c', plantK:0.7, cover:0.25, isWater:false, isRock:false },
-      { key:'rock', name:'岩地', color:'#545b63', texture:'#737b84', plantK:0, cover:0.05, isWater:false, isRock:true },
-      { key:'water', name:'水域', color:'#1b3b62', texture:'#27517f', plantK:0, cover:0, isWater:true, isRock:false },
-      { key:'wetland', name:'湿地', color:'#1f4f58', texture:'#2f7a88', plantK:0.9, cover:0.18, isWater:false, isRock:false },
-      { key:'sand', name:'砂地', color:'#7a623c', texture:'#8b754f', plantK:0.3, cover:0.05, isWater:false, isRock:false },
-    ];
-
-    const speciesLibrary = {
-      deer:{ name:'シカ系', diet:'herb', color:'#9be070', outline:'#0d190a', inner:'#d7f7b2', speed:0.6, sociality:0.5, behavior:'herd', metabolism:0.002, satietyDecay:0.003, reproduction: {interval:1400, litter:[1,2]}, vision:4, coverAffinity:0.2 },
-      wolf:{ name:'オオカミ系', diet:'carn', color:'#ff9f70', outline:'#3a1205', inner:'#ffc9a6', speed:0.8, sociality:0.7, behavior:'pack', metabolism:0.0022, satietyDecay:0.003, reproduction: {interval:1800, litter:[2,3]}, vision:5, coverAffinity:-0.1 },
-      zebra:{ name:'シマウマ系', diet:'herb', color:'#d8f0ff', outline:'#101820', inner:'#6dc6ff', speed:0.75, sociality:0.7, behavior:'herd', metabolism:0.002, satietyDecay:0.003, reproduction: {interval:1600, litter:[1,1]}, vision:4, coverAffinity:0 },
-      lion:{ name:'ライオン系', diet:'carn', color:'#f1c56a', outline:'#4e2c05', inner:'#ffe2a6', speed:0.7, sociality:0.6, behavior:'pack', metabolism:0.0024, satietyDecay:0.003, reproduction:{interval:1900, litter:[2,3]}, vision:5, coverAffinity:-0.05 },
-      capybara:{ name:'カピバラ系', diet:'herb', color:'#cdb18a', outline:'#302215', inner:'#f3e3c8', speed:0.45, sociality:0.4, behavior:'den', metabolism:0.0018, satietyDecay:0.0025, reproduction:{interval:1500, litter:[2,4]}, vision:3, coverAffinity:0.25 },
-      otter:{ name:'カワウソ系', diet:'carn', color:'#9cc4ff', outline:'#0c1d32', inner:'#d7e7ff', speed:0.6, sociality:0.5, behavior:'ambush', metabolism:0.0021, satietyDecay:0.0028, reproduction:{interval:1600, litter:[1,2]}, vision:4, coverAffinity:0.15 }
-    };
-
-    const presets = {
-      temperate: {
-        label:'温帯森林',
-        description:'四季と豊かな下草。冬の終わりにオオカミが群れを作る。',
-        climate:{ temp: [10,18,12,2], rain:[0.22,0.32,0.25,0.16] },
-        animals:[
-          { species:'deer', count:32 },
-          { species:'wolf', count:12 },
-        ],
-        terrain: { forest:0.34, shrub:0.18, wetland:0.08, water:0.08, rock:0.08, sand:0.02 },
-        mapType:'meandering_river'
-      },
-      savanna: {
-        label:'サバンナ',
-        description:'乾季が長く、雨季に草木が爆発的成長。ライオンは水場周りで協調。',
-        climate:{ temp:[24,31,27,19], rain:[0.1,0.32,0.07,0.04] },
-        animals:[
-          { species:'zebra', count:34 },
-          { species:'lion', count:14 },
-        ],
-        terrain: { grass:0.34, shrub:0.2, sand:0.14, water:0.08, rock:0.05, wetland:0.05 },
-        mapType:'savanna_mosaic'
-      },
-      wetland: {
-        label:'湿地',
-        description:'岩の巣穴が点在する大きな沼地。カワウソは葦際で待ち伏せ。',
-        climate:{ temp:[18,24,15,9], rain:[0.32,0.44,0.28,0.22] },
-        animals:[
-          { species:'capybara', count:28 },
-          { species:'otter', count:12 },
-        ],
-        terrain: { wetland:0.34, water:0.18, forest:0.16, rock:0.09, grass:0.1, shrub:0.05 },
-        mapType:'delta_wetland'
-      }
-    };
-
-    const mapPatterns = {
-      meandering_river:{ label:'蛇行する大河', noiseScale:0.08, riverCount:1, wetlandBias:0.18, forestBias:0.24, hillBias:0.18 },
-      delta_wetland:{ label:'三角州', noiseScale:0.07, riverCount:2, wetlandBias:0.35, forestBias:0.18, hillBias:0.1 },
-      mountain_valley:{ label:'山地谷', noiseScale:0.06, riverCount:1, wetlandBias:0.12, forestBias:0.28, hillBias:0.35 },
-      patchy_forest:{ label:'森林塊', noiseScale:0.09, riverCount:0, wetlandBias:0.12, forestBias:0.38, hillBias:0.12 },
-      savanna_mosaic:{ label:'草地モザイク', noiseScale:0.1, riverCount:1, wetlandBias:0.14, forestBias:0.12, hillBias:0.08 }
-    };
-
-    const state = {
+  function createState(seed){
+    return {
+      seed,
+      rng: createRng(seed),
+      cells: [],
+      animals: {herbivores: [], carnivores: []},
+      trails: [],
+      history: [],
       running:false,
-      season:0,
-      temp:12,
-      rain:0,
-      score:0,
-      animals:[],
-      plants:[],
-      terrain:[],
-      dens: new Set(),
-      reproductionEvents:[],
-      huntEvents:[],
-      births:0,
-      deaths:0,
-      hunts:0,
-      history:[],
-      stepCount:0,
-      logEvery:1,
-      speedMultiplier:1,
-      terrainDirty:true,
-      mapType:'meandering_river',
-      view:{ scale:1, offsetX:0, offsetY:0 },
-      gridW:72,
-      gridH:44,
-      tile:18,
-      climate: presets.temperate.climate,
-      endAllExtinct:false,
+      overlay:'none',
+      step:0,
+      season:'雨季',
+      seasonCounter:0,
+      events:[],
+      shareLogs:[],
+      shareCursor:0,
+      idCounter:0,
+      lastError:null
     };
-    let popChart = null;
+  }
 
-    function clampScale(value){ return Math.min(Math.max(value, 0.5), 2.5); }
-
-    function recenterView(){
-      const rect = measureStage();
-      const worldW = state.gridW * state.tile * state.view.scale;
-      const worldH = state.gridH * state.tile * state.view.scale;
-      state.view.offsetX = (rect.width - worldW)/2;
-      state.view.offsetY = (rect.height - worldH)/2;
-    }
-
-    function syncZoomSlider(){
-      if(!zoomSlider) return;
-      zoomSlider.value = clampScale(state.view.scale).toFixed(2);
-    }
-
-    function updateScale(newScale, anchorX=null, anchorY=null){
-      const rect = measureStage();
-      const anchor = {
-        x: anchorX ?? rect.width/2,
-        y: anchorY ?? rect.height/2,
-      };
-      const prevScale = state.view.scale || 1;
-      const worldX = (anchor.x - state.view.offsetX) / (state.tile * prevScale);
-      const worldY = (anchor.y - state.view.offsetY) / (state.tile * prevScale);
-      state.view.scale = clampScale(newScale);
-      const scaledTile = state.tile * state.view.scale;
-      state.view.offsetX = anchor.x - worldX * scaledTile;
-      state.view.offsetY = anchor.y - worldY * scaledTile;
-      syncZoomSlider();
-    }
-
-    function measureStage(){
-      const rect = canvasHost.getBoundingClientRect();
-      return { width: Math.round(rect.width), height: Math.round(rect.height) };
-    }
-
-    function setCanvasStatus(message, isError=false){
-      if(!canvasStatus) return;
-      if(message){
-        canvasStatus.textContent = message;
-        canvasStatus.style.borderColor = isError ? 'rgba(255,120,120,0.65)' : 'rgba(110,200,255,0.45)';
-        canvasStatus.style.background = isError ? 'rgba(55,10,10,0.82)' : 'rgba(10,30,55,0.7)';
-        canvasStatus.style.color = isError ? '#ffb0b0' : '#cde7ff';
-        canvasStatus.classList.remove('hidden');
-      } else {
-        canvasStatus.classList.add('hidden');
+  function generateTerrain(state, pattern){
+    const rng = state.rng;
+    const perlin = createPerlin(rng);
+    const w=params.gridW, h=params.gridH;
+    state.cells = new Array(w*h).fill(0).map((_,i)=>({elev:0,wet:0,moist:0.5,flowDir:-1,flowAcc:0,riverActive:false,plant:0.4}));
+    const scaleElev = pattern==='mountain_valley'?0.05:0.08;
+    const scaleWet = pattern==='delta_wetland'?0.07:0.09;
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const idx=y*w+x;
+        const elev = perlin.noise(x*scaleElev + (pattern==='mountain_valley'?0.5*y*0.02:0), y*scaleElev);
+        const wet = perlin.noise((x+100)*scaleWet, (y+30)*scaleWet);
+        state.cells[idx].elev = pattern==='mountain_valley'?Math.pow(elev,1.2):elev;
+        state.cells[idx].wet = pattern==='delta_wetland'?Math.min(1, wet*0.8+0.2):wet;
+        state.cells[idx].plant = 0.3 + rng()*0.2;
       }
     }
-
-    function showErrorModal(message){
-      if(!modalBackdrop) return;
-      modalBackdrop.innerHTML = '';
-      const modal = document.createElement('div');
-      modal.className = 'modal';
-      modal.innerHTML = `<h3>描画エラー</h3><p>${message}</p><button class="btn" id="modalClose">閉じる</button>`;
-      modalBackdrop.appendChild(modal);
-      modalBackdrop.classList.add('active');
-      const closeBtn = modal.querySelector('#modalClose');
-      closeBtn?.addEventListener('click', ()=>modalBackdrop.classList.remove('active'));
-    }
-
-    function updateDebugPanel(rect){
-      if(!debugEnabled){
-        canvasDebug.classList.add('off');
-        return;
-      }
-      canvasDebug.classList.remove('off');
-      const dpr = Math.round((window.devicePixelRatio||1)*100)/100;
-      canvasSizeStat.textContent = `キャンバス: ${rect.width}x${rect.height}`;
-      canvasDprStat.textContent = `DPR: ${dpr}`;
-      canvasRenderStat.textContent = `最終描画: ${renderStats.lastRenderMs.toFixed(1)} ms`;
-      canvasTilesStat.textContent = `タイル数: ${renderStats.worldTiles}`;
-      if(rect.width===0 || rect.height===0){
-        canvasSizeStat.classList.add('is-error');
-      } else {
-        canvasSizeStat.classList.remove('is-error');
-      }
-    }
-
-    function ensureCanvasSize(){
-      if(!pInstance) return false;
-      const rect = measureStage();
-      const dpr = window.devicePixelRatio || 1;
-      pInstance.pixelDensity(dpr);
-      if(rect.width && rect.height){
-        pInstance.resizeCanvas(rect.width, rect.height, true);
-        updateDebugPanel(rect);
-        setCanvasStatus('');
-        stageRetry = 0;
-        return true;
-      }
-      updateDebugPanel(rect);
-      if(stageRetry < maxStageRetry){
-        stageRetry++;
-        setCanvasStatus(`キャンバス準備待機中 (${stageRetry}/${maxStageRetry})`);
-        setTimeout(()=>{ ensureCanvasSize(); renderOnce('recover'); }, 100);
-      } else {
-        setCanvasStatus('キャンバス領域が 0x0 のため初期化に失敗しました', true);
-      }
-      return false;
-    }
-
-    function createCanvasSafely(sk, onSuccess=null){
-      const rect = measureStage();
-      if(rect.width && rect.height){
-        const cnv = sk.createCanvas(Math.max(1, rect.width), Math.max(1, rect.height));
-        cnv.parent(canvasHost);
-        cnv.canvas.id = 'mapCanvas';
-        setCanvasStatus('');
-        stageRetry = 0;
-        console.log(`[BioSphere] canvas created ${rect.width}x${rect.height}`);
-        if(typeof onSuccess === 'function'){ onSuccess(); }
-        return cnv;
-      }
-      if(stageRetry < maxStageRetry){
-        stageRetry++;
-        setCanvasStatus(`キャンバス初期化を再試行中 (${stageRetry}/${maxStageRetry})`);
-        setTimeout(()=>createCanvasSafely(p, onSuccess), 100);
-      } else {
-        setCanvasStatus('キャンバス領域が 0x0 のため描画できません', true);
-      }
-      return null;
-    }
-
-    const legendEntries = [
-      ...terrainTypes.map(t=>({label:t.name, color:t.color})),
-      { label:'草食動物', color:'#9be070' },
-      { label:'肉食動物', color:'#ff9f70' },
-      { label:'巣', color:'#f5d97a' }
-    ];
-
-    function renderOnce(reason='manual'){
-      if(!pInstance) return;
-      const rect = measureStage();
-      if(!rect.width || !rect.height){
-        updateDebugPanel(rect);
-        requestAnimationFrame(()=>renderOnce('recover')); 
-        return;
-      }
-      const start = performance.now();
-      ensureCanvasSize();
-      pInstance.redraw();
-      renderStats.lastRenderMs = performance.now() - start;
-      updateDebugPanel(rect);
-    }
-
-    function startSimLoop(){
-      if(simFrame) return;
-      const tick = (now=performance.now()) => {
-        if(!state.running){ simFrame = null; logicAccumulator = 0; return; }
-        if(!lastLogicTick) lastLogicTick = now;
-        const delta = Math.min(64, now - lastLogicTick);
-        lastLogicTick = now;
-        logicAccumulator += delta * (state.speedMultiplier||1);
-        let steps = Math.floor(logicAccumulator / logicDt);
-        steps = Math.min(steps, 8);
-        for(let i=0;i<steps;i++){
-          stepSim();
-          logicAccumulator -= logicDt;
-        }
-        renderOnce('sim');
-        simFrame = requestAnimationFrame(tick);
-      };
-      simFrame = requestAnimationFrame(tick);
-    }
-
-    function stopSimLoop(){
-      state.running = false;
-      if(simFrame){ cancelAnimationFrame(simFrame); simFrame = null; }
-      logicAccumulator = 0; lastLogicTick = 0;
-    }
-
-    function renderLegend(){
-      legendList.innerHTML = '';
-      legendEntries.forEach(t => {
-        const row = document.createElement('div');
-        row.className = 'legend-row';
-        row.innerHTML = `<span class="legend-swatch" style="background:${t.color}"></span><span>${t.label}</span>`;
-        legendList.appendChild(row);
-      });
-    }
-    renderLegend();
-    toggleHearts.addEventListener('change', ()=>renderOnce('overlay'));
-    toggleFlashes.addEventListener('change', ()=>renderOnce('overlay'));
-    toggleTrails.addEventListener('change', ()=>renderOnce('overlay'));
-    toggleVectors.addEventListener('change', ()=>renderOnce('overlay'));
-    zoomSlider.addEventListener('input', ()=>{ updateScale(parseFloat(zoomSlider.value||'1')); renderOnce('zoom'); });
-
-    /* Core sim helpers */
-    const clamp01 = (v) => Math.min(1, Math.max(0, v));
-    const randBetween = (min,max) => min + Math.random()*(max-min);
-    const wrap = (v, max) => (v + max) % max;
-    const spatial = { cell:3, bins:new Map() };
-
-    function rebuildSpatialHash(){
-      spatial.bins.clear();
-      state.animals.forEach((a,i)=>{
-        const cx = Math.floor(a.x / spatial.cell);
-        const cy = Math.floor(a.y / spatial.cell);
-        const key = `${cx}:${cy}`;
-        if(!spatial.bins.has(key)) spatial.bins.set(key, []);
-        spatial.bins.get(key).push(i);
-      });
-    }
-
-    function queryNeighbors(a, range){
-      const results = [];
-      const cellRange = Math.ceil(range / spatial.cell);
-      const baseX = Math.floor(a.x / spatial.cell);
-      const baseY = Math.floor(a.y / spatial.cell);
-      for(let dy=-cellRange; dy<=cellRange; dy++){
-        for(let dx=-cellRange; dx<=cellRange; dx++){
-          const key = `${baseX+dx}:${baseY+dy}`;
-          const bin = spatial.bins.get(key);
-          if(!bin) continue;
-          bin.forEach(idx => {
-            const b = state.animals[idx];
-            if(!b || b===a) return;
-            if(dist(a,b) <= range) results.push(b);
-          });
-        }
-      }
-      return results;
-    }
-
-    function createTerrain(){
-      const pattern = mapPatterns[state.mapType] || mapPatterns.meandering_river;
-      const scale = pattern.noiseScale || 0.08;
-      const riverCount = pattern.riverCount ?? 1;
-      const elevSeed = Math.random()*1000;
-      const moistSeed = Math.random()*2000;
-      const river = new Set();
-      const widen = (idx) => { river.add(idx); river.add(idx-1); river.add(idx+1); };
-      for(let r=0;r<riverCount;r++){
-        let cx = randBetween(state.gridW*0.2, state.gridW*0.8);
-        for(let y=0;y<state.gridH;y++){
-          const idx = y*state.gridW + Math.floor(cx);
-          widen(idx);
-          cx += randBetween(-1.1,1.1);
-          cx = Math.max(1, Math.min(state.gridW-2, cx));
-        }
-      }
-      const arr=[];
-      for(let y=0;y<state.gridH;y++){
-        for(let x=0;x<state.gridW;x++){
-          const idx = y*state.gridW + x;
-          const eNoise = (pInstance?.noise((x+elevSeed)*scale, (y+elevSeed)*scale) ?? Math.random());
-          const mNoise = (pInstance?.noise((x+moistSeed)*scale*1.1, (y+moistSeed)*scale*1.1) ?? Math.random());
-          const elev = eNoise + pattern.hillBias*0.5;
-          const moist = mNoise + pattern.wetlandBias*0.4;
-          const nearRiver = river.has(idx) || river.has(idx-1) || river.has(idx+1) || river.has(idx-state.gridW) || river.has(idx+state.gridW);
-          let tile = 'grass';
-          if(river.has(idx)) tile = 'water';
-          else if(nearRiver && moist>0.42) tile = 'wetland';
-          else if(elev>0.75) tile = 'rock';
-          else if(moist>0.6) tile = 'forest';
-          else if(moist>0.45) tile = 'shrub';
-          else if(elev<0.25) tile = 'sand';
-          arr.push(tile);
-        }
-      }
-      return arr;
-    }
-
-    function applyBrush(gx, gy){
-      const radius = parseInt(brushRadiusSlider?.value || '1');
-      const type = brushTypeSelect?.value || 'grass';
-      const r2 = radius*radius;
-      for(let dy=-radius; dy<=radius; dy++){
-        for(let dx=-radius; dx<=radius; dx++){
-          if(dx*dx + dy*dy > r2) continue;
-          const x = Math.max(0, Math.min(state.gridW-1, Math.floor(gx+dx)));
-          const y = Math.max(0, Math.min(state.gridH-1, Math.floor(gy+dy)));
-          const idx = y*state.gridW + x;
-          state.terrain[idx] = type;
-          const terrain = terrainTypes.find(t=>t.key===type);
-          if(!terrain || terrain.isWater || terrain.isRock){
-            state.plants[idx] = 0;
-          } else {
-            state.plants[idx] = clamp01(terrain.plantK*0.6);
-          }
-        }
-      }
-      state.terrainDirty = true;
-      setupDens();
-    }
-
-    function setupDens(){
-      state.dens.clear();
-      for(let i=0;i<state.terrain.length;i++){
-        const t = terrainTypes.find(tt=>tt.key===state.terrain[i]);
-        if(!t || t.isWater || t.isRock) continue;
-        if(t.key==='rock' || t.key==='forest'){
-          if(Math.random()<0.06) state.dens.add(i);
-        } else if(t.key==='shrub' && Math.random()<0.04){
-          state.dens.add(i);
-        }
-      }
-    }
-
-    function initPlants(){
-      state.plants = state.terrain.map(t => {
-        const terrain = terrainTypes.find(tt=>tt.key===t);
-        if(terrain.isWater || terrain.isRock) return 0;
-        return randBetween(0.2, terrain.plantK);
-      });
-    }
-
-    function spawnAnimals(animalDefs){
-      state.animals = [];
-      animalDefs.forEach(def => {
-        const sp = speciesLibrary[def.species];
-        if(!sp) return;
-        for(let i=0;i<def.count;i++){
-          state.animals.push(makeAnimal(def.species));
-        }
-      });
-    }
-
-    function makeAnimal(speciesKey){
-      const sp = speciesLibrary[speciesKey];
-      return {
-        id:crypto.randomUUID(),
-        species: speciesKey,
-        diet: sp.diet,
-        x: Math.random()*state.gridW,
-        y: Math.random()*state.gridH,
-        vx: randBetween(-0.2,0.2),
-        vy: randBetween(-0.2,0.2),
-        energy: 1,
-        satiety: 0.6,
-        age: 0,
-        lastBreed:0,
-        trail:[],
-      };
-    }
-
-    function applyPreset(key){
-      const preset = presets[key];
-      if(!preset) return;
-      state.climate = preset.climate;
-      state.mapType = preset.mapType || state.mapType;
-      state.season = 0; state.score = 0; state.temp = preset.climate.temp[0]; state.rain = preset.climate.rain[0];
-      state.terrain = createTerrain();
-      state.terrainDirty = true;
-      setupDens();
-      initPlants();
-      spawnAnimals(preset.animals);
-      state.history = [];
-      state.stepCount = 0;
-      state.births = 0; state.deaths = 0; state.hunts = 0;
-      drawErrored = false;
-      renderSummary();
-      updateHUD();
-      const note = preset.description || '';
-      document.getElementById('presetInfo').textContent = `プリセット: ${preset.label}${note ? ' — ' + note : ''}`;
-      renderStats.worldTiles = state.gridW * state.gridH;
-      recenterView();
-      syncZoomSlider();
-      logHistory();
-      renderOnce('preset');
-    }
-
-    presetButtons.forEach(btn => btn.addEventListener('click', ()=>{
-      applyPreset(btn.dataset.preset);
-      state.running = true;
-      startSimLoop();
-    }));
-
-    function renderBehaviorControls(){
-      behaviorControls.innerHTML = '';
-      const behaviorLabels = { herd:'群れ', pack:'群れ狩り', ambush:'待ち伏せ', den:'巣ごもり', wander:'放浪' };
-      Object.entries(speciesLibrary).forEach(([key, sp]) => {
-        const row = document.createElement('div');
-        row.style.display = 'grid';
-        row.style.gridTemplateColumns = '140px 1fr';
-        row.style.alignItems = 'center';
-        const label = document.createElement('div');
-        label.textContent = sp.name;
-        const select = document.createElement('select');
-        ['herd','pack','ambush','den','wander'].forEach(mode => {
-          const opt = document.createElement('option');
-          opt.value = mode; opt.textContent = behaviorLabels[mode] || mode;
-          if(sp.behavior===mode) opt.selected = true;
-          select.appendChild(opt);
+    // flowDir based on elevation gradients
+    const dirs=[[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[1,-1],[-1,1],[1,1]];
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const idx=y*w+x; const cell=state.cells[idx];
+        let best=-1, bestElev=cell.elev;
+        dirs.forEach(([dx,dy],d)=>{
+          const nx=x+dx, ny=y+dy; if(nx<0||ny<0||nx>=w||ny>=h) return;
+          const n=state.cells[ny*w+nx]; if(n.elev<bestElev){ bestElev=n.elev; best=ny*w+nx; }
         });
-        select.addEventListener('change', ()=>{
-          speciesLibrary[key].behavior = select.value;
-        });
-        row.appendChild(label); row.appendChild(select);
-        behaviorControls.appendChild(row);
+        cell.flowDir = best;
+      }
+    }
+    // flow accumulation
+    const order=[...Array(w*h).keys()].sort((a,b)=>state.cells[a].elev-state.cells[b].elev);
+    order.forEach(i=>state.cells[i].flowAcc=1);
+    order.forEach(i=>{const dir=state.cells[i].flowDir; if(dir>=0) state.cells[dir].flowAcc += state.cells[i].flowAcc;});
+    // initial moist
+    state.cells.forEach(c=>{c.moist = 0.35 + c.wet*0.4;});
+  }
+
+  function seedAnimals(state){
+    const rng=state.rng; const w=params.gridW, h=params.gridH;
+    state.animals.herbivores=[]; state.animals.carnivores=[];
+    for(let i=0;i<params.herbCount;i++){
+      const pos = {x:rng()*w,y:rng()*h,energy:0.7+0.2*rng(),hydration:0.8+0.1*rng(),id:`H${i}`};
+      state.animals.herbivores.push(pos);
+    }
+    for(let i=0;i<params.carnCount;i++){
+      const pos = {x:rng()*w,y:rng()*h,energy:0.7+0.2*rng(),hydration:0.8+0.1*rng(),id:`C${i}`};
+      state.animals.carnivores.push(pos);
+    }
+    state.idCounter = state.animals.herbivores.length + state.animals.carnivores.length;
+  }
+
+    function clamp01(v){return Math.max(0, Math.min(1, v));}
+
+    function snapshotEnvironment(state, discharge){
+      let riverCount=0; let moistSum=0;
+      state.cells.forEach(c=>{
+        const riverActive = discharge!==undefined ? (c.flowAcc*discharge>12 && c.elev<0.8) : c.riverActive;
+        if(discharge!==undefined) c.riverActive = riverActive;
+        if(riverActive) riverCount++;
+        moistSum += c.moist;
       });
-    }
-    renderBehaviorControls();
-
-    const hudEls = {
-      pop: document.getElementById('hudPop'),
-      season: document.getElementById('hudSeason'),
-      temp: document.getElementById('hudTemp'),
-      rain: document.getElementById('hudRain'),
-      score: document.getElementById('hudScore'),
-    };
-
-    function updateHUD(){
-      hudEls.pop.textContent = state.animals.length;
-      hudEls.season.textContent = ['春','夏','秋','冬'][state.season%4];
-      hudEls.temp.textContent = `${state.temp.toFixed(1)}℃`;
-      hudEls.rain.textContent = state.rain.toFixed(2);
-      hudEls.score.textContent = state.score.toFixed(0);
+      return {riverCount, meanMoist: moistSum/state.cells.length};
     }
 
-    function renderSummary(){
-      const counts = {};
-      state.animals.forEach(a => { counts[a.species] = (counts[a.species]||0)+1; });
-      const lines = Object.entries(counts).map(([k,v])=>`${speciesLibrary[k]?.name||k}: ${v}`);
-      document.getElementById('genSummary').textContent = lines.join(' / ') || 'データなし';
-    }
+  function chooseNeighbor(x,y,w,h,rng){
+    const dx=[-1,0,1]; const dy=[-1,0,1];
+    const nx=x+dx[Math.floor(rng()*3)]; const ny=y+dy[Math.floor(rng()*3)];
+    return {x:Math.max(0,Math.min(w-1,nx)), y:Math.max(0,Math.min(h-1,ny))};
+  }
 
-    function logHistory(){
-      const counts = {};
-      state.animals.forEach(a => { counts[a.species] = (counts[a.species]||0)+1; });
-      const entry = { step: state.stepCount, births: state.births, deaths: state.deaths, hunts: state.hunts, ...counts };
-      state.history.push(entry);
-      state.history = state.history.slice(-800);
-      state.births = 0; state.deaths = 0; state.hunts = 0;
-      updateChartFromHistory();
-    }
-
-    function updateChartFromHistory(){
-      if(!popChartCanvas) return;
-      const labels = state.history.map(h=>h.step);
-      const speciesKeys = Object.keys(speciesLibrary);
-      const speciesDatasets = speciesKeys.map((key, idx)=>({
-        label: speciesLibrary[key]?.name || key,
-        data: state.history.map(h=>h[key]||0),
-        borderColor: terrainTypes[idx%terrainTypes.length]?.color || '#9be070',
-        tension:0.2,
-        fill:false,
-      }));
-      const extraDatasets = [
-        { label:'出生', data: state.history.map(h=>h.births||0), borderColor:'#ff9fe1', backgroundColor:'#ff9fe1', type:'bar', yAxisID:'y1', stack:'events' },
-        { label:'死亡', data: state.history.map(h=>h.deaths||0), borderColor:'#ffd180', backgroundColor:'#ffd180', type:'bar', yAxisID:'y1', stack:'events' },
-        { label:'捕食', data: state.history.map(h=>h.hunts||0), borderColor:'#ff7043', backgroundColor:'#ff7043', type:'bar', yAxisID:'y1', stack:'events' },
-      ];
-      const config = {
-        type:'line',
-        data:{ labels, datasets:[...speciesDatasets, ...extraDatasets] },
-        options:{
-          animation:false,
-          responsive:true,
-          scales:{
-            y:{ beginAtZero:true, stacked:false },
-            y1:{ beginAtZero:true, stacked:true, position:'right', grid:{ drawOnChartArea:false } }
-          },
-          plugins:{ legend:{ labels:{ color:'#dce6f3' } } }
-        }
-      };
-      if(!popChart){
-        popChart = new Chart(popChartCanvas.getContext('2d'), config);
-      } else {
-        popChart.data = config.data;
-        popChart.update('none');
-      }
-    }
-
-    /* Simulation */
-    let sketch = (sk) => {
-      pInstance = sk;
-      let pan = { active:false, startX:0, startY:0, originX:0, originY:0 };
-
-      sk.setup = () => {
-        canvasHost.innerHTML = '';
-        const finishSetup = () => {
-          sk.pixelDensity(window.devicePixelRatio || 1);
-          sk.noLoop();
-          applyPreset('temperate');
-          if(!resizeObserver){
-            resizeObserver = new ResizeObserver(()=>{ ensureCanvasSize(); renderOnce('resize'); });
-            resizeObserver.observe(mapStage);
-          }
-          const rect = measureStage();
-          console.log(`[BioSphere] p5 ready / map dims ${rect.width}x${rect.height}`);
-        };
-        createCanvasSafely(sk, finishSetup);
-      };
-
-      sk.windowResized = () => {
-        ensureCanvasSize();
-        renderOnce('resize');
-      };
-
-      sk.draw = () => {
-        if(drawErrored) return;
-        try {
-          sk.background('#05080f');
-          drawTerrain(sk);
-          drawPlants(sk);
-          drawDens(sk);
-          drawTrails(sk);
-          drawAnimals(sk);
-          drawEvents(sk);
-        } catch(err){
-          const debugMode = window.__BIO_DEBUG__ === true;
-          if(!debugMode){
-            drawErrored = true;
-            stopSimLoop();
-            sk.noLoop();
-          }
-          console.error('[BioSphere] draw error', err);
-          showErrorModal(`描画中にエラーが発生しました: ${err.message}`);
-        }
-      };
-      console.log('[BioSphere] draw handlers ready');
-
-      function worldToScreen(x,y){
-        return {
-          x: x*state.tile*state.view.scale + state.view.offsetX,
-          y: y*state.tile*state.view.scale + state.view.offsetY
-        };
-      }
-
-      function screenToGrid(mx, my){
-        return {
-          x: (mx - state.view.offsetX)/(state.tile*state.view.scale),
-          y: (my - state.view.offsetY)/(state.tile*state.view.scale)
-        };
-      }
-
-      function drawTerrain(sk){
-        ensureValidP5(sk);
-        if(!terrainLayer || state.terrainDirty){
-          terrainLayer = sk.createGraphics(state.gridW*state.tile, state.gridH*state.tile);
-          terrainLayer.pixelDensity(1);
-          terrainLayer.noStroke();
-          state.terrain.forEach((tKey, idx)=>{
-            const x = idx % state.gridW;
-            const y = Math.floor(idx/state.gridW);
-            const cellType = terrainTypes.find(t=>t.key===tKey) || terrainTypes[0];
-            const posX = x*state.tile;
-            const posY = y*state.tile;
-            terrainLayer.fill(cellType.color + 'cc');
-            terrainLayer.rect(posX, posY, state.tile, state.tile);
-            terrainLayer.stroke(cellType.texture);
-            terrainLayer.strokeWeight(1);
-            if(tKey==='forest'){
-              terrainLayer.line(posX+state.tile*0.3, posY, posX+state.tile*0.7, posY+state.tile);
-              terrainLayer.line(posX, posY+state.tile*0.4, posX+state.tile, posY+state.tile*0.6);
-            } else if(tKey==='water'){
-              terrainLayer.noFill();
-              terrainLayer.beginShape();
-              curveVertexSafe(terrainLayer, posX, posY+state.tile*0.25);
-              curveVertexSafe(terrainLayer, posX+state.tile*0.15, posY+state.tile*0.35);
-              curveVertexSafe(terrainLayer, posX+state.tile*0.45, posY+state.tile*0.55);
-              curveVertexSafe(terrainLayer, posX+state.tile*0.75, posY+state.tile*0.7);
-              curveVertexSafe(terrainLayer, posX+state.tile, posY+state.tile*0.82);
-              terrainLayer.endShape();
-              terrainLayer.noStroke();
-            } else if(tKey==='rock'){
-              terrainLayer.fill(cellType.texture); terrainLayer.noStroke();
-              terrainLayer.triangle(posX+state.tile*0.2,posY+state.tile*0.8,posX+state.tile*0.5,posY+state.tile*0.2,posX+state.tile*0.8,posY+state.tile*0.9);
-            } else if(tKey==='wetland'){
-              terrainLayer.noFill(); terrainLayer.stroke(cellType.texture);
-              terrainLayer.ellipse(posX+state.tile*0.4,posY+state.tile*0.6,state.tile*0.4,state.tile*0.25);
-              terrainLayer.noStroke();
-            } else if(tKey==='sand'){
-              terrainLayer.noFill(); terrainLayer.stroke(cellType.texture);
-              terrainLayer.line(posX+state.tile*0.2,posY+state.tile*0.7,posX+state.tile*0.8,posY+state.tile*0.65);
-              terrainLayer.noStroke();
-            } else if(tKey==='shrub'){
-              terrainLayer.noStroke(); terrainLayer.fill(cellType.texture);
-              terrainLayer.circle(posX+state.tile*0.3,posY+state.tile*0.4,state.tile*0.2);
-              terrainLayer.circle(posX+state.tile*0.6,posY+state.tile*0.5,state.tile*0.25);
-            }
-          });
-          state.terrainDirty = false;
-        }
-        sk.image(terrainLayer, state.view.offsetX, state.view.offsetY, terrainLayer.width*state.view.scale, terrainLayer.height*state.view.scale);
-      }
-
-      function drawPlants(sk){
-        sk.noStroke();
-        state.plants.forEach((v,idx)=>{
-          if(v<=0.01) return;
-          const x = idx % state.gridW;
-          const y = Math.floor(idx / state.gridW);
-          const pos = worldToScreen(x,y);
-          const size = state.tile*state.view.scale;
-          sk.fill(100,200,120, clamp01(v)*180 + 40);
-          sk.circle(pos.x+size/2, pos.y+size/2, Math.max(4, size*0.4*v));
-        });
-      }
-
-      function drawDens(sk){
-        sk.noStroke();
-        state.dens.forEach(idx => {
-          const x = idx % state.gridW; const y = Math.floor(idx/state.gridW);
-          const pos = worldToScreen(x,y);
-          const size = state.tile*state.view.scale;
-          sk.fill('#f5d97a');
-          sk.rect(pos.x+size*0.28,pos.y+size*0.28,size*0.44,size*0.44,4);
-        });
-      }
-
-      function drawTrails(sk){
-        if(!toggleTrails.checked) return;
-        state.animals.forEach(a=>{
-          if(!a.trail || a.trail.length < 2) return;
-          sk.noFill();
-          sk.stroke('rgba(160,210,255,0.45)');
-          sk.strokeWeight(Math.max(1, state.tile*state.view.scale*0.06));
-          sk.beginShape();
-          a.trail.forEach(pt => {
-            const pos = worldToScreen(pt.x, pt.y);
-            sk.vertex(pos.x, pos.y);
-          });
-          const head = worldToScreen(a.x, a.y);
-          sk.vertex(head.x, head.y);
-          sk.endShape();
-        });
-      }
-
-      function drawAnimals(sk){
-        state.animals.forEach(a=>{
-          const pos = worldToScreen(a.x,a.y);
-          const size = state.tile*state.view.scale;
-          const sp = speciesLibrary[a.species];
-          if(!sp) return;
-          sk.stroke(sp.outline); sk.strokeWeight(1.6); sk.fill(sp.color);
-          if(sp.diet==='herb'){
-            sk.circle(pos.x, pos.y, size*0.72);
-            sk.fill(sp.inner); sk.noStroke();
-            sk.circle(pos.x, pos.y, size*0.3);
-          } else {
-            sk.triangle(pos.x-size*0.4,pos.y+size*0.4,pos.x+size*0.4,pos.y+size*0.4,pos.x,pos.y-size*0.5);
-            sk.fill(sp.inner); sk.noStroke();
-            sk.triangle(pos.x-size*0.18,pos.y+size*0.18,pos.x+size*0.18,pos.y+size*0.18,pos.x,pos.y-size*0.24);
-          }
-          if(toggleVectors.checked){
-            const mag = Math.hypot(a.vx, a.vy) || 0;
-            if(mag > 0.001){
-              const dirX = a.vx / mag;
-              const dirY = a.vy / mag;
-              const len = size * 0.9;
-              sk.stroke('rgba(240,255,255,0.85)');
-              sk.strokeWeight(Math.max(1, size*0.08));
-              sk.line(pos.x, pos.y, pos.x + dirX*len, pos.y + dirY*len);
-              sk.strokeWeight(Math.max(1, size*0.05));
-              sk.line(pos.x + dirX*len, pos.y + dirY*len, pos.x + dirX*len - dirY*len*0.25, pos.y + dirY*len + dirX*len*0.25);
-              sk.line(pos.x + dirX*len, pos.y + dirY*len, pos.x + dirX*len + dirY*len*0.25, pos.y + dirY*len - dirX*len*0.25);
-            }
-          }
-        });
-      }
-
-      function drawEvents(sk){
-        const now = performance.now();
-        state.reproductionEvents = state.reproductionEvents.filter(ev => now-ev.time < 900);
-        state.huntEvents = state.huntEvents.filter(ev => now-ev.time < 480);
-
-        if(toggleHearts.checked){
-          state.reproductionEvents.forEach(ev => {
-            const t = (now-ev.time)/900;
-            const pos = worldToScreen(ev.x, ev.y);
-            sk.noStroke(); sk.fill(`rgba(255,120,200,${1-t})`);
-            sk.textSize(state.tile*state.view.scale*0.8);
-            sk.text('♡', pos.x, pos.y);
-          });
-        }
-        if(toggleFlashes.checked){
-          state.huntEvents.forEach(ev => {
-            const t = (now-ev.time)/480;
-            const pos = worldToScreen(ev.x, ev.y);
-            sk.noFill(); sk.stroke(`rgba(255,180,80,${1-t})`); sk.strokeWeight(3);
-            const r = state.tile*state.view.scale*(0.6 + t*0.6);
-            sk.circle(pos.x, pos.y, r);
-          });
-        }
-      }
-
-      const ensureValidP5 = (sk) => {
-        if(!sk || typeof sk.rect !== 'function' || typeof sk.beginShape !== 'function'){
-          throw new Error('drawTerrain: invalid p5 instance (sk) passed');
-        }
-      };
-
-      const curveVertexSafe = (sk, x, y) => {
-        if(sk && typeof sk.curveVertex === 'function') return sk.curveVertex(x, y);
-        if(sk && typeof sk.vertex === 'function') return sk.vertex(x, y);
-      };
-
-      const curveSafe = (sk, x1,y1,x2,y2,x3,y3,x4,y4) => {
-        if(sk && typeof sk.curve === 'function') return sk.curve(x1,y1,x2,y2,x3,y3,x4,y4);
-        if(sk && typeof sk.bezier === 'function') return sk.bezier(x1,y1,x2,y2,x3,y3,x4,y4);
-      };
-
-      const tryPaint = () => {
-        if(!editModeToggle?.checked || sk.mouseButton !== sk.LEFT) return false;
-        const g = screenToGrid(sk.mouseX, sk.mouseY);
-        if(g.x<0 || g.y<0 || g.x>state.gridW || g.y>state.gridH) return false;
-        applyBrush(g.x, g.y);
-        renderOnce('paint');
-        return true;
-      };
-
-      sk.mouseWheel = (event) => {
-        const factor = event.delta > 0 ? 0.92 : 1.08;
-        updateScale(state.view.scale * factor, sk.mouseX, sk.mouseY);
-        renderOnce('zoom');
-      };
-
-      sk.mousePressed = () => {
-        if(tryPaint()) return;
-        if(sk.mouseButton === sk.CENTER || (sk.mouseButton === sk.LEFT && sk.keyIsDown(32))){
-          pan.active = true; pan.startX = sk.mouseX; pan.startY = sk.mouseY; pan.originX = state.view.offsetX; pan.originY = state.view.offsetY;
-        }
-      };
-      sk.mouseDragged = () => {
-        if(editModeToggle?.checked && continuousPaintToggle?.checked && sk.mouseButton===sk.LEFT){
-          tryPaint();
-          return;
-        }
-        if(pan.active){
-          state.view.offsetX = pan.originX + (sk.mouseX - pan.startX);
-          state.view.offsetY = pan.originY + (sk.mouseY - pan.startY);
-          renderOnce('pan');
-        }
-      };
-      sk.mouseReleased = () => { if(pan.active) renderOnce('pan'); pan.active=false; };
-
-      const resetViewBtn = document.getElementById('resetView');
-      if(resetViewBtn){
-        resetViewBtn.addEventListener('click', ()=>{
-          state.view.scale = 1;
-          recenterView();
-          syncZoomSlider();
-          renderOnce('reset');
-        });
-      }
-      if(startBtn){ startBtn.addEventListener('click', ()=> { state.running=true; startSimLoop(); }); }
-      if(stopBtn){ stopBtn.addEventListener('click', ()=> { stopSimLoop(); renderOnce('stop'); }); }
-      if(stepBtn){ stepBtn.addEventListener('click', ()=> { stopSimLoop(); stepSim(); renderOnce('step'); }); }
-      if(panicBtn){
-        panicBtn.addEventListener('click', ()=>{
-          widgetManager.panicReset();
-          state.view = { scale:1, offsetX:0, offsetY:0 };
-          recenterView();
-          syncZoomSlider();
-          stopSimLoop();
-          drawErrored = false;
-          renderOnce('panic');
-        });
-      }
-      if(speedSelect){ speedSelect.addEventListener('change', ()=>{ state.speedMultiplier = parseFloat(speedSelect.value||'1')||1; }); }
-      if(logIntervalSelect){ logIntervalSelect.addEventListener('change', ()=>{ state.logEvery = parseInt(logIntervalSelect.value||'1')||1; }); }
-      state.speedMultiplier = parseFloat(speedSelect?.value||'1')||1;
-      state.logEvery = parseInt(logIntervalSelect?.value||'1')||1;
-    };
-
-    function stepSim(){
-      updateClimate();
-      growPlants();
-      updateAnimals();
-      checkEndCondition();
-      state.stepCount++;
-      if(state.stepCount % state.logEvery === 0){ logHistory(); }
-      updateHUD();
-      renderSummary();
-    }
-
-    function updateClimate(){
-      const seasonLength = 2200;
-      state.score += 0.05;
-      state.temp += (state.climate.temp[state.season%4] - state.temp) * 0.002;
-      state.rain += (state.climate.rain[state.season%4] - state.rain) * 0.002;
-      state.score = Math.max(0, state.score);
-      if(state.score > seasonLength){
-        state.season++; state.score = 0;
-      }
-    }
-
-    function growPlants(){
-      state.plants = state.plants.map((v,i)=>{
-        const terrain = terrainTypes.find(t=>t.key===state.terrain[i]);
-        if(!terrain || terrain.isWater || terrain.isRock) return 0;
-        const growth = 0.001 + state.rain*0.002;
-        const K = terrain.plantK;
-        return clamp01(v + growth*v*(K - v));
+    function applyKillDistribution(events,state,uiParams){
+      const w=params.gridW; const packR=params.packRange; const shareRate=uiParams.shareRate; const leaderBonus=uiParams.leaderBonus;
+      let killCount=0;
+      events.filter(e=>e.type==='kill').forEach(evt=>{
+        killCount++;
+        const killer = state.animals.carnivores.find(a=>a.id===evt.predatorId);
+        if(!killer) return;
+        const members = state.animals.carnivores.filter(a=>Math.hypot(a.x-evt.x,a.y-evt.y)<=packR);
+        const E = evt.energy;
+        const share = E*shareRate;
+        const remain = E-share;
+        const baseShare = members.length>0?share/members.length:0;
+        members.forEach(a=>{a.energy = clamp01(a.energy + baseShare); a.hydration=clamp01(a.hydration+0.2*shareRate);});
+        killer.energy = clamp01(killer.energy + remain*leaderBonus);
+        state.shareLogs.push({step:state.step, size:members.length, energy:share});
+        console.log('KillShare', {killCount, shareGroupSize:members.length, sharedEnergyTotal:Number(share.toFixed(3))});
       });
     }
 
-    function updateAnimals(){
-      rebuildSpatialHash();
-      const preyIndex = new Map();
-      state.animals.forEach((a,i)=>{ if(a.diet==='herb') preyIndex.set(a.id, i); });
-      const alerts = [];
-      const trailLimit = 18;
-      const beforeCount = state.animals.length;
+  function engineStep(state, uiParams){
+    const rng=state.rng; const w=params.gridW; const h=params.gridH;
+    state.events=[]; state.step++;
+    // season update
+    const seasonLen = state.season==='雨季'?uiParams.rainyLen:uiParams.dryLen;
+    state.seasonCounter++; if(state.seasonCounter>seasonLen){ state.season = state.season==='雨季'?'乾季':'雨季'; state.seasonCounter=0; logMsg(`季節が ${state.season} になりました`); }
 
-      state.animals.forEach(a => {
-        const sp = speciesLibrary[a.species];
-        if(!sp) return;
-        const hunger = 1 - a.satiety;
-        const satiatedBrake = a.satiety>0.8 ? 0.35 : 1;
-        const speed = (sp.speed + hunger*0.3) * satiatedBrake;
-        if(Math.random() < speed){
-          const dir = chooseDirection(a, sp, alerts);
-          a.vx = dir.x; a.vy = dir.y;
-          const before = {x:a.x, y:a.y};
-          a.x = wrap(a.x + a.vx, state.gridW);
-          a.y = wrap(a.y + a.vy, state.gridH);
-          a.trail = [...(a.trail||[]), before].slice(-trailLimit);
+    const rain = state.season==='雨季'?params.moistRecoverRainy:0.01;
+    const discharge = state.season==='雨季'?params.dischargeRainy:params.dischargeDry;
+    const moistLoss = state.season==='雨季'?0.005:params.moistLossDry;
+    let riverCount=0; let moistSum=0;
+
+    for(let i=0;i<state.cells.length;i++){
+      const c=state.cells[i];
+      c.riverActive = c.flowAcc*discharge>12 && c.elev<0.8;
+      if(c.riverActive) riverCount++;
+      c.moist = clamp01(c.moist + rain*(0.4+c.wet*0.6) - moistLoss + (c.riverActive?0.05:0));
+      const grow = params.plantGrowth * c.plant * (1-c.plant) * (0.4 + c.moist*0.8);
+      c.plant = clamp01(c.plant + grow - 0.01*(1-c.moist));
+      moistSum += c.moist;
+    }
+
+    function moveAnimal(a,targetScoreFn){
+      const cx=Math.floor(a.x), cy=Math.floor(a.y);
+      let best={x:cx,y:cy,score:-1};
+      for(let dy=-1;dy<=1;dy++){
+        for(let dx=-1;dx<=1;dx++){
+          const nx=Math.min(w-1, Math.max(0,cx+dx));
+          const ny=Math.min(h-1, Math.max(0,cy+dy));
+          const s=targetScoreFn(nx,ny);
+          if(s>best.score){best={x:nx,y:ny,score:s};}
         }
-        a.satiety = clamp01(a.satiety - sp.satietyDecay);
-        a.energy = clamp01(a.energy - sp.metabolism + a.satiety*0.0004);
-        a.age += 1;
-        a.lastBreed += 1;
+      }
+      a.x = best.x + rng()*0.3; a.y = best.y + rng()*0.3;
+    }
 
-        if(a.diet==='herb') consumePlant(a, sp, hunger);
-        else huntPrey(a, sp, alerts);
-
-        tryReproduce(a, sp);
+    // herbivores
+    state.animals.herbivores = state.animals.herbivores.filter(a=>{
+      a.hydration = clamp01(a.hydration - params.hydrationDecay*(state.season==='乾季'?1.4:1));
+      a.energy = clamp01(a.energy - params.baseMetabolism);
+      const c = state.cells[Math.floor(a.y)*w+Math.floor(a.x)];
+      moveAnimal(a,(x,y)=>{
+        const cell=state.cells[y*w+x];
+        const thirst = 1-a.hydration;
+        return cell.plant*0.6 + cell.moist*0.4 + thirst*cell.moist;
       });
-
-      state.animals = state.animals.filter(a => a.energy>0 && a.age<8000);
-      state.deaths += Math.max(0, beforeCount - state.animals.length);
-    }
-
-    function chooseDirection(a, sp, alerts){
-      let vec = {x: randBetween(-0.3,0.3), y: randBetween(-0.3,0.3)};
-      const neighbors = queryNeighbors(a, 3).filter(b => b.diet===a.diet);
-      if(sp.behavior==='herd' && neighbors.length){
-        const cohesion = neighbors.reduce((acc,b)=>({x:acc.x+(b.x-a.x), y:acc.y+(b.y-a.y)}), {x:0,y:0});
-        vec.x += cohesion.x/neighbors.length * 0.05;
-        vec.y += cohesion.y/neighbors.length * 0.05;
-      }
-      if(neighbors.length){
-        const separation = neighbors.reduce((acc,b)=>{
-          const d = dist(a,b)+0.01;
-          return {x: acc.x - (b.x-a.x)/(d*d), y: acc.y - (b.y-a.y)/(d*d)};
-        }, {x:0,y:0});
-        vec.x += separation.x * 0.08;
-        vec.y += separation.y * 0.08;
-      }
-      if(sp.diet==='herb'){
-        const food = findFoodPatch(a);
-        if(food){
-          vec.x += (food.x - a.x)*0.04;
-          vec.y += (food.y - a.y)*0.04;
-        }
-      }
-      if(sp.behavior==='pack' && a.diet==='carn' && alerts.length){
-        const signal = alerts.reduce((acc,al)=>({x:acc.x+al.x-a.x, y:acc.y+al.y-a.y}), {x:0,y:0});
-        vec.x += signal.x/alerts.length * 0.03;
-        vec.y += signal.y/alerts.length * 0.03;
-      }
-      if(sp.behavior==='ambush'){
-        vec.x *= 0.35; vec.y *= 0.35;
-      }
-      if(sp.behavior==='wander'){
-        vec.x += randBetween(-0.2,0.2);
-        vec.y += randBetween(-0.2,0.2);
-      }
-      const coverBias = sp.coverAffinity || 0;
-      if(Math.abs(coverBias)>0.01){
-        const best = findNearestCover(a, coverBias>0);
-        if(best) {
-          vec.x += (best.x - a.x)*0.02*coverBias;
-          vec.y += (best.y - a.y)*0.02*coverBias;
-        }
-      }
-      const len = Math.hypot(vec.x, vec.y) || 1;
-      return { x: vec.x/len*0.4, y: vec.y/len*0.4 };
-    }
-
-    function findNearestCover(a, seekDense){
-      let best=null; let bestScore = seekDense? -1: 999;
-      for(let i=0;i<state.terrain.length;i+=12){
-        const t = terrainTypes.find(tt=>tt.key===state.terrain[i]);
-        if(!t) continue;
-        const score = t.cover;
-        const x = (i % state.gridW); const y = Math.floor(i/state.gridW);
-        const d = Math.hypot(a.x-x, a.y-y);
-        if(d>6) continue;
-        if(seekDense && score>bestScore){ bestScore = score; best={x,y}; }
-        if(!seekDense && score<bestScore){ bestScore = score; best={x,y}; }
-      }
-      return best;
-    }
-
-    function consumePlant(a, sp, hunger){
-      const idx = Math.floor(a.y)*state.gridW + Math.floor(a.x);
-      if(idx<0 || idx>=state.plants.length) return;
-      const terrain = terrainTypes.find(t=>t.key===state.terrain[idx]);
-      if(!terrain || terrain.isWater || terrain.isRock) return;
-      let plant = state.plants[idx];
-      if(plant<=0 || hunger<0.2) return;
-      const eat = Math.min(plant, 0.08 + hunger*0.1);
-      plant -= eat;
-      a.satiety = clamp01(a.satiety + eat*0.7);
-      a.energy = clamp01(a.energy + eat*0.2);
-      state.plants[idx] = plant;
-    }
-
-    function huntPrey(a, sp, alerts){
-      const target = findPrey(a, sp);
-      if(!target) return;
-      const d = dist(a, target);
-      alerts.push({x:target.x, y:target.y});
-      if(d < 0.7){
-        const allies = state.animals.filter(b=>b!==a && b.diet==='carn' && dist(b,target)<2).length;
-        const cover = terrainTypes.find(t=>t.key===state.terrain[Math.floor(target.y)*state.gridW + Math.floor(target.x)])?.cover || 0;
-        const success = Math.random() < 0.55 + allies*0.08 - cover*0.25;
-        if(success){
-          a.satiety = clamp01(a.satiety + 0.7/(allies||1));
-          a.energy = clamp01(a.energy + 0.4/(allies||1));
-          state.hunts += 1;
-          state.animals = state.animals.filter(x => x!==target);
-          state.huntEvents.push({x:target.x, y:target.y, time:performance.now()});
-        }
-      } else {
-        a.vx += (target.x - a.x)*0.02; a.vy += (target.y - a.y)*0.02;
-      }
-    }
-
-    function findPrey(a, sp){
-      let best=null; let bestD=999;
-      const candidates = queryNeighbors(a, sp.vision || 4).filter(b=>b.diet==='herb');
-      candidates.forEach(b => {
-        const tile = terrainTypes.find(t=>t.key===state.terrain[Math.floor(b.y)*state.gridW + Math.floor(b.x)]);
-        const cover = tile?.cover || 0;
-        const range = sp.vision * (1 - cover*0.4);
-        const d = dist(a,b);
-        if(d<range && d<bestD){ best=b; bestD=d; }
-      });
-      return best;
-    }
-
-    function tryReproduce(a, sp){
-      if(a.lastBreed < sp.reproduction.interval) return;
-      if(a.satiety < 0.55 || a.energy < 0.5) return;
-      const idx = Math.floor(a.y)*state.gridW + Math.floor(a.x);
-      const nearDen = state.dens.has(idx);
-      const chance = nearDen ? 0.5 : 0.12;
-      if(Math.random() < chance){
-        const litter = Math.round(randBetween(sp.reproduction.litter[0], sp.reproduction.litter[1]));
-        for(let i=0;i<litter;i++) state.animals.push(makeAnimal(a.species));
-        state.births += litter;
-        a.lastBreed = 0;
-        a.energy -= 0.2;
-        state.reproductionEvents.push({x:a.x, y:a.y, time:performance.now()});
-      }
-    }
-
-    function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
-
-    function checkEndCondition(){
-      if(!extinctionModeCheckbox.checked) return;
-      const animalsLeft = state.animals.length;
-      const plantsLeft = state.plants.some((v,i)=>{
-        const terrain = terrainTypes.find(t=>t.key===state.terrain[i]);
-        if(!terrain || terrain.isWater || terrain.isRock) return false;
-        return v>0.02;
-      });
-      if(animalsLeft===0 && !plantsLeft){
-        state.running=false;
-      }
-    }
-
-    function findFoodPatch(a){
-      let best=null; let bestScore=0;
-      for(let dy=-3; dy<=3; dy++){
-        for(let dx=-3; dx<=3; dx++){
-          const x = wrap(Math.floor(a.x+dx), state.gridW);
-          const y = wrap(Math.floor(a.y+dy), state.gridH);
-          const idx = y*state.gridW + x;
-          const terrain = terrainTypes.find(t=>t.key===state.terrain[idx]);
-          if(!terrain || terrain.isWater || terrain.isRock) continue;
-          const score = state.plants[idx];
-          if(score > bestScore){ bestScore = score; best = {x:a.x+dx, y:a.y+dy}; }
-        }
-      }
-      return best;
-    }
-
-    canvasDebugToggle.addEventListener('click', ()=>{
-      debugEnabled = !debugEnabled;
-      canvasDebugToggle.setAttribute('aria-pressed', debugEnabled);
-      canvasDebugToggle.textContent = debugEnabled ? '非表示' : '表示';
-      updateDebugPanel(measureStage());
+      const cell = state.cells[Math.floor(a.y)*w+Math.floor(a.x)];
+      const eat=Math.min(cell.plant,0.12);
+      cell.plant -= eat; a.energy = clamp01(a.energy + eat*0.8);
+      if(cell.moist>0.5 || cell.riverActive){ a.hydration=clamp01(a.hydration+0.2); }
+      if(a.energy<=0){ state.events.push({type:'death', reason:'starve', id:a.id}); return false; }
+      if(a.hydration<=0){ state.events.push({type:'death', reason:'dehydrate', id:a.id}); return false; }
+      if(a.energy>params.reproductionEnergy && rng()<0.05){ a.energy*=0.6; state.animals.herbivores.push({x:a.x+0.2*rng(), y:a.y+0.2*rng(), energy:0.6, hydration:0.8, id:`H${state.idCounter++}`}); state.events.push({type:'birth', species:'herb'}); }
+      return true;
     });
 
-    function initCanvas(){
-      requestAnimationFrame(()=>{
-        requestAnimationFrame(()=>{
-          if(pInstance) return;
-          pInstance = new p5(sketch, mapStage);
-        });
-      });
+    // carnivores
+    state.animals.carnivores = state.animals.carnivores.filter(a=>{
+      a.hydration = clamp01(a.hydration - params.hydrationDecay*(state.season==='乾季'?1.6:1));
+      a.energy = clamp01(a.energy - params.baseMetabolism*1.3);
+      const prey = state.animals.herbivores.find(p=>Math.hypot(p.x-a.x,p.y-a.y)<params.viewRange);
+      if(prey){
+        const packMates = state.animals.carnivores.filter(o=>o!==a && Math.hypot(o.x-a.x,o.y-a.y)<params.packRange);
+        const target = packMates.length?packMates[0].target||prey:prey;
+        a.target = target;
+        moveAnimal(a,(x,y)=>-Math.hypot(x-target.x,y-target.y));
+        if(Math.hypot(a.x-prey.x,a.y-prey.y)<0.8){
+          const idx = state.animals.herbivores.indexOf(prey);
+          if(idx>=0) state.animals.herbivores.splice(idx,1);
+          const gain=0.5+0.3*rng();
+          state.events.push({type:'kill', predatorId:a.id, preyId:prey.id, x:a.x, y:a.y, energy:gain});
+        }
+      } else {
+        moveAnimal(a,(x,y)=>{const cell=state.cells[y*w+x]; return (cell.riverActive?1:0)+cell.moist*0.8;});
+        a.target=null;
+      }
+      const cell=state.cells[Math.floor(a.y)*w+Math.floor(a.x)];
+      if(cell.moist>0.5 || cell.riverActive) a.hydration=clamp01(a.hydration+0.15);
+      if(a.energy>params.reproductionEnergy && rng()<0.03){ a.energy*=0.5; state.animals.carnivores.push({x:a.x+0.2*rng(), y:a.y+0.2*rng(), energy:0.6, hydration:0.8, id:`C${state.idCounter++}`}); state.events.push({type:'birth', species:'carn'}); }
+      if(a.energy<=0){ state.events.push({type:'death', reason:'starve', id:a.id}); return false; }
+      if(a.hydration<=0){ state.events.push({type:'death', reason:'dehydrate', id:a.id}); return false; }
+      return true;
+    });
+
+    applyKillDistribution(state.events,state,uiParams);
+
+    // history logging
+    const meanMoist = moistSum/state.cells.length;
+    state.history.push({Step:state.step, Plant:state.cells.reduce((s,c)=>s+c.plant,0)/state.cells.length, Herbivore:state.animals.herbivores.length, Carnivore:state.animals.carnivores.length, MeanMoist:meanMoist, RiverCells:riverCount, Births:state.events.filter(e=>e.type==='birth').length, Deaths:state.events.filter(e=>e.type==='death').length, Kills:state.events.filter(e=>e.type==='kill').length, DehydrationDeaths:state.events.filter(e=>e.reason==='dehydrate').length});
+    return {riverCount, meanMoist};
+  }
+
+  // Renderer (p5 instance mode)
+  const renderer = (()=>{
+    let sk=null; let simpleMode=false; let lastDraw=0;
+    const colors={water:'#4da7ff', forest:'#2a7a4f', grass:'#3ea35a', dry:'#8a5a3a'};
+    function setup(p){
+      sk=p; const rect=document.getElementById('canvasHost').getBoundingClientRect();
+      p.createCanvas(rect.width||640, rect.height||480).parent('canvasHost');
+      p.noLoop();
     }
-    initCanvas();
+    function drawCell(p,cell,x,y,size,overlay){
+      let col;
+      if(overlay==='moist'){const m=cell.moist; col=p.color(40+200*m,80+80*m,120+100*m);}
+      else if(overlay==='river'){col=cell.riverActive?p.color(90,170,255):p.color(30,40,60);}
+      else if(overlay==='plant'){const v=cell.plant; col=p.color(40,80+150*v,60+90*v);} 
+      else{col=p.color(30+140*cell.elev, 40+80*cell.wet, 40);} 
+      p.noStroke(); p.fill(col); p.rect(x,y,size,size);
+    }
+    function drawAnimals(p,animals,color){ p.fill(color); p.noStroke(); animals.forEach(a=>{p.circle(a.x*params.cellSize, a.y*params.cellSize, 6);}); }
+    function draw(state){
+      if(!sk) return;
+      const start=performance.now();
+      try{
+        const w=params.gridW*params.cellSize; const h=params.gridH*params.cellSize;
+        sk.resizeCanvas(w,h,true); sk.background('#0b0f18');
+        for(let y=0;y<params.gridH;y++){
+          for(let x=0;x<params.gridW;x++){
+            const cell=state.cells[y*params.gridW+x];
+            drawCell(sk,cell,x*params.cellSize,y*params.cellSize,params.cellSize,state.overlay);
+          }
+        }
+        drawAnimals(sk,state.animals.herbivores,'#9be070');
+        drawAnimals(sk,state.animals.carnivores,'#ff9f70');
+        document.getElementById('renderAlert').style.display='none'; simpleMode=false;
+      }catch(err){
+        console.error('draw error',err); document.getElementById('renderAlert').style.display='block';
+        if(!simpleMode){ simpleMode=true; }
+        sk.background('#111'); sk.fill('#ccc'); sk.text('描画エラー: 簡易表示', 20,20);
+      }
+      lastDraw=performance.now()-start;
+    }
+    return {setup, draw};
+  })();
+
+  const ui = (()=>{
+    let chart=null; const logBox=document.getElementById('logBox');
+    function bind(state){
+      document.getElementById('startBtn').onclick=()=>{state.running=true; loop();};
+      document.getElementById('stopBtn').onclick=()=>{state.running=false;};
+      document.getElementById('resetBtn').onclick=()=>{resetSim();};
+      document.getElementById('regenBtn').onclick=()=>{resetSim(false);};
+      document.getElementById('downloadCsv').onclick=()=>downloadCsv(state.history);
+      document.querySelectorAll('input[name="overlay"]').forEach(r=>r.onchange=()=>{state.overlay=r.value; renderer.draw(state);});
+      document.getElementById('speedSelect').onchange=(e)=>{state.speed=Number(e.target.value)||1;};
+    }
+    function log(text){ const el=document.createElement('div'); el.textContent=text; logBox.appendChild(el); logBox.scrollTop=logBox.scrollHeight; }
+    function initChart(){
+      const ctx=document.getElementById('popChart');
+      chart = new Chart(ctx,{type:'line', data:{labels:[], datasets:[{label:'草食',borderColor:'#9be070',data:[],tension:0.2},{label:'肉食',borderColor:'#ff9f70',data:[],tension:0.2},{label:'植物',borderColor:'#5dc48d',data:[],tension:0.2},{label:'平均水分',borderColor:'#7aa8ff',data:[],yAxisID:'env',tension:0.2},{label:'河川セル',borderColor:'#4da7ff',data:[],yAxisID:'env',tension:0.2}]}, options:{animation:false, scales:{env:{position:'right'}}}});
+    }
+    function updateChart(state){
+      if(!chart) return; const latest=state.history[state.history.length-1]; if(!latest) return;
+      chart.data.labels.push(latest.Step);
+      chart.data.datasets[0].data.push(latest.Herbivore);
+      chart.data.datasets[1].data.push(latest.Carnivore);
+      chart.data.datasets[2].data.push(Math.round(latest.Plant*100)/100);
+      chart.data.datasets[3].data.push(Math.round(latest.MeanMoist*100)/100);
+      chart.data.datasets[4].data.push(latest.RiverCells);
+      if(chart.data.labels.length>400){ chart.data.labels.shift(); chart.data.datasets.forEach(d=>d.data.shift()); }
+      chart.update('none');
+    }
+    function downloadCsv(history){
+      if(!history.length) return; const header=Object.keys(history[0]);
+      const rows=history.map(h=>header.map(k=>h[k]).join(','));
+      const blob=new Blob([header.join(',')+'\n'+rows.join('\n')],{type:'text/csv'});
+      const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='history.csv'; a.click(); URL.revokeObjectURL(url);
+    }
+    function clearChart(){ if(chart){ chart.data.labels=[]; chart.data.datasets.forEach(d=>d.data=[]); chart.update(); } }
+    return {bind, log, initChart, updateChart, clearChart};
+  })();
+
+  // メインループ
+  let state=createState('bs-demo');
+  let pApp=null; let loopFrame=null;
+
+  function logMsg(msg){ ui.log(`[${state.step}] ${msg}`); }
+
+    function resetSim(){
+      const seed=document.getElementById('seedInput').value || 'bs-demo';
+      cancelAnimationFrame(loopFrame);
+      state=createState(seed);
+      const pattern=document.getElementById('patternSelect').value;
+      generateTerrain(state, pattern);
+      seedAnimals(state);
+      const initEnv = snapshotEnvironment(state, params.dischargeRainy);
+      state.speed=Number(document.getElementById('speedSelect').value)||1;
+      state.season='雨季'; state.seasonCounter=0; state.history=[]; state.step=0;
+      console.table([{seed, preset:pattern, mapSize:`${params.gridW}x${params.gridH}`, meanMoist:Number(initEnv.meanMoist.toFixed(3)), riverCells:initEnv.riverCount}]);
+      ui.clearChart();
+      renderer.draw(state);
+    }
+
+  function loop(){
+    if(!state.running){ cancelAnimationFrame(loopFrame); return; }
+    const uiParams={
+      rainyLen:Number(document.getElementById('rainyLen').value)||600,
+      dryLen:Number(document.getElementById('dryLen').value)||400,
+      shareRate:Math.min(1,Math.max(0, Number(document.getElementById('shareRate').value)||0)),
+      leaderBonus:Math.max(1, Number(document.getElementById('leaderBonus').value)||1)
+    };
+    const speed = state.speed||1;
+      for(let i=0;i<speed;i++){
+        const {riverCount, meanMoist} = engineStep(state, uiParams);
+        document.getElementById('hudRiver').textContent = riverCount;
+        document.getElementById('hudMoist').textContent = meanMoist.toFixed(2);
+      }
+      if(state.history.length && state.step%50===0){
+        const latest=state.history[state.history.length-1];
+        console.table([{Step:latest.Step, Plant:Number(latest.Plant.toFixed(3)), Herb:latest.Herbivore, Carn:latest.Carnivore, MeanMoist:Number(latest.MeanMoist.toFixed(3)), RiverCells:latest.RiverCells}]);
+      }
+      while(state.shareCursor < state.shareLogs.length){
+        const s = state.shareLogs[state.shareCursor++];
+        logMsg(`群れ分配: ${s.size}体に ${s.energy.toFixed(2)} エネルギー共有`);
+      }
+    document.getElementById('hudStep').textContent = state.step;
+    document.getElementById('hudSeason').textContent = state.season;
+    document.getElementById('hudHerb').textContent = state.animals.herbivores.length;
+    document.getElementById('hudCarn').textContent = state.animals.carnivores.length;
+    ui.updateChart(state);
+    renderer.draw(state);
+    loopFrame=requestAnimationFrame(loop);
+  }
+
+  // 初期化
+  ui.bind(state); ui.initChart();
+  new p5((p)=>{p.setup=()=>renderer.setup(p); p.draw=()=>renderer.draw(state);});
+  resetSim();
+  console.log('Boot OK');
   </script>
 </body>
 </html>
