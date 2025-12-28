@@ -155,17 +155,35 @@
         <button data-action="maximize" data-widget-id="controlsWidget">▢</button>
       </div>
     </div>
-    <div class="widget-body">
-      <div class="row" style="display:flex; gap:8px; flex-wrap:wrap;">
-        <button class="btn primary" id="startBtn">開始</button>
-        <button class="btn" id="stopBtn">停止</button>
-        <button class="btn" id="stepBtn">1ステップ</button>
-        <button class="btn danger" id="panicBtn">パニック</button>
-      </div>
-      <div class="section">
-        <details open>
-          <summary>オーバーレイ切替</summary>
-          <div class="section-body">
+      <div class="widget-body">
+        <div class="row" style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn primary" id="startBtn">開始</button>
+          <button class="btn" id="stopBtn">停止</button>
+          <button class="btn" id="stepBtn">1ステップ</button>
+          <button class="btn danger" id="panicBtn">パニック</button>
+        </div>
+        <div class="row" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; align-items:center;">
+          <label class="chip">速度
+            <select id="speedSelect">
+              <option value="1">x1</option>
+              <option value="2">x2</option>
+              <option value="4">x4</option>
+              <option value="8">x8</option>
+            </select>
+          </label>
+          <label class="chip">ログ間引き
+            <select id="logInterval">
+              <option value="1">毎ステップ</option>
+              <option value="2">x2</option>
+              <option value="4">x4</option>
+              <option value="8">x8</option>
+            </select>
+          </label>
+        </div>
+        <div class="section">
+          <details open>
+            <summary>オーバーレイ切替</summary>
+            <div class="section-body">
             <label><input type="checkbox" id="toggleHearts" checked /> ♡を表示</label>
             <label><input type="checkbox" id="toggleFlashes" checked /> 狩りエフェクトを表示</label>
             <label><input type="checkbox" id="toggleTrails" checked /> 軌跡を表示</label>
@@ -187,6 +205,42 @@
           </div>
         </details>
       </div>
+      <div class="section">
+        <details>
+          <summary>編集モード</summary>
+          <div class="section-body" style="display:grid; gap:10px;">
+            <label><input type="checkbox" id="editModeToggle" /> Edit Modeを有効化</label>
+            <label>ブラシ
+              <select id="brushType">
+                <option value="grass">草原</option>
+                <option value="forest">森林</option>
+                <option value="shrub">低木地</option>
+                <option value="water">水域</option>
+                <option value="wetland">湿地</option>
+                <option value="rock">岩地</option>
+                <option value="sand">砂地</option>
+              </select>
+            </label>
+            <label>ブラシ半径
+              <input id="brushRadius" type="range" min="1" max="8" step="1" value="2" />
+            </label>
+            <label><input type="checkbox" id="continuousPaint" checked /> ドラッグで連続描画</label>
+          </div>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  <div class="widget" id="chartWidget" data-widget-id="chartWidget" style="left:360px; top:540px; width:420px;">
+    <div class="widget-header" data-widget-id="chartWidget">
+      <div class="widget-title">指標</div>
+      <div class="widget-controls">
+        <button data-action="minimize" data-widget-id="chartWidget">—</button>
+        <button data-action="maximize" data-widget-id="chartWidget">▢</button>
+      </div>
+    </div>
+    <div class="widget-body">
+      <canvas id="popChart" aria-label="個体数グラフ" height="200"></canvas>
     </div>
   </div>
 
@@ -437,6 +491,10 @@
     const maxStageRetry = 10;
     const renderStats = { lastRenderMs: 0, worldTiles: 0 };
     let drawErrored = false;
+    let terrainLayer = null;
+    const logicDt = 16;
+    let logicAccumulator = 0;
+    let lastLogicTick = 0;
 
     /* Simulation */
     const legendList = document.getElementById('legendList');
@@ -449,9 +507,16 @@
     const stopBtn = document.getElementById('stopBtn');
     const stepBtn = document.getElementById('stepBtn');
     const panicBtn = document.getElementById('panicBtn');
+    const speedSelect = document.getElementById('speedSelect');
+    const logIntervalSelect = document.getElementById('logInterval');
     const extinctionModeCheckbox = document.getElementById('modeExtinction');
     const behaviorControls = document.getElementById('behaviorControls');
     const zoomSlider = document.getElementById('zoomSlider');
+    const editModeToggle = document.getElementById('editModeToggle');
+    const brushTypeSelect = document.getElementById('brushType');
+    const brushRadiusSlider = document.getElementById('brushRadius');
+    const continuousPaintToggle = document.getElementById('continuousPaint');
+    const popChartCanvas = document.getElementById('popChart');
 
     const terrainTypes = [
       { key:'grass', name:'草原', color:'#1f6f3f', texture:'#2b8a4f', plantK:0.65, cover:0.1, isWater:false, isRock:false },
@@ -481,7 +546,8 @@
           { species:'deer', count:32 },
           { species:'wolf', count:12 },
         ],
-        terrain: { forest:0.34, shrub:0.18, wetland:0.08, water:0.08, rock:0.08, sand:0.02 }
+        terrain: { forest:0.34, shrub:0.18, wetland:0.08, water:0.08, rock:0.08, sand:0.02 },
+        mapType:'meandering_river'
       },
       savanna: {
         label:'サバンナ',
@@ -491,7 +557,8 @@
           { species:'zebra', count:34 },
           { species:'lion', count:14 },
         ],
-        terrain: { grass:0.34, shrub:0.2, sand:0.14, water:0.08, rock:0.05, wetland:0.05 }
+        terrain: { grass:0.34, shrub:0.2, sand:0.14, water:0.08, rock:0.05, wetland:0.05 },
+        mapType:'savanna_mosaic'
       },
       wetland: {
         label:'湿地',
@@ -501,8 +568,17 @@
           { species:'capybara', count:28 },
           { species:'otter', count:12 },
         ],
-        terrain: { wetland:0.34, water:0.18, forest:0.16, rock:0.09, grass:0.1, shrub:0.05 }
+        terrain: { wetland:0.34, water:0.18, forest:0.16, rock:0.09, grass:0.1, shrub:0.05 },
+        mapType:'delta_wetland'
       }
+    };
+
+    const mapPatterns = {
+      meandering_river:{ label:'蛇行する大河', noiseScale:0.08, riverCount:1, wetlandBias:0.18, forestBias:0.24, hillBias:0.18 },
+      delta_wetland:{ label:'三角州', noiseScale:0.07, riverCount:2, wetlandBias:0.35, forestBias:0.18, hillBias:0.1 },
+      mountain_valley:{ label:'山地谷', noiseScale:0.06, riverCount:1, wetlandBias:0.12, forestBias:0.28, hillBias:0.35 },
+      patchy_forest:{ label:'森林塊', noiseScale:0.09, riverCount:0, wetlandBias:0.12, forestBias:0.38, hillBias:0.12 },
+      savanna_mosaic:{ label:'草地モザイク', noiseScale:0.1, riverCount:1, wetlandBias:0.14, forestBias:0.12, hillBias:0.08 }
     };
 
     const state = {
@@ -517,6 +593,15 @@
       dens: new Set(),
       reproductionEvents:[],
       huntEvents:[],
+      births:0,
+      deaths:0,
+      hunts:0,
+      history:[],
+      stepCount:0,
+      logEvery:1,
+      speedMultiplier:1,
+      terrainDirty:true,
+      mapType:'meandering_river',
       view:{ scale:1, offsetX:0, offsetY:0 },
       gridW:72,
       gridH:44,
@@ -524,6 +609,7 @@
       climate: presets.temperate.climate,
       endAllExtinct:false,
     };
+    let popChart = null;
 
     function clampScale(value){ return Math.min(Math.max(value, 0.5), 2.5); }
 
@@ -673,9 +759,18 @@
 
     function startSimLoop(){
       if(simFrame) return;
-      const tick = () => {
-        if(!state.running){ simFrame = null; return; }
-        stepSim();
+      const tick = (now=performance.now()) => {
+        if(!state.running){ simFrame = null; logicAccumulator = 0; return; }
+        if(!lastLogicTick) lastLogicTick = now;
+        const delta = Math.min(64, now - lastLogicTick);
+        lastLogicTick = now;
+        logicAccumulator += delta * (state.speedMultiplier||1);
+        let steps = Math.floor(logicAccumulator / logicDt);
+        steps = Math.min(steps, 8);
+        for(let i=0;i<steps;i++){
+          stepSim();
+          logicAccumulator -= logicDt;
+        }
         renderOnce('sim');
         simFrame = requestAnimationFrame(tick);
       };
@@ -685,6 +780,7 @@
     function stopSimLoop(){
       state.running = false;
       if(simFrame){ cancelAnimationFrame(simFrame); simFrame = null; }
+      logicAccumulator = 0; lastLogicTick = 0;
     }
 
     function renderLegend(){
@@ -707,20 +803,99 @@
     const clamp01 = (v) => Math.min(1, Math.max(0, v));
     const randBetween = (min,max) => min + Math.random()*(max-min);
     const wrap = (v, max) => (v + max) % max;
+    const spatial = { cell:3, bins:new Map() };
 
-    function createTerrain(weights){
-      const cumulative = [];
-      let sum = 0;
-      const keys = Object.keys(weights);
-      keys.forEach(k=>{ sum += weights[k]; cumulative.push({key:k, end:sum}); });
-      const total = sum || 1;
+    function rebuildSpatialHash(){
+      spatial.bins.clear();
+      state.animals.forEach((a,i)=>{
+        const cx = Math.floor(a.x / spatial.cell);
+        const cy = Math.floor(a.y / spatial.cell);
+        const key = `${cx}:${cy}`;
+        if(!spatial.bins.has(key)) spatial.bins.set(key, []);
+        spatial.bins.get(key).push(i);
+      });
+    }
+
+    function queryNeighbors(a, range){
+      const results = [];
+      const cellRange = Math.ceil(range / spatial.cell);
+      const baseX = Math.floor(a.x / spatial.cell);
+      const baseY = Math.floor(a.y / spatial.cell);
+      for(let dy=-cellRange; dy<=cellRange; dy++){
+        for(let dx=-cellRange; dx<=cellRange; dx++){
+          const key = `${baseX+dx}:${baseY+dy}`;
+          const bin = spatial.bins.get(key);
+          if(!bin) continue;
+          bin.forEach(idx => {
+            const b = state.animals[idx];
+            if(!b || b===a) return;
+            if(dist(a,b) <= range) results.push(b);
+          });
+        }
+      }
+      return results;
+    }
+
+    function createTerrain(){
+      const pattern = mapPatterns[state.mapType] || mapPatterns.meandering_river;
+      const scale = pattern.noiseScale || 0.08;
+      const riverCount = pattern.riverCount ?? 1;
+      const elevSeed = Math.random()*1000;
+      const moistSeed = Math.random()*2000;
+      const river = new Set();
+      const widen = (idx) => { river.add(idx); river.add(idx-1); river.add(idx+1); };
+      for(let r=0;r<riverCount;r++){
+        let cx = randBetween(state.gridW*0.2, state.gridW*0.8);
+        for(let y=0;y<state.gridH;y++){
+          const idx = y*state.gridW + Math.floor(cx);
+          widen(idx);
+          cx += randBetween(-1.1,1.1);
+          cx = Math.max(1, Math.min(state.gridW-2, cx));
+        }
+      }
       const arr=[];
-      for(let i=0;i<state.gridW*state.gridH;i++){
-        const r = Math.random()*total;
-        const found = cumulative.find(c=>r<=c.end) || cumulative[cumulative.length-1];
-        arr.push(found.key);
+      for(let y=0;y<state.gridH;y++){
+        for(let x=0;x<state.gridW;x++){
+          const idx = y*state.gridW + x;
+          const eNoise = (pInstance?.noise((x+elevSeed)*scale, (y+elevSeed)*scale) ?? Math.random());
+          const mNoise = (pInstance?.noise((x+moistSeed)*scale*1.1, (y+moistSeed)*scale*1.1) ?? Math.random());
+          const elev = eNoise + pattern.hillBias*0.5;
+          const moist = mNoise + pattern.wetlandBias*0.4;
+          const nearRiver = river.has(idx) || river.has(idx-1) || river.has(idx+1) || river.has(idx-state.gridW) || river.has(idx+state.gridW);
+          let tile = 'grass';
+          if(river.has(idx)) tile = 'water';
+          else if(nearRiver && moist>0.42) tile = 'wetland';
+          else if(elev>0.75) tile = 'rock';
+          else if(moist>0.6) tile = 'forest';
+          else if(moist>0.45) tile = 'shrub';
+          else if(elev<0.25) tile = 'sand';
+          arr.push(tile);
+        }
       }
       return arr;
+    }
+
+    function applyBrush(gx, gy){
+      const radius = parseInt(brushRadiusSlider?.value || '1');
+      const type = brushTypeSelect?.value || 'grass';
+      const r2 = radius*radius;
+      for(let dy=-radius; dy<=radius; dy++){
+        for(let dx=-radius; dx<=radius; dx++){
+          if(dx*dx + dy*dy > r2) continue;
+          const x = Math.max(0, Math.min(state.gridW-1, Math.floor(gx+dx)));
+          const y = Math.max(0, Math.min(state.gridH-1, Math.floor(gy+dy)));
+          const idx = y*state.gridW + x;
+          state.terrain[idx] = type;
+          const terrain = terrainTypes.find(t=>t.key===type);
+          if(!terrain || terrain.isWater || terrain.isRock){
+            state.plants[idx] = 0;
+          } else {
+            state.plants[idx] = clamp01(terrain.plantK*0.6);
+          }
+        }
+      }
+      state.terrainDirty = true;
+      setupDens();
     }
 
     function setupDens(){
@@ -777,11 +952,16 @@
       const preset = presets[key];
       if(!preset) return;
       state.climate = preset.climate;
+      state.mapType = preset.mapType || state.mapType;
       state.season = 0; state.score = 0; state.temp = preset.climate.temp[0]; state.rain = preset.climate.rain[0];
-      state.terrain = createTerrain(preset.terrain);
+      state.terrain = createTerrain();
+      state.terrainDirty = true;
       setupDens();
       initPlants();
       spawnAnimals(preset.animals);
+      state.history = [];
+      state.stepCount = 0;
+      state.births = 0; state.deaths = 0; state.hunts = 0;
       drawErrored = false;
       renderSummary();
       updateHUD();
@@ -790,6 +970,7 @@
       renderStats.worldTiles = state.gridW * state.gridH;
       recenterView();
       syncZoomSlider();
+      logHistory();
       renderOnce('preset');
     }
 
@@ -848,6 +1029,53 @@
       document.getElementById('genSummary').textContent = lines.join(' / ') || 'データなし';
     }
 
+    function logHistory(){
+      const counts = {};
+      state.animals.forEach(a => { counts[a.species] = (counts[a.species]||0)+1; });
+      const entry = { step: state.stepCount, births: state.births, deaths: state.deaths, hunts: state.hunts, ...counts };
+      state.history.push(entry);
+      state.history = state.history.slice(-800);
+      state.births = 0; state.deaths = 0; state.hunts = 0;
+      updateChartFromHistory();
+    }
+
+    function updateChartFromHistory(){
+      if(!popChartCanvas) return;
+      const labels = state.history.map(h=>h.step);
+      const speciesKeys = Object.keys(speciesLibrary);
+      const speciesDatasets = speciesKeys.map((key, idx)=>({
+        label: speciesLibrary[key]?.name || key,
+        data: state.history.map(h=>h[key]||0),
+        borderColor: terrainTypes[idx%terrainTypes.length]?.color || '#9be070',
+        tension:0.2,
+        fill:false,
+      }));
+      const extraDatasets = [
+        { label:'出生', data: state.history.map(h=>h.births||0), borderColor:'#ff9fe1', backgroundColor:'#ff9fe1', type:'bar', yAxisID:'y1', stack:'events' },
+        { label:'死亡', data: state.history.map(h=>h.deaths||0), borderColor:'#ffd180', backgroundColor:'#ffd180', type:'bar', yAxisID:'y1', stack:'events' },
+        { label:'捕食', data: state.history.map(h=>h.hunts||0), borderColor:'#ff7043', backgroundColor:'#ff7043', type:'bar', yAxisID:'y1', stack:'events' },
+      ];
+      const config = {
+        type:'line',
+        data:{ labels, datasets:[...speciesDatasets, ...extraDatasets] },
+        options:{
+          animation:false,
+          responsive:true,
+          scales:{
+            y:{ beginAtZero:true, stacked:false },
+            y1:{ beginAtZero:true, stacked:true, position:'right', grid:{ drawOnChartArea:false } }
+          },
+          plugins:{ legend:{ labels:{ color:'#dce6f3' } } }
+        }
+      };
+      if(!popChart){
+        popChart = new Chart(popChartCanvas.getContext('2d'), config);
+      } else {
+        popChart.data = config.data;
+        popChart.update('none');
+      }
+    }
+
     /* Simulation */
     let sketch = (sk) => {
       pInstance = sk;
@@ -904,50 +1132,62 @@
         };
       }
 
+      function screenToGrid(mx, my){
+        return {
+          x: (mx - state.view.offsetX)/(state.tile*state.view.scale),
+          y: (my - state.view.offsetY)/(state.tile*state.view.scale)
+        };
+      }
+
       function drawTerrain(sk){
         ensureValidP5(sk);
-        for(let y=0;y<state.gridH;y++){
-          for(let x=0;x<state.gridW;x++){
-            const idx = y*state.gridW+x;
-            const tKey = state.terrain[idx];
+        if(!terrainLayer || state.terrainDirty){
+          terrainLayer = sk.createGraphics(state.gridW*state.tile, state.gridH*state.tile);
+          terrainLayer.pixelDensity(1);
+          terrainLayer.noStroke();
+          state.terrain.forEach((tKey, idx)=>{
+            const x = idx % state.gridW;
+            const y = Math.floor(idx/state.gridW);
             const cellType = terrainTypes.find(t=>t.key===tKey) || terrainTypes[0];
-            const pos = worldToScreen(x,y);
-            const size = state.tile*state.view.scale;
-            sk.noStroke();
-            const c = sk.color(cellType.color);
-            c.setAlpha(190);
-            sk.fill(c);
-            sk.rect(pos.x, pos.y, size, size);
-            sk.stroke(cellType.texture);
-            sk.strokeWeight(1);
+            const posX = x*state.tile;
+            const posY = y*state.tile;
+            terrainLayer.fill(cellType.color + 'cc');
+            terrainLayer.rect(posX, posY, state.tile, state.tile);
+            terrainLayer.stroke(cellType.texture);
+            terrainLayer.strokeWeight(1);
             if(tKey==='forest'){
-              sk.line(pos.x+size*0.3, pos.y, pos.x+size*0.7, pos.y+size);
-              sk.line(pos.x, pos.y+size*0.4, pos.x+size, pos.y+size*0.6);
+              terrainLayer.line(posX+state.tile*0.3, posY, posX+state.tile*0.7, posY+state.tile);
+              terrainLayer.line(posX, posY+state.tile*0.4, posX+state.tile, posY+state.tile*0.6);
             } else if(tKey==='water'){
-              sk.noFill();
-              sk.beginShape();
-              curveVertexSafe(sk, pos.x, pos.y+size*0.25);
-              curveVertexSafe(sk, pos.x+size*0.15, pos.y+size*0.35);
-              curveVertexSafe(sk, pos.x+size*0.45, pos.y+size*0.55);
-              curveVertexSafe(sk, pos.x+size*0.75, pos.y+size*0.7);
-              curveVertexSafe(sk, pos.x+size, pos.y+size*0.82);
-              sk.endShape();
+              terrainLayer.noFill();
+              terrainLayer.beginShape();
+              curveVertexSafe(terrainLayer, posX, posY+state.tile*0.25);
+              curveVertexSafe(terrainLayer, posX+state.tile*0.15, posY+state.tile*0.35);
+              curveVertexSafe(terrainLayer, posX+state.tile*0.45, posY+state.tile*0.55);
+              curveVertexSafe(terrainLayer, posX+state.tile*0.75, posY+state.tile*0.7);
+              curveVertexSafe(terrainLayer, posX+state.tile, posY+state.tile*0.82);
+              terrainLayer.endShape();
+              terrainLayer.noStroke();
             } else if(tKey==='rock'){
-              sk.fill(cellType.texture); sk.noStroke();
-              sk.triangle(pos.x+size*0.2,pos.y+size*0.8,pos.x+size*0.5,pos.y+size*0.2,pos.x+size*0.8,pos.y+size*0.9);
+              terrainLayer.fill(cellType.texture); terrainLayer.noStroke();
+              terrainLayer.triangle(posX+state.tile*0.2,posY+state.tile*0.8,posX+state.tile*0.5,posY+state.tile*0.2,posX+state.tile*0.8,posY+state.tile*0.9);
             } else if(tKey==='wetland'){
-              sk.noFill(); sk.stroke(cellType.texture);
-              sk.ellipse(pos.x+size*0.4,pos.y+size*0.6,size*0.4,size*0.25);
+              terrainLayer.noFill(); terrainLayer.stroke(cellType.texture);
+              terrainLayer.ellipse(posX+state.tile*0.4,posY+state.tile*0.6,state.tile*0.4,state.tile*0.25);
+              terrainLayer.noStroke();
             } else if(tKey==='sand'){
-              sk.noFill(); sk.stroke(cellType.texture);
-              sk.line(pos.x+size*0.2,pos.y+size*0.7,pos.x+size*0.8,pos.y+size*0.65);
+              terrainLayer.noFill(); terrainLayer.stroke(cellType.texture);
+              terrainLayer.line(posX+state.tile*0.2,posY+state.tile*0.7,posX+state.tile*0.8,posY+state.tile*0.65);
+              terrainLayer.noStroke();
             } else if(tKey==='shrub'){
-              sk.noStroke(); sk.fill(cellType.texture);
-              sk.circle(pos.x+size*0.3,pos.y+size*0.4,size*0.2);
-              sk.circle(pos.x+size*0.6,pos.y+size*0.5,size*0.25);
+              terrainLayer.noStroke(); terrainLayer.fill(cellType.texture);
+              terrainLayer.circle(posX+state.tile*0.3,posY+state.tile*0.4,state.tile*0.2);
+              terrainLayer.circle(posX+state.tile*0.6,posY+state.tile*0.5,state.tile*0.25);
             }
-          }
+          });
+          state.terrainDirty = false;
         }
+        sk.image(terrainLayer, state.view.offsetX, state.view.offsetY, terrainLayer.width*state.view.scale, terrainLayer.height*state.view.scale);
       }
 
       function drawPlants(sk){
@@ -1066,6 +1306,15 @@
         if(sk && typeof sk.bezier === 'function') return sk.bezier(x1,y1,x2,y2,x3,y3,x4,y4);
       };
 
+      const tryPaint = () => {
+        if(!editModeToggle?.checked || sk.mouseButton !== sk.LEFT) return false;
+        const g = screenToGrid(sk.mouseX, sk.mouseY);
+        if(g.x<0 || g.y<0 || g.x>state.gridW || g.y>state.gridH) return false;
+        applyBrush(g.x, g.y);
+        renderOnce('paint');
+        return true;
+      };
+
       sk.mouseWheel = (event) => {
         const factor = event.delta > 0 ? 0.92 : 1.08;
         updateScale(state.view.scale * factor, sk.mouseX, sk.mouseY);
@@ -1073,11 +1322,16 @@
       };
 
       sk.mousePressed = () => {
+        if(tryPaint()) return;
         if(sk.mouseButton === sk.CENTER || (sk.mouseButton === sk.LEFT && sk.keyIsDown(32))){
           pan.active = true; pan.startX = sk.mouseX; pan.startY = sk.mouseY; pan.originX = state.view.offsetX; pan.originY = state.view.offsetY;
         }
       };
       sk.mouseDragged = () => {
+        if(editModeToggle?.checked && continuousPaintToggle?.checked && sk.mouseButton===sk.LEFT){
+          tryPaint();
+          return;
+        }
         if(pan.active){
           state.view.offsetX = pan.originX + (sk.mouseX - pan.startX);
           state.view.offsetY = pan.originY + (sk.mouseY - pan.startY);
@@ -1109,16 +1363,19 @@
           renderOnce('panic');
         });
       }
+      if(speedSelect){ speedSelect.addEventListener('change', ()=>{ state.speedMultiplier = parseFloat(speedSelect.value||'1')||1; }); }
+      if(logIntervalSelect){ logIntervalSelect.addEventListener('change', ()=>{ state.logEvery = parseInt(logIntervalSelect.value||'1')||1; }); }
+      state.speedMultiplier = parseFloat(speedSelect?.value||'1')||1;
+      state.logEvery = parseInt(logIntervalSelect?.value||'1')||1;
     };
 
     function stepSim(){
-      const stepsPerFrame = 2;
-      for(let s=0;s<stepsPerFrame;s++){
-        updateClimate();
-        growPlants();
-        updateAnimals();
-        checkEndCondition();
-      }
+      updateClimate();
+      growPlants();
+      updateAnimals();
+      checkEndCondition();
+      state.stepCount++;
+      if(state.stepCount % state.logEvery === 0){ logHistory(); }
       updateHUD();
       renderSummary();
     }
@@ -1145,10 +1402,12 @@
     }
 
     function updateAnimals(){
+      rebuildSpatialHash();
       const preyIndex = new Map();
       state.animals.forEach((a,i)=>{ if(a.diet==='herb') preyIndex.set(a.id, i); });
       const alerts = [];
       const trailLimit = 18;
+      const beforeCount = state.animals.length;
 
       state.animals.forEach(a => {
         const sp = speciesLibrary[a.species];
@@ -1176,11 +1435,12 @@
       });
 
       state.animals = state.animals.filter(a => a.energy>0 && a.age<8000);
+      state.deaths += Math.max(0, beforeCount - state.animals.length);
     }
 
     function chooseDirection(a, sp, alerts){
       let vec = {x: randBetween(-0.3,0.3), y: randBetween(-0.3,0.3)};
-      const neighbors = state.animals.filter(b => b !== a && b.diet===a.diet && dist(a,b)<3);
+      const neighbors = queryNeighbors(a, 3).filter(b => b.diet===a.diet);
       if(sp.behavior==='herd' && neighbors.length){
         const cohesion = neighbors.reduce((acc,b)=>({x:acc.x+(b.x-a.x), y:acc.y+(b.y-a.y)}), {x:0,y:0});
         vec.x += cohesion.x/neighbors.length * 0.05;
@@ -1266,6 +1526,7 @@
         if(success){
           a.satiety = clamp01(a.satiety + 0.7/(allies||1));
           a.energy = clamp01(a.energy + 0.4/(allies||1));
+          state.hunts += 1;
           state.animals = state.animals.filter(x => x!==target);
           state.huntEvents.push({x:target.x, y:target.y, time:performance.now()});
         }
@@ -1276,8 +1537,8 @@
 
     function findPrey(a, sp){
       let best=null; let bestD=999;
-      state.animals.forEach(b => {
-        if(b.diet!=='herb') return;
+      const candidates = queryNeighbors(a, sp.vision || 4).filter(b=>b.diet==='herb');
+      candidates.forEach(b => {
         const tile = terrainTypes.find(t=>t.key===state.terrain[Math.floor(b.y)*state.gridW + Math.floor(b.x)]);
         const cover = tile?.cover || 0;
         const range = sp.vision * (1 - cover*0.4);
@@ -1296,6 +1557,7 @@
       if(Math.random() < chance){
         const litter = Math.round(randBetween(sp.reproduction.litter[0], sp.reproduction.litter[1]));
         for(let i=0;i<litter;i++) state.animals.push(makeAnimal(a.species));
+        state.births += litter;
         a.lastBreed = 0;
         a.energy -= 0.2;
         state.reproductionEvents.push({x:a.x, y:a.y, time:performance.now()});
