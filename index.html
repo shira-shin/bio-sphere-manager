@@ -16,6 +16,20 @@
     main{display:grid; grid-template-columns: 1fr 360px; gap:0; min-height:calc(100vh - 76px);}
     #mapStage{position:relative; background:radial-gradient(circle at 20% 30%, rgba(80,140,220,0.06), transparent 40%), #060b12; overflow:hidden;}
     #canvasHost{position:absolute; inset:12px; border-radius:18px; box-shadow:0 16px 40px rgba(0,0,0,0.55); background:#050910; overflow:hidden;}
+    #mapOverlay{position:absolute; left:20px; top:20px; display:flex; flex-direction:column; gap:10px; z-index:10;}
+    .layer-label{padding:8px 10px; border-radius:10px; background:rgba(15,22,34,0.86); border:1px solid #22344a; font-weight:700; color:#d7e6ff; box-shadow:0 6px 20px rgba(0,0,0,0.45); min-width:220px;}
+    .layer-label small{display:block; color:#8da5c7; font-weight:600; margin-top:2px;}
+    .legend{padding:10px 12px; border-radius:12px; background:rgba(12,18,28,0.86); border:1px solid #22344a; box-shadow:0 6px 20px rgba(0,0,0,0.45); min-width:240px;}
+    .legend h3{margin:0 0 8px; font-size:13px; letter-spacing:0.03em; color:#c7d8f0;}
+    .legend ul{list-style:none; padding:0; margin:0; display:grid; grid-template-columns:repeat(2,minmax(110px,1fr)); gap:6px;}
+    .legend li{display:flex; align-items:center; gap:8px; font-size:12px; color:#9fb0c3;}
+    .swatch{width:16px; height:16px; border-radius:4px; border:1px solid #2e3f57; display:inline-block;}
+    .swatch.base{background:linear-gradient(135deg,#2c6a2c,#2b3d2b);}
+    .swatch.river{background:#4da7ff;}
+    .swatch.moist{background:linear-gradient(90deg,#2f3a70,#6fa4ff);}
+    .swatch.plant{background:linear-gradient(135deg,#2d5f39,#5ad17f);}
+    .swatch.herb{background:#a7f18c; border:1px solid #f5ffe7; box-shadow:0 0 0 1px #0b0f18;}
+    .swatch.carn{background:#ffad7d; border:1px solid #fff2e7; box-shadow:0 0 0 1px #0b0f18;}
     #mapStage canvas{display:block; width:100%; height:100%;}
     #renderAlert{position:absolute; left:18px; bottom:18px; background:rgba(60,12,12,0.85); border:1px solid rgba(255,120,120,0.4); padding:10px 12px; border-radius:12px; font-weight:700; color:#ffb4b4; z-index:5; display:none;}
     aside{background:#0b1018; border-left:1px solid #162030; display:flex; flex-direction:column;}
@@ -50,6 +64,20 @@
   <main>
     <section id="mapStage" aria-label="シミュレーションマップ">
       <div id="canvasHost"></div>
+      <div id="mapOverlay" aria-label="表示ガイド">
+        <div class="layer-label" id="layerLabel">Layer: ベース<small>地形 + 森林 + 河川</small></div>
+        <div class="legend" aria-label="凡例">
+          <h3>凡例 / Legend</h3>
+          <ul>
+            <li><span class="swatch base"></span>ベース地形</li>
+            <li><span class="swatch river"></span>河川セル</li>
+            <li><span class="swatch moist"></span>水分フィールド</li>
+            <li><span class="swatch plant"></span>植生/バイオマス</li>
+            <li><span class="swatch herb"></span>草食動物</li>
+            <li><span class="swatch carn"></span>肉食動物</li>
+          </ul>
+        </div>
+      </div>
       <div id="renderAlert">描画エラーが発生したため簡易描画に切替えました</div>
     </section>
     <aside>
@@ -438,7 +466,20 @@
       else{col=p.color(30+140*cell.elev, 40+80*cell.wet, 40);} 
       p.noStroke(); p.fill(col); p.rect(x,y,size,size);
     }
-    function drawAnimals(p,animals,color){ p.fill(color); p.noStroke(); animals.forEach(a=>{p.circle(a.x*params.cellSize, a.y*params.cellSize, 6);}); }
+    function drawAnimals(p, animals, style){
+      p.strokeWeight(1.2);
+      animals.forEach(a=>{
+        const px=a.x*params.cellSize; const py=a.y*params.cellSize;
+        p.fill(style.fill);
+        if(style.stroke){ p.stroke(style.stroke); } else { p.noStroke(); }
+        if(style.shape==='triangle'){
+          p.triangle(px-4, py+4, px+4, py+4, px, py-5);
+        } else {
+          p.circle(px, py, 7);
+        }
+      });
+      p.noStroke();
+    }
     function draw(state){
       if(!sk) return;
       try{
@@ -461,8 +502,8 @@
             }
           }
         }
-        drawAnimals(sk,state.animals.herbivores,'#9be070');
-        drawAnimals(sk,state.animals.carnivores,'#ff9f70');
+        drawAnimals(sk,state.animals.herbivores,{fill:'#9be070', stroke:'#f8ffe6', shape:'circle'});
+        drawAnimals(sk,state.animals.carnivores,{fill:'#ff9f70', stroke:'#fff2e7', shape:'triangle'});
         document.getElementById('renderAlert').style.display='none'; simpleMode=false; state.lastError=null;
       }catch(err){
         console.error('draw error',err); state.lastError=err; document.getElementById('renderAlert').style.display='block';
@@ -476,6 +517,23 @@
   // --- UI & ログ ---
   const ui = (()=>{
     let chart=null; const logBox=document.getElementById('logBox');
+    const overlayDescriptions={
+      none:{title:'ベース', detail:'地形 + 森林 + 河川'},
+      moist:{title:'水分 (0..1)', detail:'湿度・河川補正値'},
+      river:{title:'河川マスク', detail:'流量閾値を超えるセル'},
+      plant:{title:'植生 (0..1)', detail:'草量/バイオマス'}
+    };
+    function updateLayerLabel(state, riverCount){
+      const el=document.getElementById('layerLabel'); if(!el) return;
+      const overlay=state.overlay||'none';
+      const desc=overlayDescriptions[overlay]||overlayDescriptions.none;
+      let detail=desc.detail;
+      if(overlay==='river'){
+        const count = riverCount ?? state.cells.filter(c=>c.riverActive).length;
+        detail = count>0 ? `河川セル: ${count}` : '現在の地形では河川が生成されていません';
+      }
+      el.innerHTML = `Layer: ${desc.title}<small>${detail}</small>`;
+    }
     function bind(state){
       document.addEventListener('click',(e)=>{
         const btn = e.target.closest('[data-action]');
@@ -487,7 +545,7 @@
         if(action==='regen') resetSim(false);
         if(action==='download-csv') downloadCsv(state.history);
       });
-      document.querySelectorAll('input[name="overlay"]').forEach(r=>r.onchange=()=>{state.overlay=r.value; renderer.draw(state);});
+      document.querySelectorAll('input[name="overlay"]').forEach(r=>r.onchange=()=>{state.overlay=r.value; renderer.draw(state); updateLayerLabel(state);});
       document.getElementById('speedSelect').onchange=(e)=>{state.speed=Number(e.target.value)||1;};
     }
     function log(text){ const el=document.createElement('div'); el.textContent=text; logBox.appendChild(el); logBox.scrollTop=logBox.scrollHeight; }
@@ -538,7 +596,7 @@
       const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='history.csv'; a.click(); URL.revokeObjectURL(url);
     }
     function clearChart(){ if(chart){ chart.data.labels=[]; chart.data.datasets.forEach(d=>d.data=[]); chart.update(); } }
-    return {bind, log, initChart, updateChart, clearChart, downloadCsv};
+    return {bind, log, initChart, updateChart, clearChart, downloadCsv, updateLayerLabel};
   })();
 
   // --- メインループ ---
@@ -559,6 +617,7 @@
     ui.clearChart();
     renderer.drawTerrain(state);
     renderer.draw(state);
+    ui.updateLayerLabel(state);
     refreshHud(state);
     if(!fullReset){ logMsg('地形を再生成しました'); }
   }
@@ -583,6 +642,7 @@
     document.getElementById('hudCarn').textContent = currentState.animals.carnivores.length;
     document.getElementById('hudRiver').textContent = river;
     document.getElementById('hudMoist').textContent = moist.toFixed(2);
+    ui.updateLayerLabel(currentState, river);
   }
 
   function loop(){
