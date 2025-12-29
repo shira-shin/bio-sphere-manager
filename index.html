@@ -155,6 +155,51 @@
         <div class="row"><label><input id="evoToggle" type="checkbox" checked>進化ON</label><label>突然変異率<input id="mutRate" type="number" value="0.05" min="0" max="0.5" step="0.01"></label></div>
         <div style="font-size:12px; color:#9fb0c3; margin-top:4px;">speed=最大移動量 / vision=探索半径 / metabolism=消費倍率 / fertility=繁殖率 / water=水分消費倍率</div>
         <div id="speciesEditor" style="display:grid; gap:8px; grid-template-columns:1fr;"></div>
+        <details style="margin-top:8px;">
+          <summary>架空生物エディタ</summary>
+          <div class="row" style="margin-top:6px;">
+            <label>名前<input id="newSpName" type="text" placeholder="新種"></label>
+            <label>ID<input id="newSpId" type="text" placeholder="id"></label>
+          </div>
+          <div class="row" style="margin-top:6px;">
+            <label>分類<select id="newSpTrophic"><option value="herb">草食</option><option value="omn">雑食</option><option value="carn">肉食</option></select></label>
+            <label>形状<select id="newSpShape"><option value="ellipse">楕円</option><option value="antler">角付き</option><option value="tusk">牙</option><option value="arrow">矢印</option><option value="round">丸</option><option value="stripe">ストライプ</option></select></label>
+            <label>色<input id="newSpColor" type="color" value="#88c0ff"></label>
+          </div>
+          <div class="row" style="margin-top:6px;">
+            <label>速度<input id="newSpSpeed" type="number" step="0.05" value="1"></label>
+            <label>視野<input id="newSpVision" type="number" step="0.1" value="5"></label>
+            <label>代謝<input id="newSpMeta" type="number" step="0.05" value="1"></label>
+            <label>繁殖<input id="newSpFert" type="number" step="0.05" value="0.5"></label>
+            <label>水需要<input id="newSpWater" type="number" step="0.05" value="0.7"></label>
+          </div>
+          <div class="row" style="margin-top:6px;">
+            <label>毒耐性<input id="newSpPoison" type="number" step="0.05" value="0.5"></label>
+            <label>トゲ耐性<input id="newSpThorn" type="number" step="0.05" value="0.5"></label>
+            <label>社会<select id="newSpSocial"><option value="solo">単独</option><option value="pair">ペア</option><option value="herd">群れ</option><option value="pack">群狩り</option></select></label>
+          </div>
+          <div class="row" style="margin-top:6px;">
+            <label>被食対象(カンマ区切り)<input id="newSpPrey" type="text" placeholder="hare,deer"></label>
+            <label>草:毒:低木:樹木<input id="newSpDiet" type="text" value="0.6,0.1,0.2,0.1"></label>
+          </div>
+          <div class="row" style="margin-top:8px;">
+            <button type="button" data-action="add-species" class="primary">種を追加</button>
+            <button type="button" data-action="export-species">JSON Export</button>
+            <button type="button" data-action="import-species">JSON Import</button>
+            <button type="button" data-action="save-species">ローカル保存</button>
+            <button type="button" data-action="load-species">保存読込</button>
+          </div>
+        </details>
+      </div>
+      <div class="panel">
+        <h2>スコア</h2>
+        <div class="hud-grid">
+          <div class="hud"><div class="label">生存種数</div><div class="value" id="hudSpecies">0</div></div>
+          <div class="hud"><div class="label">Shannon</div><div class="value" id="hudShannon">0.00</div></div>
+          <div class="hud"><div class="label">遺伝多様度</div><div class="value" id="hudGenetic">0.00</div></div>
+          <div class="hud"><div class="label">安定度</div><div class="value" id="hudStability">0.00</div></div>
+          <div class="hud"><div class="label">絶滅回数</div><div class="value" id="hudExtinct">0</div></div>
+        </div>
       </div>
       <div class="panel">
         <h2>ログ / CSV</h2>
@@ -201,6 +246,9 @@
   const wrap=(v,max)=>{ if(!Number.isFinite(v)) return 0; return ((v%max)+max)%max; };
   const torusDelta=(a,b,size)=>{ const d=((a-b+size/2)%size)-size/2; return Number.isFinite(d)?d:0; };
   const safeNorm=(x,y)=>{const d=Math.hypot(x,y); return d<1e-9?null:d;};
+  const toId=str=>str.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')||`sp_${Date.now()}`;
+  const parseDiet=str=>{ const [g,p,s,t]=str.split(',').map(v=>parseFloat(v)||0); return {grass:clamp01(g||0), poison:clamp01(p||0), shrub:clamp01(s||0), tree:clamp01(t||0)}; };
+  const STORAGE_KEY='biosphere_custom_species';
 
   // --- STATE ---
   const params={gridW:96, gridH:64, cellSize:8};
@@ -229,7 +277,8 @@
   function createState(seed){
     return {seed, rng:createRng(seed), perlin:null, cells:[], animals:[], species:JSON.parse(JSON.stringify(baseSpecies)), overlay:'animals_all', overlayAlpha:0.6, overlaySpecies:null, boundaryMode:'bounce',
       running:false, step:0, season:'雨季', seasonCounter:0, events:[], idCounter:0, lastError:null, renderSimple:false, logs:[], chartData:[], averages:[], births:0, deaths:0, kills:0, density:new Float32Array(params.gridW*params.gridH),
-      movedAgents:0, nanAgents:0, zeroMoveStreak:0, vegMin:0, vegMax:0, vegMean:0, vegGrowth:0, vegConsumed:0};
+      movedAgents:0, nanAgents:0, zeroMoveStreak:0, vegMin:0, vegMax:0, vegMean:0, vegGrowth:0, vegConsumed:0,
+      shannon:0, genetic:0, stability:0, extinction:0, stabilityWindow:[], prevCounts:{}};
   }
   let state=createState('bs-demo');
   let uiParams={...initialUiParams};
@@ -293,6 +342,32 @@
     });
     state.overlaySpecies=select.value;
   }
+
+  function addCustomSpeciesFromForm(){
+    const name=document.getElementById('newSpName').value.trim()||'新種';
+    const id=document.getElementById('newSpId').value.trim()||toId(name);
+    const trophic=document.getElementById('newSpTrophic').value;
+    const color=document.getElementById('newSpColor').value||'#88c0ff';
+    const shape=document.getElementById('newSpShape').value;
+    const baseSpeed=parseFloat(document.getElementById('newSpSpeed').value)||1;
+    const vision=parseFloat(document.getElementById('newSpVision').value)||5;
+    const metabolism=parseFloat(document.getElementById('newSpMeta').value)||1;
+    const fertility=parseFloat(document.getElementById('newSpFert').value)||0.5;
+    const waterNeed=parseFloat(document.getElementById('newSpWater').value)||0.7;
+    const poisonTolerance=parseFloat(document.getElementById('newSpPoison').value)||0.5;
+    const thornHandling=parseFloat(document.getElementById('newSpThorn').value)||0.5;
+    const socialMode=document.getElementById('newSpSocial').value;
+    const preyList=document.getElementById('newSpPrey').value.split(',').map(s=>s.trim()).filter(Boolean);
+    const diet=parseDiet(document.getElementById('newSpDiet').value||'0.5,0,0.3,0.2');
+    const newSp={id,name,trophic,color,shape,baseSpeed,vision,metabolism,fertility,waterNeed,socialMode,preyList,poisonTolerance,thornHandling,dietPreference:diet};
+    state.species.push(newSp);
+    resetSpeciesEditor(); spawnAnimals(); logMsg(`種を追加: ${name}`);
+  }
+
+  function saveSpeciesLocal(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state.species)); logMsg('ローカル保存完了'); } catch(err){ logMsg('保存失敗:'+err.message); } }
+  function loadSpeciesLocal(skipSpawn=false){ try{ const txt=localStorage.getItem(STORAGE_KEY); if(txt){ state.species=JSON.parse(txt); resetSpeciesEditor(); if(!skipSpawn) spawnAnimals(); logMsg('保存データ読込'); } else { if(!skipSpawn) logMsg('保存された種はありません'); } } catch(err){ logMsg('読込失敗:'+err.message); } }
+  function exportSpeciesJSON(){ try{ const blob=new Blob([JSON.stringify(state.species,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='species.json'; a.click(); } catch(err){ logMsg('Export失敗:'+err.message);} }
+  function importSpeciesJSON(){ const txt=prompt('JSONを貼り付け'); if(!txt) return; try{ const parsed=JSON.parse(txt); if(Array.isArray(parsed)){ state.species=parsed; resetSpeciesEditor(); spawnAnimals(); logMsg('JSONから読み込み'); } else { logMsg('配列形式ではありません'); } } catch(err){ logMsg('Import失敗:'+err.message);} }
   function spawnAnimals(){
     state.animals=[]; const counts={}; document.querySelectorAll('#speciesEditor input[data-kind="count"]').forEach(inp=>counts[inp.dataset.id]=parseInt(inp.value||'0'));
     const rng=state.rng; state.species.forEach(sp=>{
@@ -310,7 +385,7 @@
     const w=params.gridW, h=params.gridH; const sex=rng()<0.5?'F':'M';
     return {id:`A${state.idCounter++}`, speciesId:sp.id, x:rng()*w, y:rng()*h, energy:0.7+rng()*0.2, hydration:0.7+rng()*0.2, age:0, sex,
       behavior:'wander', state:'WANDER', stateTimer:30+rng()*30, lastEvent:'-', genes:defaultGenes(), trail:[], alive:true, vx:0, vy:0, waterCooldown:0, target:null,
-      lastSafeX:0, lastSafeY:0};
+      lastSafeX:0, lastSafeY:0, headingX:1, headingY:0};
   }
 
   // --- ENGINE ---
@@ -344,14 +419,16 @@
       const thirst=1-a.hydration, hunger=1-a.energy;
       const predators=state.animals.filter(o=>o.alive && (state.species.find(s=>s.id===o.speciesId)?.trophic==='carn'));
       const predatorNearby=predators.some(o=>{const dx=torusDelta(a.x,o.x,w), dy=torusDelta(a.y,o.y,h); const d=safeNorm(dx,dy); return d && d<vision;});
-      const stateMin=18; a.stateTimer=Math.max(0,a.stateTimer-1);
-      const wantDrink=thirst>0.65 && a.waterCooldown<=0;
-      const drinkSatisfied=thirst<0.25;
-      const wantForage=hunger>0.45 && sp.trophic!=='carn';
+      const stateMin=24; a.stateTimer=Math.max(0,a.stateTimer-1);
+      const wantDrink=a.hydration<0.35 && a.waterCooldown<=0;
+      const drinkSatisfied=a.hydration>0.78;
+      const wantForage=a.energy<0.55 && sp.trophic!=='carn';
+      const forageSatisfied=a.energy>0.85;
       const wantHunt=sp.trophic==='carn' && hunger>0.35;
       let nextState=a.state;
       if(predatorNearby && (sp.trophic!=='carn' || hunger<0.8)) nextState='FLEE';
-      else if(a.state==='DRINK' && !drinkSatisfied && a.stateTimer>0){ nextState='DRINK'; }
+      else if(a.state==='DRINK' && !drinkSatisfied){ nextState='DRINK'; }
+      else if(a.state==='FORAGE' && !forageSatisfied){ nextState='FORAGE'; }
       else if(a.stateTimer<=0){
         if(wantDrink) nextState='DRINK';
         else if(wantForage) nextState='FORAGE';
@@ -359,7 +436,7 @@
         else if(hunger<0.25 && thirst<0.25) nextState='REST';
         else nextState='WANDER';
       }
-      if(a.state!==nextState){ a.state=nextState; a.stateTimer=stateMin+Math.floor(rng()*20); }
+      if(a.state!==nextState){ a.state=nextState; a.stateTimer=stateMin+Math.floor(rng()*24); }
       let vx=0, vy=0;
       const cellNow=state.cells[cy*w+cx];
       const repelWater=cellNow.river?0.8:(cellNow.shore?0.3:0);
@@ -402,7 +479,7 @@
       }
       // avoid water clusters and high density
       const localDensity=state.density[cy*w+cx]; if(localDensity>6){vx-=0.2*(rng()-0.5); vy-=0.2*(rng()-0.5);} if(cellNow.river) {vx-=0.4; vy-=0.4;}
-      const steerN=safeNorm(vx,vy); if(steerN){vx/=steerN; vy/=steerN;} else {vx=rng()-0.5; vy=rng()-0.5;}
+      const steerN=safeNorm(vx,vy); if(steerN){vx/=steerN; vy/=steerN; a.headingX=vx; a.headingY=vy;} else {vx=rng()-0.5; vy=rng()-0.5;}
       const prevX=a.x, prevY=a.y; a.lastSafeX=prevX; a.lastSafeY=prevY; a.vx=vx; a.vy=vy;
       const speedMul=a.state==='REST'?0.15:0.6;
       const nx=a.x + vx*speed*speedMul; const ny=a.y + vy*speed*speedMul;
@@ -447,7 +524,15 @@
     let vegMin=Infinity, vegMax=0; state.cells.forEach(c=>{const t=c.veg.grass+c.veg.poison+c.veg.shrub+c.veg.shrubThorn+c.veg.tree; vegMin=Math.min(vegMin,t); vegMax=Math.max(vegMax,t);});
     state.vegMin=vegMin; state.vegMax=vegMax; state.vegMean=vegSum/state.cells.length; state.zeroMoveStreak=state.movedAgents===0?state.zeroMoveStreak+1:0;
     state.animals=animalsAlive; state.births=births; state.deaths=deaths; state.kills=kills;
-    state.logs.push({step:state.step, season:state.season, river:riverCount, moist:moistSum/state.cells.length, veg:vegSum/state.cells.length, births,deaths,kills, counts:speciesCounts(), genesAvg:averageGenes(), vegMin:state.vegMin, vegMax:state.vegMax, vegGrowth:state.vegGrowth, vegConsumed:state.vegConsumed, moved:state.movedAgents, nan:state.nanAgents});
+    const counts=speciesCounts();
+    const totalPop=Object.values(counts).reduce((s,v)=>s+v,0);
+    const shannon=computeShannon(counts);
+    const genetic=computeGeneticDiversity();
+    updateStabilityMetric(totalPop);
+    Object.entries(counts).forEach(([id,v])=>{ if((state.prevCounts[id]||0)>0 && v===0) state.extinction++; });
+    state.prevCounts=counts;
+    state.shannon=shannon; state.genetic=genetic;
+    state.logs.push({step:state.step, season:state.season, river:riverCount, moist:moistSum/state.cells.length, veg:vegSum/state.cells.length, births,deaths,kills, counts, genesAvg:averageGenes(), vegMin:state.vegMin, vegMax:state.vegMax, vegGrowth:state.vegGrowth, vegConsumed:state.vegConsumed, moved:state.movedAgents, nan:state.nanAgents, shannon, genetic, stability:state.stability, extinction:state.extinction});
     if(state.logs.length>600) state.logs.shift();
   }
 
@@ -462,6 +547,9 @@
     const list=state.animals.filter(a=>a.alive); if(list.length===0) return sums; list.forEach(a=>keys.forEach(k=>sums[k]+=a.genes[k]||1)); keys.forEach(k=>sums[k]/=list.length); return sums;
   }
   function speciesCounts(){ const counts={}; state.species.forEach(sp=>counts[sp.id]=0); state.animals.forEach(a=>{if(a.alive) counts[a.speciesId]++;}); return counts; }
+  function computeShannon(counts){ const total=Object.values(counts).reduce((s,v)=>s+v,0); if(total===0) return 0; let h=0; Object.values(counts).forEach(v=>{ if(v>0){ const p=v/total; h-=p*Math.log(p); } }); return h/Math.log(state.species.length||1); }
+  function computeGeneticDiversity(){ const keys=['g_speed','g_vision','g_metabolism','g_fertility','g_thirstTol','g_starveTol']; let totalVar=0, speciesUsed=0; state.species.forEach(sp=>{ const list=state.animals.filter(a=>a.alive && a.speciesId===sp.id); if(list.length<2) return; const means={}; keys.forEach(k=>means[k]=0); list.forEach(a=>keys.forEach(k=>means[k]+=a.genes[k]||1)); keys.forEach(k=>means[k]/=list.length); let varSum=0; list.forEach(a=>keys.forEach(k=>{ const d=(a.genes[k]||1)-means[k]; varSum+=d*d; })); totalVar+=varSum/(list.length*keys.length); speciesUsed++; }); return speciesUsed?totalVar/speciesUsed:0; }
+  function updateStabilityMetric(totalPop){ const window=state.stabilityWindow; window.push(totalPop); if(window.length>180) window.shift(); if(window.length>3){ const avg=window.reduce((s,v)=>s+v,0)/window.length; const variance=window.reduce((s,v)=>s+(v-avg)*(v-avg),0)/window.length; state.stability=1/(1+Math.sqrt(variance)); } else { state.stability=0; } }
 
   // --- RENDER ---
   let p5inst=null; let canvasW=0, canvasH=0; let selected=null; let overlayLayer=null;
@@ -477,7 +565,7 @@
   function handleHover(p){
     const cellTooltip=document.getElementById('cellTooltip'); const x=Math.floor(p.mouseX/params.cellSize), y=Math.floor(p.mouseY/params.cellSize);
     if(x<0||y<0||x>=params.gridW||y>=params.gridH){cellTooltip.classList.add('hidden'); return;}
-    const c=state.cells[y*params.gridW+x]; cellTooltip.textContent=`(${x},${y}) elev:${c.elev.toFixed(2)}\n地形:${c.terrain} river:${c.river?'yes':'no'}\nmoist:${c.moist.toFixed(2)}\ngrass:${c.veg.grass.toFixed(2)} shrub:${c.veg.shrub.toFixed(2)} tree:${c.veg.tree.toFixed(2)}`;
+    const c=state.cells[y*params.gridW+x]; cellTooltip.textContent=`(${x},${y}) elev:${c.elev.toFixed(2)}\n地形:${c.terrain} river:${c.river?'yes':'no'}\nmoist:${c.moist.toFixed(2)}\n草:${c.veg.grass.toFixed(2)} 毒:${c.veg.poison.toFixed(2)}\n低木:${c.veg.shrub.toFixed(2)} トゲ:${c.veg.shrubThorn.toFixed(2)} 樹木:${c.veg.tree.toFixed(2)}`;
     cellTooltip.style.left=(p.mouseX+16)+'px'; cellTooltip.style.top=(p.mouseY+16)+'px'; cellTooltip.classList.remove('hidden');
   }
   function handleSelect(p){
@@ -546,10 +634,17 @@
     updateHud(); updateInspector(); updateChart();
   }
   function drawAnimal(p,a){
-    const sp=state.species.find(s=>s.id===a.speciesId); const size=sp.trophic==='carn'?8:7; const screenX=a.x*params.cellSize+params.cellSize/2; const screenY=a.y*params.cellSize+params.cellSize/2; const color=p.color(sp.color);
-    p.push(); p.translate(screenX,screenY); const stroke=p.brightness(color)>50?'#000':'#fff'; p.stroke(stroke); p.strokeWeight(1.2); p.fill(color);
-    if(state.overlay==='animals_filter' && document.getElementById('speciesDim').checked && state.overlaySpecies && state.overlaySpecies!==a.speciesId){ p.tint(255,60); p.stroke(255,80);}
-    if(sp.shape==='triangle'){p.triangle(-size/2,size/2, size/2,size/2, 0,-size/2);} else if(sp.shape==='square'){p.rect(-size/2,-size/2,size,size,2);} else {p.circle(0,0,size);}
+    const sp=state.species.find(s=>s.id===a.speciesId); const size=sp.trophic==='carn'?9:8; const screenX=a.x*params.cellSize+params.cellSize/2; const screenY=a.y*params.cellSize+params.cellSize/2; const color=p.color(sp.color);
+    const angle=Math.atan2(a.headingY||0,a.headingX||1);
+    p.push(); p.translate(screenX,screenY); p.rotate(angle); const stroke=p.brightness(color)>50?'#000':'#fff'; p.stroke(stroke); p.strokeWeight(1.1); p.fill(color);
+    if(state.overlay==='animals_filter' && document.getElementById('speciesDim').checked && state.overlaySpecies && state.overlaySpecies!==a.speciesId){ p.tint(255,60); p.stroke(255,80);} 
+    if(sp.shape==='ellipse'){ p.ellipse(0,0,size*1.1,size*0.8); p.fill(255,255,255,140); p.circle(size*0.4,0,2); }
+    else if(sp.shape==='antler'){ p.ellipse(0,0,size*1.2,size*0.85); p.strokeWeight(1); p.line(size*0.2,-size*0.3,size*0.6,-size*0.8); p.line(size*0.2,-size*0.3,size*0.6,-size*0.3);} 
+    else if(sp.shape==='tusk'){ p.rect(-size*0.5,-size*0.4,size*0.9,size*0.8,3); p.triangle(size*0.1,0,size*0.7,-size*0.4,size*0.7,size*0.4);} 
+    else if(sp.shape==='arrow'){ p.triangle(-size*0.5,-size*0.6,-size*0.5,size*0.6,size*0.8,0); p.rect(-size*0.6,-size*0.2,size*0.7,size*0.4,2);} 
+    else if(sp.shape==='round'){ p.circle(0,0,size); p.circle(size*0.35,-size*0.2,3);} 
+    else if(sp.shape==='stripe'){ p.ellipse(0,0,size*1.1,size*0.8); p.stroke(255,255,255,120); p.strokeWeight(1); p.line(-size*0.4,-size*0.35,size*0.4,size*0.35); p.line(-size*0.4,size*0.35,size*0.4,-size*0.35); p.stroke(stroke); } 
+    else { p.triangle(-size/2,size/2, size/2,size/2, 0,-size/2);} 
     if(document.getElementById('haloToggle').checked){ if(a.behavior==='graze') {p.noFill(); p.stroke(50,200,120,160); p.circle(0,0,size+6);} else if(a.behavior==='chase'){p.noFill(); p.stroke(255,80,80,180); p.circle(0,0,size+6);} else if(a.behavior==='water'){p.noFill(); p.stroke(80,160,255,180); p.circle(0,0,size+6);} else if(a.behavior==='mate'){p.noStroke(); p.fill(255,180,200,200); p.text('♡',-4,4);} }
     p.pop();
   }
@@ -563,6 +658,11 @@
     document.getElementById('hudVegStats').textContent=`${(log.vegMin||0).toFixed(2)}/${state.vegMean.toFixed(2)}/${(log.vegMax||0).toFixed(2)}`;
     document.getElementById('hudVegFlux').textContent=`${state.vegGrowth.toFixed(2)}/${state.vegConsumed.toFixed(2)}`;
     document.getElementById('hudMoveNan').textContent=`${state.movedAgents}/${state.nanAgents}`;
+    document.getElementById('hudSpecies').textContent=Object.values(log.counts).filter(v=>v>0).length;
+    document.getElementById('hudShannon').textContent=(log.shannon||0).toFixed(2);
+    document.getElementById('hudGenetic').textContent=(log.genetic||0).toFixed(2);
+    document.getElementById('hudStability').textContent=(log.stability||0).toFixed(2);
+    document.getElementById('hudExtinct').textContent=state.extinction;
     const warn=document.getElementById('movementWarning'); if(state.zeroMoveStreak>=2){warn.classList.remove('hidden');} else {warn.classList.add('hidden');}
   }
   function updateInspector(){
@@ -572,14 +672,19 @@
   }
   function logMsg(msg){ const logBox=document.getElementById('logBox'); const t=`[${state.step}] ${msg}`; state.events.push({type:'log', msg}); logBox.textContent += t+'\n'; logBox.scrollTop=logBox.scrollHeight; }
   function updateChart(){
-    if(!window.popChartInstance){ const ctx=document.getElementById('popChart'); window.popChartInstance=new Chart(ctx,{type:'line',data:{labels:[],datasets:[]},options:{animation:false, plugins:{legend:{labels:{color:'#dce8ff'}}}, scales:{x:{ticks:{color:'#9fb0c3'}}, y:{ticks:{color:'#9fb0c3'}}}}}); }
+    if(!window.popChartInstance){ const ctx=document.getElementById('popChart'); window.popChartInstance=new Chart(ctx,{type:'line',data:{labels:[],datasets:[]},options:{animation:false, plugins:{legend:{labels:{color:'#dce8ff'}}}, scales:{x:{ticks:{color:'#9fb0c3'}}, pop:{type:'linear', position:'left', ticks:{color:'#9fb0c3'}}, score:{type:'linear', position:'right', ticks:{color:'#9fb0c3'}}}}}); }
     if(state.step%5!==0) return; const chart=window.popChartInstance; const log=state.logs[state.logs.length-1]; if(!log) return; const labels=state.logs.map(l=>l.step);
-    chart.data.labels=labels; chart.data.datasets=[...state.species.map(sp=>({label:sp.name, data:state.logs.map(l=>l.counts[sp.id]||0), borderColor:sp.color, tension:0.2, spanGaps:true, fill:false})), {label:'植生合計', data:state.logs.map(l=>l.veg), borderColor:'#68e38f', borderDash:[4,4], tension:0.2}];
-    if(chart.data.datasets.length>0){chart.update('none');} else {logMsg('グラフ更新失敗: datasetなし');}
+    const totalData=state.logs.map(l=>Object.values(l.counts).reduce((s,v)=>s+v,0));
+    chart.data.labels=labels; chart.data.datasets=[{label:'総個体数', data:totalData, borderColor:'#ffffff', tension:0.25, yAxisID:'pop'},
+      ...state.species.map(sp=>({label:sp.name, data:state.logs.map(l=>l.counts[sp.id]||0), borderColor:sp.color, tension:0.2, spanGaps:true, fill:false, yAxisID:'pop'})),
+      {label:'Shannon', data:state.logs.map(l=>l.shannon||0), borderColor:'#7fe8ff', borderDash:[6,4], tension:0.25, yAxisID:'score'},
+      {label:'遺伝多様度', data:state.logs.map(l=>l.genetic||0), borderColor:'#ffb347', borderDash:[3,3], tension:0.25, yAxisID:'score'},
+      {label:'植生合計', data:state.logs.map(l=>l.veg), borderColor:'#68e38f', borderDash:[4,4], tension:0.2, yAxisID:'score'}];
+    chart.update('none');
   }
   function downloadCsv(){
-    const rows=['step,season,moist,veg_total,herb_total,carn_total,births,deaths,hunts,nan,'+state.species.map(s=>s.id).join(',')];
-    state.logs.forEach(l=>{const herb=Object.entries(l.counts).filter(([id])=>state.species.find(s=>s.id===id)?.trophic==='herb').reduce((s,[,v])=>s+v,0); const carn=Object.entries(l.counts).filter(([id])=>state.species.find(s=>s.id===id)?.trophic==='carn').reduce((s,[,v])=>s+v,0); rows.push([l.step,l.season,l.moist.toFixed(3),l.veg.toFixed(3),herb,carn,l.births,l.deaths,l.kills,l.nan,...state.species.map(s=>l.counts[s.id])].join(','));});
+    const rows=['step,season,moist,veg_total,herb_total,carn_total,births,deaths,hunts,nan,shannon,genetic,stability,extinction,'+state.species.map(s=>s.id).join(',')];
+    state.logs.forEach(l=>{const herb=Object.entries(l.counts).filter(([id])=>state.species.find(s=>s.id===id)?.trophic==='herb').reduce((s,[,v])=>s+v,0); const carn=Object.entries(l.counts).filter(([id])=>state.species.find(s=>s.id===id)?.trophic==='carn').reduce((s,[,v])=>s+v,0); rows.push([l.step,l.season,l.moist.toFixed(3),l.veg.toFixed(3),herb,carn,l.births,l.deaths,l.kills,l.nan,(l.shannon||0).toFixed(3),(l.genetic||0).toFixed(3),(l.stability||0).toFixed(3),l.extinction,...state.species.map(s=>l.counts[s.id])].join(','));});
     try{const blob=new Blob([rows.join('\n')],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='biosphere-log.csv'; a.click();}
     catch(err){logMsg('CSV保存失敗:'+err.message);} }
 
@@ -624,12 +729,13 @@
   }
 
   // --- INIT ---
-  function init(){ resetSpeciesEditor(); generateTerrain(document.getElementById('patternSelect').value); spawnAnimals(); startP5(); bindUI(); }
+  function init(){ resetSpeciesEditor(); if(localStorage.getItem(STORAGE_KEY)){ loadSpeciesLocal(true); } generateTerrain(document.getElementById('patternSelect').value); spawnAnimals(); startP5(); bindUI(); }
   function bindUI(){
     document.querySelectorAll('button[data-action]').forEach(btn=>btn.addEventListener('click',()=>{
       const act=btn.dataset.action; if(act==='start') state.running=true; else if(act==='stop') state.running=false; else if(act==='reset'){ state=createState(document.getElementById('seedInput').value); generateTerrain(document.getElementById('patternSelect').value); spawnAnimals(); selected=null; }
       else if(act==='regen'){ state.seed=document.getElementById('seedInput').value; state.rng=createRng(state.seed); generateTerrain(document.getElementById('patternSelect').value); }
       else if(act==='download-csv') downloadCsv(); else if(act==='run-test') runTest(); else if(act==='self-test') runSelfTest(); else if(act==='headless-3000') runHeadless3000();
+      else if(act==='add-species') addCustomSpeciesFromForm(); else if(act==='export-species') exportSpeciesJSON(); else if(act==='import-species') importSpeciesJSON(); else if(act==='save-species') saveSpeciesLocal(); else if(act==='load-species') loadSpeciesLocal();
     }));
     document.querySelectorAll('button[data-preset]').forEach(btn=>btn.addEventListener('click',()=>applyPreset(btn.dataset.preset)));
     document.querySelectorAll('input[name="overlay"]').forEach(r=>r.addEventListener('change',e=>{state.overlay=e.target.value;}));
