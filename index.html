@@ -392,7 +392,7 @@
     constructor(sp, rng, id){
       const w=params.gridW, h=params.gridH; this.id=`A${id}`; this.speciesId=sp.id; this.x=rng()*w; this.y=rng()*h;
       this.energy=0.7+rng()*0.2; this.hydration=0.7+rng()*0.2; this.age=0; this.sex=rng()<0.5?'F':'M';
-      this.behavior='wander'; this.state=AnimalStates.WANDER; this.stateTimer=30+rng()*30; this.lastEvent='-';
+      this.behavior='wander'; this.state=AnimalStates.WANDER; this.stateLock=0; this.lastEvent='-';
       this.genes=defaultGenes(); this.trail=[]; this.alive=true; this.vx=0; this.vy=0; this.waterCooldown=0; this.target=null;
       this.lastSafeX=0; this.lastSafeY=0; this.headingX=1; this.headingY=0; this.wanderAngle=rng()*Math.PI*2; this.mateCooldown=0;
     }
@@ -400,62 +400,77 @@
     getSpecies(){ return state.species.find(s=>s.id===this.speciesId); }
 
     update(state){
-      if(!this.alive) return; this.think(state); this.calculateForces(state); this.move(state); this.metabolism(state);
+      if(!this.alive) return;
+      this.decideState(state);
+      this.applyForces(state);
+      this.move(state);
+      this.consumeAndMetabolize(state);
+      this.handleReproduction(state);
       this.trail.push({x:this.x,y:this.y}); if(this.trail.length>40) this.trail.shift();
     }
 
-    think(state){
-      const sp=this.getSpecies(); const genes=this.genes; const w=params.gridW, h=params.gridH; const rng=state.rng;
+    decideState(state){
+      const sp=this.getSpecies(); const genes=this.genes; const rng=state.rng;
       const speed=clampRange(sp.baseSpeed*lerp(0.7,1.3,genes.g_speed),0.2,2.5); const vision=clampRange(sp.vision*lerp(0.7,1.3,genes.g_vision),2,12);
       this.cached={speed,vision};
-      const thirst=1-this.hydration, hunger=1-this.energy; const thirstPct=thirst*100, hungerPct=hunger*100; const stateMin=40; this.stateTimer=Math.max(0,this.stateTimer-1);
-      const drinkEnter=thirstPct>70 && this.waterCooldown<=0; const drinkExit=thirstPct<10; // hysteresis
-      const eatEnter=hungerPct>55 && sp.trophic!=='carn'; const eatExit=hungerPct<12;
-      const mateReady=this.energy>0.85 && this.hydration>0.5 && this.mateCooldown<=0;
 
-      let next=this.state;
-      if(this.state===AnimalStates.DRINK){ if(!drinkExit) next=AnimalStates.DRINK; }
-      else if(this.state===AnimalStates.EAT){ if(!eatExit) next=AnimalStates.EAT; }
-      else if(this.state===AnimalStates.MATE){ if(this.stateTimer>0 && mateReady) next=AnimalStates.MATE; }
-      else if(this.stateTimer<=0){
-        if(drinkEnter) next=AnimalStates.DRINK;
-        else if(eatEnter || (sp.trophic==='carn' && hungerPct>40)) next=AnimalStates.EAT;
-        else if(mateReady) next=AnimalStates.MATE;
-        else next=AnimalStates.WANDER;
-      }
+      const thirstPct=(1-this.hydration)*100; const hungerPct=(1-this.energy)*100;
+      if(this.state===AnimalStates.DRINK && thirstPct>=5){ this.behavior='water'; return; }
+      if(this.state===AnimalStates.DRINK && thirstPct<5) this.stateLock=0;
+      if(this.stateLock>0){ this.stateLock--; return; }
 
-      if(this.state!==next){ this.state=next; this.stateTimer=stateMin+Math.floor(rng()*30); this.target=null; }
+      const mateReady=this.energy>0.8 && thirstPct<30 && this.mateCooldown<=0;
+      const drinkNeed=thirstPct>60 && this.waterCooldown<=0;
+      const foodNearby=this.hasFoodNearby(state,vision);
+
+      let next=AnimalStates.WANDER;
+      if(drinkNeed) next=AnimalStates.DRINK;
+      else if(hungerPct>40 && foodNearby) next=AnimalStates.EAT;
+      else if(mateReady) next=AnimalStates.MATE;
+
+      if(next!==this.state){ this.state=next; this.stateLock=30+Math.floor(rng()*30); this.target=null; }
     }
 
-    calculateForces(state){
+    hasFoodNearby(state, vision){
+      const sp=this.getSpecies(); const w=params.gridW, h=params.gridH;
+      if(sp.trophic==='carn'){
+        return state.animals.some(o=>o.alive && sp.preyList.includes(o.speciesId) && Math.hypot(torusDelta(o.x,this.x,w), torusDelta(o.y,this.y,h))<vision);
+      }
+      const cx=Math.floor(wrap(this.x,w)), cy=Math.floor(wrap(this.y,h));
+      for(let dy=-2;dy<=2;dy++) for(let dx=-2;dx<=2;dx++){
+        const nx=wrap(cx+dx,w), ny=wrap(cy+dy,h); const c=state.cells[ny*w+nx];
+        const vegScore=(c.veg.grass+c.veg.poison+c.veg.shrub+c.veg.shrubThorn+c.veg.tree);
+        if(vegScore>0.08) return true;
+      }
+      return false;
+    }
+
+    applyForces(state){
       const sp=this.getSpecies(); const {speed,vision}=this.cached; const w=params.gridW, h=params.gridH; const rng=state.rng;
       let steerX=0, steerY=0;
-      // small wander jitter
-      this.wanderAngle+= (rng()-0.5)*0.35; steerX+=Math.cos(this.wanderAngle)*0.4; steerY+=Math.sin(this.wanderAngle)*0.4;
+      this.wanderAngle+= (rng()-0.5)*0.35; steerX+=Math.cos(this.wanderAngle)*0.35; steerY+=Math.sin(this.wanderAngle)*0.35;
 
       const cx=Math.floor(wrap(this.x,w)), cy=Math.floor(wrap(this.y,h));
       const cellNow=state.cells[cy*w+cx];
-      const thirst=1-this.hydration; const hunger=1-this.energy;
 
       if(this.state===AnimalStates.DRINK){
         let best={score:-Infinity,x:cx,y:cy};
         for(let dy=-3;dy<=3;dy++) for(let dx=-3;dx<=3;dx++){
           const nx=wrap(cx+dx,w), ny=wrap(cy+dy,h); const c=state.cells[ny*w+nx];
-          const nearRiver=c.river||c.shore; const score=(nearRiver?1.2:0)+(c.moist*0.7)-Math.hypot(dx,dy)*0.06;
+          const nearRiver=c.river||c.shore; const score=(nearRiver?1.5:0)+(c.moist*0.8)-Math.hypot(dx,dy)*0.05;
           if(score>best.score){best={score,x:nx,y:ny};}
         }
         steerX+=torusDelta(best.x+0.5,this.x,w); steerY+=torusDelta(best.y+0.5,this.y,h); this.behavior='water'; this.target=best;
       } else if(this.state===AnimalStates.EAT){
         if(sp.trophic==='carn'){
-          const prey=state.animals.filter(o=>o.alive && sp.preyList.includes(o.speciesId)); let targetPrey=null,minD=Infinity;
-          prey.forEach(o=>{const dx=torusDelta(o.x,this.x,w), dy=torusDelta(o.y,this.y,h); const d=safeNorm(dx,dy); if(d && d<minD && d<vision){minD=d; targetPrey=o;}});
+          let targetPrey=null,minD=Infinity; state.animals.forEach(o=>{ if(!o.alive||!sp.preyList.includes(o.speciesId)) return; const dx=torusDelta(o.x,this.x,w), dy=torusDelta(o.y,this.y,h); const d=safeNorm(dx,dy); if(d && d<minD && d<vision){minD=d; targetPrey=o;} });
           if(targetPrey){const dx=torusDelta(targetPrey.x,this.x,w), dy=torusDelta(targetPrey.y,this.y,h); const d=safeNorm(dx,dy); if(d){steerX+=dx/d*1.6; steerY+=dy/d*1.6; this.target=targetPrey; this.behavior='chase';}}
         } else {
           let best={score:-Infinity,x:cx,y:cy};
           for(let dy=-2;dy<=2;dy++) for(let dx=-2;dx<=2;dx++){
             const nx=wrap(cx+dx,w), ny=wrap(cy+dy,h); const c=state.cells[ny*w+nx];
             const vegScore=(c.veg.grass*(sp.dietPreference.grass||0)+c.veg.poison*(sp.dietPreference.poison||0)*sp.poisonTolerance+(c.veg.shrub+c.veg.shrubThorn*0.8)*(sp.dietPreference.shrub||0)+c.veg.tree*(sp.dietPreference.tree||0));
-            const score=vegScore - (Math.abs(dx)+Math.abs(dy))*0.08 + c.moist*0.05;
+            const score=vegScore - Math.hypot(dx,dy)*0.08 + c.moist*0.04;
             if(score>best.score){best={score,x:nx,y:ny};}
           }
           steerX+=torusDelta(best.x+0.5,this.x,w); steerY+=torusDelta(best.y+0.5,this.y,h); this.target=best; this.behavior='graze';
@@ -468,19 +483,17 @@
         this.behavior='wander';
       }
 
-      // separation force (boids)
-      const sepRadius=2; let sepX=0, sepY=0, sepCount=0;
-      state.animals.forEach(o=>{ if(o===this||!o.alive) return; const dx=torusDelta(o.x,this.x,w), dy=torusDelta(o.y,this.y,h); const d=safeNorm(dx,dy); if(d && d<sepRadius){ const weight=cellNow.river||cellNow.shore?1.6:1; sepX-=dx/(d*d)*weight; sepY-=dy/(d*d)*weight; sepCount++; }});
-      if(sepCount>0){ const sN=safeNorm(sepX,sepY); if(sN){ steerX+=sepX/sN*1.1; steerY+=sepY/sN*1.1; }}
+      const sepRadius=2; let sepX=0, sepY=0, sepCount=0; const sepBoost=this.state===AnimalStates.DRINK?1.8:1.2;
+      state.animals.forEach(o=>{ if(o===this||!o.alive) return; const dx=torusDelta(o.x,this.x,w), dy=torusDelta(o.y,this.y,h); const d=safeNorm(dx,dy); if(d && d<sepRadius){ sepX-=dx/(d*d)*sepBoost; sepY-=dy/(d*d)*sepBoost; sepCount++; }});
+      if(sepCount>0){ const sN=safeNorm(sepX,sepY); if(sN){ steerX+=sepX/sN; steerY+=sepY/sN; }}
 
       if(sp.socialMode==='herd' || sp.socialMode==='pack'){
         const mates=state.animals.filter(o=>o.alive && o.speciesId===this.speciesId && Math.hypot(torusDelta(o.x,this.x,w), torusDelta(o.y,this.y,h))<vision);
         let alignX=0,alignY=0,cohX=0,cohY=0; mates.forEach(o=>{const dx=torusDelta(o.x,this.x,w), dy=torusDelta(o.y,this.y,h); const d=safeNorm(dx,dy); if(!d) return; alignX+=o.vx||0; alignY+=o.vy||0; cohX+=dx; cohY+=dy; });
-        if(mates.length>0){ alignX/=mates.length; alignY/=mates.length; cohX/=mates.length; cohY/=mates.length; const aN=safeNorm(alignX,alignY); if(aN){steerX+=alignX/aN*0.25; steerY+=alignY/aN*0.25;} const cN=safeNorm(cohX,cohY); if(cN){steerX+=cohX/cN*0.15; steerY+=cohY/cN*0.15;} }
+        if(mates.length>0){ alignX/=mates.length; alignY/=mates.length; cohX/=mates.length; cohY/=mates.length; const aN=safeNorm(alignX,alignY); if(aN){steerX+=alignX/aN*0.2; steerY+=alignY/aN*0.2;} const cN=safeNorm(cohX,cohY); if(cN){steerX+=cohX/cN*0.12; steerY+=cohY/cN*0.12;} }
       }
 
-      // avoid overly wet cells when not drinking
-      if(this.state!==AnimalStates.DRINK && (cellNow.river||cellNow.shore)){ steerX-=0.2; steerY-=0.2; }
+      if(this.state!==AnimalStates.DRINK && (cellNow.river||cellNow.shore)){ steerX-=0.25; steerY-=0.25; }
 
       const steerN=safeNorm(steerX,steerY); if(steerN){ steerX/=steerN; steerY/=steerN; this.headingX=steerX; this.headingY=steerY; }
       else { steerX=rng()-0.5; steerY=rng()-0.5; }
@@ -498,7 +511,7 @@
       if(Math.hypot(this.x-prevX,this.y-prevY)>0.001) state.movedAgents++;
     }
 
-    metabolism(state){
+    consumeAndMetabolize(state){
       const sp=this.getSpecies(); const genes=this.genes; const w=params.gridW; const rng=state.rng;
       const metabolism=clampRange(sp.metabolism*genes.g_metabolism,0.2,2); const thirstTol=clampRange(lerp(0.7,1.3,genes.g_thirstTol),0.2,2.0); const waterNeed=clampRange(sp.waterNeed,0.2,2.0);
       this.age+=1; this.energy-=0.002*metabolism; this.hydration-=0.002*waterNeed*thirstTol; if(this.waterCooldown>0) this.waterCooldown-=1; if(this.mateCooldown>0) this.mateCooldown-=1;
@@ -510,8 +523,9 @@
         const shrub=Math.min(cell.veg.shrub,0.05*(sp.dietPreference.shrub||0)); cell.veg.shrub-=shrub; this.energy=Math.min(1,this.energy+shrub*1.05); state.vegConsumed+=shrub;
         const thornEat=Math.min(cell.veg.shrubThorn,0.045*(sp.dietPreference.shrub||0.6)); cell.veg.shrubThorn-=thornEat; const thornEff=(sp.thornHandling||0.5); this.energy=clamp01(this.energy+thornEat*(0.3+thornEff)); this.energy-=Math.max(0,0.1-thornEff)*thornEat*0.5; state.vegConsumed+=thornEat;
         const treeEat=Math.min(cell.veg.tree,0.03*(sp.dietPreference.tree||0)); cell.veg.tree-=treeEat; this.energy=Math.min(1,this.energy+treeEat); state.vegConsumed+=treeEat;
-        if(this.state===AnimalStates.DRINK && (cell.shore||cell.river||cell.moist>0.45)) {this.hydration=Math.min(1,this.hydration+0.08*cell.moist+0.04); this.waterCooldown=30+Math.floor(rng()*90);}
       }
+
+      if(this.state===AnimalStates.DRINK && (cell.shore||cell.river||cell.moist>0.45)) {this.hydration=Math.min(1,this.hydration+0.08*cell.moist+0.05); this.waterCooldown=40+Math.floor(rng()*80);}
 
       if(sp.trophic==='carn'){
         const victim=state.animals.find(o=>o.alive && sp.preyList.includes(o.speciesId) && Math.hypot(torusDelta(o.x,this.x,params.gridW), torusDelta(o.y,this.y,params.gridH))<0.6);
@@ -527,10 +541,19 @@
       }
 
       if(this.energy<=0||this.hydration<=0){this.alive=false; state.deaths++; state.events.push({type:'death', id:this.id}); this.lastEvent='死亡'; return;}
+    }
 
-      const fert=clampRange(sp.fertility*lerp(0.7,1.3,this.genes.g_fertility),0,1); if(this.state===AnimalStates.MATE && this.energy>0.85 && state.rng()<0.015*fert){
-        const mate=state.animals.find(o=>o.alive && o.speciesId===this.speciesId && o!==this && Math.hypot(torusDelta(o.x,this.x,params.gridW), torusDelta(o.y,this.y,params.gridH))<1.2);
-        if(mate){ this.energy*=0.65; mate.energy*=0.65; const child=createAnimal(sp,state.rng); const angle=state.rng()*Math.PI*2; const dist=1+state.rng()*2; child.x=wrap(this.x+Math.cos(angle)*dist,params.gridW); child.y=wrap(this.y+Math.sin(angle)*dist,params.gridH); child.genes=combineGenes(this.genes,mate.genes); state.spawnBuffer.push(child); state.births++; state.events.push({type:'birth', species:sp.id}); this.behavior='seek-mate'; mate.behavior='seek-mate'; this.lastEvent='繁殖'; mate.lastEvent='繁殖'; child.lastEvent='誕生'; this.mateCooldown=180; mate.mateCooldown=180; this.stateTimer=90; mate.stateTimer=90; }
+    handleReproduction(state){
+      if(!this.alive || this.state!==AnimalStates.MATE) return;
+      const sp=this.getSpecies(); const rng=state.rng; const fert=clampRange(sp.fertility*lerp(0.7,1.3,this.genes.g_fertility),0,1);
+      const partner=state.animals.find(o=>o.alive && o!==this && o.speciesId===this.speciesId && o.sex!==this.sex && o.state===AnimalStates.MATE && Math.hypot(torusDelta(o.x,this.x,params.gridW), torusDelta(o.y,this.y,params.gridH))<0.9);
+      if(!partner) return;
+      if(rng()<0.08*fert){
+        this.energy*=0.7; partner.energy*=0.7; this.mateCooldown=180; partner.mateCooldown=180; this.stateLock=40; partner.stateLock=40;
+        const child=createAnimal(sp,rng); const angle=rng()*Math.PI*2; const dist=1.2+rng()*1.5; child.x=wrap(this.x+Math.cos(angle)*dist,params.gridW); child.y=wrap(this.y+Math.sin(angle)*dist,params.gridH);
+        child.genes=combineGenes(this.genes,partner.genes);
+        state.spawnBuffer.push(child); state.births++; state.events.push({type:'birth', species:sp.id});
+        this.lastEvent='繁殖'; partner.lastEvent='繁殖'; child.lastEvent='誕生'; this.behavior='seek-mate'; partner.behavior='seek-mate';
       }
     }
   }
@@ -704,17 +727,17 @@
     else if(a.state===AnimalStates.EAT){ color=p.lerpColor(baseColor,p.color('#68e38f'),0.3); }
     else if(a.state===AnimalStates.MATE){ color=p.lerpColor(baseColor,p.color('#ffc1e3'),0.35); }
     const angle=Math.atan2(a.headingY||0,a.headingX||1);
-    p.push(); p.translate(screenX,screenY); p.rotate(angle); const stroke=p.brightness(color)>50?'#000':'#fff'; p.stroke(stroke); p.strokeWeight(1.1); p.fill(color);
+    p.push(); p.translate(screenX,screenY); p.rotate(angle); const stroke=p.brightness(color)>50?'#000':'#fff'; p.strokeWeight(a.state===AnimalStates.DRINK?2:1.1); p.stroke(a.state===AnimalStates.DRINK?'#6fa4ff':stroke); p.fill(color);
     if(state.overlay==='animals_filter' && document.getElementById('speciesDim').checked && state.overlaySpecies && state.overlaySpecies!==a.speciesId){ p.tint(255,60); p.stroke(255,80);}
     if(sp.trophic==='carn'){
       p.triangle(-size/2,size/2, size/2,size/2, 0,-size/2);
       p.rect(-size*0.45,-size*0.15,size*0.9,size*0.3,2);
     } else {
-      p.circle(0,0,size);
+      p.circle(0,0,size+ (a.state===AnimalStates.DRINK?1.5:0));
       p.noStroke(); p.fill(255,255,255,130); p.circle(size*0.25,0,2.5);
-      p.stroke(stroke); p.fill(color);
+      p.stroke(a.state===AnimalStates.DRINK?'#6fa4ff':stroke); p.fill(color);
     }
-    if(document.getElementById('haloToggle').checked){ if(a.behavior==='graze') {p.noFill(); p.stroke(50,200,120,160); p.circle(0,0,size+6);} else if(a.behavior==='chase'){p.noFill(); p.stroke(255,80,80,180); p.circle(0,0,size+6);} else if(a.behavior==='water'){p.noFill(); p.stroke(80,160,255,180); p.circle(0,0,size+6);} else if(a.behavior==='seek-mate'){p.noStroke(); p.fill(255,180,200,200); p.text('♡',-4,4);} }
+    if(document.getElementById('haloToggle').checked){ if(a.behavior==='graze') {p.noFill(); p.stroke(50,200,120,160); p.circle(0,0,size+6);} else if(a.behavior==='chase'){p.noFill(); p.stroke(255,80,80,180); p.circle(0,0,size+6);} else if(a.behavior==='water'){p.noFill(); p.stroke(80,160,255,200); p.circle(0,0,size+7);} else if(a.behavior==='seek-mate'){p.noStroke(); p.fill(255,180,200,200); p.text('♡',-4,4);} }
     p.pop();
   }
 
