@@ -562,7 +562,8 @@
     vegSum=Math.max(0,vegSum);
     let vegMin=Infinity, vegMax=0; state.cells.forEach(c=>{const t=c.veg.grass+c.veg.poison+c.veg.shrub+c.veg.shrubThorn+c.veg.tree; vegMin=Math.min(vegMin,t); vegMax=Math.max(vegMax,t);});
     state.vegMin=vegMin; state.vegMax=vegMax; state.vegMean=vegSum/state.cells.length; state.zeroMoveStreak=state.movedAgents===0?state.zeroMoveStreak+1:0;
-    state.animals=animalsAlive; state.births=births; state.deaths=deaths; state.kills=kills;
+    state.animals=animalsAlive;
+    const births=state.births, deaths=state.deaths, kills=state.kills;
     const counts=speciesCounts();
     const totalPop=Object.values(counts).reduce((s,v)=>s+v,0);
     const shannon=computeShannon(counts);
