@@ -391,8 +391,8 @@
   class Animal{
     constructor(sp, rng, id){
       const w=params.gridW, h=params.gridH; this.id=`A${id}`; this.speciesId=sp.id; this.x=rng()*w; this.y=rng()*h;
-      this.energy=0.7+rng()*0.2; this.hydration=0.7+rng()*0.2; this.age=0; this.sex=rng()<0.5?'F':'M';
-      this.behavior='wander'; this.state=AnimalStates.WANDER; this.stateLock=0; this.lastEvent='-';
+      this.energy=0.8+rng()*0.15; this.hydration=0.8+rng()*0.15; this.age=0; this.sex=rng()<0.5?'F':'M';
+      this.behavior='wander'; this.state=AnimalStates.WANDER; this.stateTimer=0; this.lastEvent='-';
       this.genes=defaultGenes(); this.trail=[]; this.alive=true; this.vx=0; this.vy=0; this.waterCooldown=0; this.target=null;
       this.lastSafeX=0; this.lastSafeY=0; this.headingX=1; this.headingY=0; this.wanderAngle=rng()*Math.PI*2; this.mateCooldown=0;
     }
@@ -415,11 +415,14 @@
       this.cached={speed,vision};
 
       const thirstPct=(1-this.hydration)*100; const hungerPct=(1-this.energy)*100;
-      if(this.state===AnimalStates.DRINK && thirstPct>=5){ this.behavior='water'; return; }
-      if(this.state===AnimalStates.DRINK && thirstPct<5) this.stateLock=0;
-      if(this.stateLock>0){ this.stateLock--; return; }
+      if(this.stateTimer>0) this.stateTimer--;
+      if(this.state===AnimalStates.DRINK){
+        this.behavior='water';
+        if(thirstPct>5) return;
+      }
+      if(this.stateTimer>0) return;
 
-      const mateReady=this.energy>0.8 && thirstPct<30 && this.mateCooldown<=0;
+      const mateReady=this.energy>0.7 && thirstPct<35 && this.mateCooldown<=0;
       const drinkNeed=thirstPct>60 && this.waterCooldown<=0;
       const foodNearby=this.hasFoodNearby(state,vision);
 
@@ -428,7 +431,7 @@
       else if(hungerPct>40 && foodNearby) next=AnimalStates.EAT;
       else if(mateReady) next=AnimalStates.MATE;
 
-      if(next!==this.state){ this.state=next; this.stateLock=30+Math.floor(rng()*30); this.target=null; }
+      if(next!==this.state){ this.state=next; this.stateTimer=30+Math.floor(rng()*20); this.target=null; }
     }
 
     hasFoodNearby(state, vision){
@@ -483,8 +486,8 @@
         this.behavior='wander';
       }
 
-      const sepRadius=2; let sepX=0, sepY=0, sepCount=0; const sepBoost=this.state===AnimalStates.DRINK?1.8:1.2;
-      state.animals.forEach(o=>{ if(o===this||!o.alive) return; const dx=torusDelta(o.x,this.x,w), dy=torusDelta(o.y,this.y,h); const d=safeNorm(dx,dy); if(d && d<sepRadius){ sepX-=dx/(d*d)*sepBoost; sepY-=dy/(d*d)*sepBoost; sepCount++; }});
+      const sepRadius=this.state===AnimalStates.DRINK?2.8:2.2; let sepX=0, sepY=0, sepCount=0; const sepBoost=this.state===AnimalStates.DRINK?2.2:1.5;
+      state.animals.forEach(o=>{ if(o===this||!o.alive) return; const dx=torusDelta(o.x,this.x,w), dy=torusDelta(o.y,this.y,h); const d=safeNorm(dx,dy); if(d && d<sepRadius){ const weight=(sepRadius-d)/(d*d); sepX-=dx*weight*sepBoost; sepY-=dy*weight*sepBoost; sepCount++; }});
       if(sepCount>0){ const sN=safeNorm(sepX,sepY); if(sN){ steerX+=sepX/sN; steerY+=sepY/sN; }}
 
       if(sp.socialMode==='herd' || sp.socialMode==='pack'){
@@ -498,11 +501,15 @@
       const steerN=safeNorm(steerX,steerY); if(steerN){ steerX/=steerN; steerY/=steerN; this.headingX=steerX; this.headingY=steerY; }
       else { steerX=rng()-0.5; steerY=rng()-0.5; }
 
-      this.vx=steerX*speed; this.vy=steerY*speed; this.moveMul=this.state===AnimalStates.WANDER?0.65:(this.state===AnimalStates.DRINK?0.5:(this.state===AnimalStates.MATE?0.7:0.6));
+      this.moveMul=this.state===AnimalStates.WANDER?0.65:(this.state===AnimalStates.DRINK?0.5:(this.state===AnimalStates.MATE?0.7:0.6));
+      const targetVx=steerX*speed*this.moveMul; const targetVy=steerY*speed*this.moveMul;
+      const inertia=0.82; const accel=0.18;
+      this.vx=this.vx*inertia + targetVx*accel;
+      this.vy=this.vy*inertia + targetVy*accel;
     }
 
     move(state){
-      const w=params.gridW, h=params.gridH; const prevX=this.x, prevY=this.y; const nx=this.x + this.vx*this.moveMul; const ny=this.y + this.vy*this.moveMul;
+      const w=params.gridW, h=params.gridH; const prevX=this.x, prevY=this.y; const nx=this.x + this.vx; const ny=this.y + this.vy;
       this.lastSafeX=prevX; this.lastSafeY=prevY;
       if(state.boundaryMode==='wrap'){ this.x=wrap(nx,w); this.y=wrap(ny,h);} else {
         this.x=clampRange(nx,0,w-0.01); this.y=clampRange(ny,0,h-0.01);
@@ -548,8 +555,8 @@
       const sp=this.getSpecies(); const rng=state.rng; const fert=clampRange(sp.fertility*lerp(0.7,1.3,this.genes.g_fertility),0,1);
       const partner=state.animals.find(o=>o.alive && o!==this && o.speciesId===this.speciesId && o.sex!==this.sex && o.state===AnimalStates.MATE && Math.hypot(torusDelta(o.x,this.x,params.gridW), torusDelta(o.y,this.y,params.gridH))<0.9);
       if(!partner) return;
-      if(rng()<0.08*fert){
-        this.energy*=0.7; partner.energy*=0.7; this.mateCooldown=180; partner.mateCooldown=180; this.stateLock=40; partner.stateLock=40;
+      if(rng()<0.12*fert){
+        this.energy*=0.7; partner.energy*=0.7; this.mateCooldown=180; partner.mateCooldown=180; this.stateTimer=Math.max(this.stateTimer,40); partner.stateTimer=Math.max(partner.stateTimer,40);
         const child=createAnimal(sp,rng); const angle=rng()*Math.PI*2; const dist=1.2+rng()*1.5; child.x=wrap(this.x+Math.cos(angle)*dist,params.gridW); child.y=wrap(this.y+Math.sin(angle)*dist,params.gridH);
         child.genes=combineGenes(this.genes,partner.genes);
         state.spawnBuffer.push(child); state.births++; state.events.push({type:'birth', species:sp.id});
