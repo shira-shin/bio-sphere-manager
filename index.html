@@ -251,10 +251,27 @@
   const safeNorm=(x,y)=>{const d=Math.hypot(x,y); return d<1e-9?null:d;};
   const toId=str=>str.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')||`sp_${Date.now()}`;
   const parseDiet=str=>{ const [g,p,s,t]=str.split(',').map(v=>parseFloat(v)||0); return {grass:clamp01(g||0), poison:clamp01(p||0), shrub:clamp01(s||0), tree:clamp01(t||0)}; };
+  const createAnimalGrid=()=>Array.from({length:params.gridW*params.gridH},()=>[]);
+  const gridIndex=(x,y,boundary)=>{ const w=params.gridW, h=params.gridH; const wrapX=boundary==='wrap'?wrap(x,w):clampRange(x,0,w-1e-3); const wrapY=boundary==='wrap'?wrap(y,h):clampRange(y,0,h-1e-3); return Math.floor(wrapY)*w+Math.floor(wrapX); };
+  const registerAnimalToGrid=(animal, state)=>{ const idx=gridIndex(animal.x, animal.y, state.boundaryMode); animal.gridIdx=idx; state.animalGrid[idx].push(animal); };
+  const moveAnimalInGrid=(animal, state)=>{ const newIdx=gridIndex(animal.x, animal.y, state.boundaryMode); if(animal.gridIdx===newIdx) return; const cell=state.animalGrid[animal.gridIdx]||[]; const pos=cell.indexOf(animal); if(pos>=0) cell.splice(pos,1); animal.gridIdx=newIdx; state.animalGrid[newIdx].push(animal); };
+  const removeAnimalFromGrid=(animal, state)=>{ const cell=state.animalGrid[animal.gridIdx]; if(!cell) return; const idx=cell.indexOf(animal); if(idx>=0) cell.splice(idx,1); };
+  function getNeighbors(animal, state, radius){
+    const w=params.gridW, h=params.gridH; const cellRange=Math.ceil(radius); const cx=Math.floor(animal.x), cy=Math.floor(animal.y); const res=[];
+    for(let dy=-cellRange; dy<=cellRange; dy++){
+      for(let dx=-cellRange; dx<=cellRange; dx++){
+        let nx=cx+dx, ny=cy+dy;
+        if(state.boundaryMode==='wrap'){ nx=wrap(nx,w); ny=wrap(ny,h);} else { if(nx<0||ny<0||nx>=w||ny>=h) continue; }
+        const idx=ny*w+nx; const list=state.animalGrid[idx]; if(!list) continue; list.forEach(o=>{ if(o!==animal && o.alive) res.push(o); });
+      }
+    }
+    return res;
+  }
   const STORAGE_KEY='biosphere_custom_species';
 
   // --- STATE ---
   const params={gridW:96, gridH:64, cellSize:8};
+  const VEG_UPDATE_INTERVAL=30;
   const baseSpecies=[
     {id:'hare', name:'ウサギ', trophic:'herb', color:'#a7f18c', shape:'ellipse', baseSpeed:1.25, vision:5, metabolism:0.8, waterNeed:0.6, fertility:0.7, socialMode:'herd', preyList:[],
       poisonTolerance:0.4, thornHandling:0.4, dietPreference:{grass:0.72,poison:0.1,shrub:0.13,tree:0.05}},
@@ -281,7 +298,8 @@
     return {seed, rng:createRng(seed), perlin:null, cells:[], animals:[], species:JSON.parse(JSON.stringify(baseSpecies)), overlay:'animals_all', overlayAlpha:0.6, overlaySpecies:null, boundaryMode:'bounce',
       running:false, step:0, season:'雨季', seasonCounter:0, events:[], idCounter:0, lastError:null, renderSimple:false, logs:[], chartData:[], averages:[], births:0, deaths:0, kills:0, spawnBuffer:[], density:new Float32Array(params.gridW*params.gridH),
       movedAgents:0, nanAgents:0, zeroMoveStreak:0, vegMin:0, vegMax:0, vegMean:0, vegGrowth:0, vegConsumed:0,
-      shannon:0, genetic:0, stability:0, extinction:0, stabilityWindow:[], prevCounts:{}};
+      shannon:0, genetic:0, stability:0, extinction:0, stabilityWindow:[], prevCounts:{},
+      animalGrid:[], needsBgRedraw:true, lastRiverCount:0, lastMoistAvg:0, lastVegAvg:0};
   }
   let state=createState('bs-demo');
   let uiParams={...initialUiParams};
@@ -329,6 +347,7 @@
       }
     }
     if(pattern==='delta_wetland' && riverCount===0){ document.getElementById('riverThresh').value=Math.max(0.6, riverFactor-0.2).toFixed(2); updateRivers(pattern); return; }
+    state.needsBgRedraw=true;
   }
 
   // --- SPECIES & ANIMALS ---
@@ -378,6 +397,8 @@
       const n=counts[sp.id]??20; for(let i=0;i<n;i++){state.animals.push(createAnimal(sp, rng));}
     });
     state.idCounter=state.animals.length;
+    state.animalGrid=createAnimalGrid();
+    state.animals.forEach(a=>registerAnimalToGrid(a,state));
   }
   function applyPreset(key){
     const preset=presets[key]; if(!preset) return;
@@ -437,7 +458,8 @@
     hasFoodNearby(state, vision){
       const sp=this.getSpecies(); const w=params.gridW, h=params.gridH;
       if(sp.trophic==='carn'){
-        return state.animals.some(o=>o.alive && sp.preyList.includes(o.speciesId) && Math.hypot(torusDelta(o.x,this.x,w), torusDelta(o.y,this.y,h))<vision);
+        const nearby=getNeighbors(this,state,vision);
+        return nearby.some(o=>sp.preyList.includes(o.speciesId) && Math.hypot(torusDelta(o.x,this.x,w), torusDelta(o.y,this.y,h))<vision);
       }
       const cx=Math.floor(wrap(this.x,w)), cy=Math.floor(wrap(this.y,h));
       for(let dy=-2;dy<=2;dy++) for(let dx=-2;dx<=2;dx++){
@@ -466,7 +488,8 @@
         steerX+=torusDelta(best.x+0.5,this.x,w); steerY+=torusDelta(best.y+0.5,this.y,h); this.behavior='water'; this.target=best;
       } else if(this.state===AnimalStates.EAT){
         if(sp.trophic==='carn'){
-          let targetPrey=null,minD=Infinity; state.animals.forEach(o=>{ if(!o.alive||!sp.preyList.includes(o.speciesId)) return; const dx=torusDelta(o.x,this.x,w), dy=torusDelta(o.y,this.y,h); const d=safeNorm(dx,dy); if(d && d<minD && d<vision){minD=d; targetPrey=o;} });
+          let targetPrey=null,minD=Infinity; const nearby=getNeighbors(this,state,vision);
+          nearby.forEach(o=>{ if(!sp.preyList.includes(o.speciesId)) return; const dx=torusDelta(o.x,this.x,w), dy=torusDelta(o.y,this.y,h); const d=safeNorm(dx,dy); if(d && d<minD && d<vision){minD=d; targetPrey=o;} });
           if(targetPrey){const dx=torusDelta(targetPrey.x,this.x,w), dy=torusDelta(targetPrey.y,this.y,h); const d=safeNorm(dx,dy); if(d){steerX+=dx/d*1.6; steerY+=dy/d*1.6; this.target=targetPrey; this.behavior='chase';}}
         } else {
           let best={score:-Infinity,x:cx,y:cy};
@@ -479,7 +502,7 @@
           steerX+=torusDelta(best.x+0.5,this.x,w); steerY+=torusDelta(best.y+0.5,this.y,h); this.target=best; this.behavior='graze';
         }
       } else if(this.state===AnimalStates.MATE){
-        const mate=state.animals.find(o=>o.alive && o!==this && o.speciesId===this.speciesId && o.sex!==this.sex && Math.hypot(torusDelta(o.x,this.x,w), torusDelta(o.y,this.y,h))<vision);
+        const mate=getNeighbors(this,state,vision).find(o=>o.speciesId===this.speciesId && o.sex!==this.sex && Math.hypot(torusDelta(o.x,this.x,w), torusDelta(o.y,this.y,h))<vision);
         if(mate){ const dx=torusDelta(mate.x,this.x,w), dy=torusDelta(mate.y,this.y,h); const d=safeNorm(dx,dy); if(d){ steerX+=dx/d*1.2; steerY+=dy/d*1.2; this.target=mate; this.behavior='seek-mate'; }}
         else { this.behavior='wander'; }
       } else {
@@ -487,11 +510,11 @@
       }
 
       const sepRadius=this.state===AnimalStates.DRINK?2.8:2.2; let sepX=0, sepY=0, sepCount=0; const sepBoost=this.state===AnimalStates.DRINK?2.2:1.5;
-      state.animals.forEach(o=>{ if(o===this||!o.alive) return; const dx=torusDelta(o.x,this.x,w), dy=torusDelta(o.y,this.y,h); const d=safeNorm(dx,dy); if(d && d<sepRadius){ const weight=(sepRadius-d)/(d*d); sepX-=dx*weight*sepBoost; sepY-=dy*weight*sepBoost; sepCount++; }});
+      getNeighbors(this,state,sepRadius).forEach(o=>{ const dx=torusDelta(o.x,this.x,w), dy=torusDelta(o.y,this.y,h); const d=safeNorm(dx,dy); if(d && d<sepRadius){ const weight=(sepRadius-d)/(d*d); sepX-=dx*weight*sepBoost; sepY-=dy*weight*sepBoost; sepCount++; }});
       if(sepCount>0){ const sN=safeNorm(sepX,sepY); if(sN){ steerX+=sepX/sN; steerY+=sepY/sN; }}
 
       if(sp.socialMode==='herd' || sp.socialMode==='pack'){
-        const mates=state.animals.filter(o=>o.alive && o.speciesId===this.speciesId && Math.hypot(torusDelta(o.x,this.x,w), torusDelta(o.y,this.y,h))<vision);
+        const mates=getNeighbors(this,state,vision).filter(o=>o.speciesId===this.speciesId && Math.hypot(torusDelta(o.x,this.x,w), torusDelta(o.y,this.y,h))<vision);
         let alignX=0,alignY=0,cohX=0,cohY=0; mates.forEach(o=>{const dx=torusDelta(o.x,this.x,w), dy=torusDelta(o.y,this.y,h); const d=safeNorm(dx,dy); if(!d) return; alignX+=o.vx||0; alignY+=o.vy||0; cohX+=dx; cohY+=dy; });
         if(mates.length>0){ alignX/=mates.length; alignY/=mates.length; cohX/=mates.length; cohY/=mates.length; const aN=safeNorm(alignX,alignY); if(aN){steerX+=alignX/aN*0.2; steerY+=alignY/aN*0.2;} const cN=safeNorm(cohX,cohY); if(cN){steerX+=cohX/cN*0.12; steerY+=cohY/cN*0.12;} }
       }
@@ -515,6 +538,7 @@
         this.x=clampRange(nx,0,w-0.01); this.y=clampRange(ny,0,h-0.01);
         if(nx<=0||nx>=w) this.vx*=-0.4; if(ny<=0||ny>=h) this.vy*=-0.4;
       }
+      moveAnimalInGrid(this,state);
       if(Math.hypot(this.x-prevX,this.y-prevY)>0.001) state.movedAgents++;
     }
 
@@ -535,8 +559,8 @@
       if(this.state===AnimalStates.DRINK && (cell.shore||cell.river||cell.moist>0.45)) {this.hydration=Math.min(1,this.hydration+0.08*cell.moist+0.05); this.waterCooldown=40+Math.floor(rng()*80);}
 
       if(sp.trophic==='carn'){
-        const victim=state.animals.find(o=>o.alive && sp.preyList.includes(o.speciesId) && Math.hypot(torusDelta(o.x,this.x,params.gridW), torusDelta(o.y,this.y,params.gridH))<0.6);
-        if(victim){victim.alive=false; state.kills++; const pack=state.animals.filter(o=>o.alive && o.speciesId===this.speciesId && Math.hypot(torusDelta(o.x,this.x,params.gridW), torusDelta(o.y,this.y,params.gridH))<3); const shareBase=0.55/Math.max(1,pack.length);
+        const victim=getNeighbors(this,state,0.8).find(o=>sp.preyList.includes(o.speciesId) && Math.hypot(torusDelta(o.x,this.x,params.gridW), torusDelta(o.y,this.y,params.gridH))<0.6);
+        if(victim){victim.alive=false; removeAnimalFromGrid(victim,state); state.kills++; const pack=getNeighbors(this,state,3).filter(o=>o.speciesId===this.speciesId); const shareBase=0.55/Math.max(1,pack.length);
           pack.forEach(o=>{o.energy=Math.min(1,o.energy+shareBase); o.hydration=Math.min(1,o.hydration+0.12);});
           this.energy=Math.min(1,this.energy+0.15); this.hydration=Math.min(1,this.hydration+0.05);
           this.behavior='hunt'; state.events.push({type:'hunt', predator:sp.id, prey:victim.speciesId});
@@ -547,13 +571,13 @@
         this.x=this.lastSafeX; this.y=this.lastSafeY; this.vx=0; this.vy=0; state.nanAgents++; this.lastEvent='NaN rollback'; state.events.push({type:'nan', id:this.id, x:this.x,y:this.y});
       }
 
-      if(this.energy<=0||this.hydration<=0){this.alive=false; state.deaths++; state.events.push({type:'death', id:this.id}); this.lastEvent='死亡'; return;}
+      if(this.energy<=0||this.hydration<=0){this.alive=false; state.deaths++; removeAnimalFromGrid(this,state); state.events.push({type:'death', id:this.id}); this.lastEvent='死亡'; return;}
     }
 
     handleReproduction(state){
       if(!this.alive || this.state!==AnimalStates.MATE) return;
       const sp=this.getSpecies(); const rng=state.rng; const fert=clampRange(sp.fertility*lerp(0.7,1.3,this.genes.g_fertility),0,1);
-      const partner=state.animals.find(o=>o.alive && o!==this && o.speciesId===this.speciesId && o.sex!==this.sex && o.state===AnimalStates.MATE && Math.hypot(torusDelta(o.x,this.x,params.gridW), torusDelta(o.y,this.y,params.gridH))<0.9);
+      const partner=getNeighbors(this,state,1).find(o=>o.speciesId===this.speciesId && o.sex!==this.sex && o.state===AnimalStates.MATE && Math.hypot(torusDelta(o.x,this.x,params.gridW), torusDelta(o.y,this.y,params.gridH))<0.9);
       if(!partner) return;
       if(rng()<0.12*fert){
         this.energy*=0.7; partner.energy*=0.7; this.mateCooldown=180; partner.mateCooldown=180; this.stateTimer=Math.max(this.stateTimer,40); partner.stateTimer=Math.max(partner.stateTimer,40);
@@ -575,30 +599,40 @@
     let births=0; let deaths=0;
     const rng=state.rng; const w=params.gridW, h=params.gridH; state.events=[]; state.step++; state.seasonCounter++;
     state.movedAgents=0; state.nanAgents=0; state.vegGrowth=0; state.vegConsumed=0;
+    state.animalGrid=createAnimalGrid(); state.animals.forEach(a=>{ if(a.alive) registerAnimalToGrid(a,state); });
     const seasonLen=state.season==='雨季'?uiParams.rainyLen:uiParams.dryLen; if(state.seasonCounter>seasonLen){state.season=state.season==='雨季'?'乾季':'雨季'; state.seasonCounter=0; logMsg(`季節が${state.season}に切替`);} 
     const moistGain=state.season==='雨季'?0.05:0.015; const moistLoss=state.season==='雨季'?0.008:0.03;
     let riverCount=0, moistSum=0, vegSum=0;
+    const updateVeg=state.step%VEG_UPDATE_INTERVAL===0;
     state.density.fill(0);
-    state.cells.forEach((c,i)=>{
-      const beforeVeg=c.veg.grass+c.veg.shrub+c.veg.tree;
-      c.moist=clamp01(c.moist + moistGain*(0.5+c.wet*0.6) - moistLoss + (c.river?0.06:0));
-      const seasonFactor=state.season==='雨季'?1:0.65; const tempFactor=c.elev>0.75?0.7:1;
-      const growBase=0.06*seasonFactor*tempFactor;
-      c.veg.grass=clamp01(c.veg.grass + growBase*c.moist*(1-c.veg.grass) - 0.015*(1-c.moist));
-      c.veg.poison=clamp01(c.veg.poison + 0.04*c.moist*(1-c.veg.poison) - 0.01*(0.5-c.moist));
-      c.veg.shrub=clamp01(c.veg.shrub + 0.04*c.moist*(1-c.veg.shrub) - 0.01*(0.4-c.moist));
-      c.veg.shrubThorn=clamp01(c.veg.shrubThorn + 0.035*c.moist*(1-c.veg.shrubThorn) - 0.012*(0.45-c.moist));
-      c.veg.tree=clamp01(c.veg.tree + 0.02*c.moist*(1-c.veg.tree) - 0.008*(0.35-c.moist));
-      const afterVeg=c.veg.grass+c.veg.poison+c.veg.shrub+c.veg.shrubThorn+c.veg.tree; state.vegGrowth+=Math.max(0, afterVeg-beforeVeg);
-      if(c.river) riverCount++; moistSum+=c.moist; vegSum+=afterVeg;
-    });
+    if(updateVeg){
+      state.cells.forEach((c)=>{
+        const beforeVeg=c.veg.grass+c.veg.shrub+c.veg.tree;
+        c.moist=clamp01(c.moist + moistGain*(0.5+c.wet*0.6) - moistLoss + (c.river?0.06:0));
+        const seasonFactor=state.season==='雨季'?1:0.65; const tempFactor=c.elev>0.75?0.7:1;
+        const growBase=0.06*seasonFactor*tempFactor;
+        c.veg.grass=clamp01(c.veg.grass + growBase*c.moist*(1-c.veg.grass) - 0.015*(1-c.moist));
+        c.veg.poison=clamp01(c.veg.poison + 0.04*c.moist*(1-c.veg.poison) - 0.01*(0.5-c.moist));
+        c.veg.shrub=clamp01(c.veg.shrub + 0.04*c.moist*(1-c.veg.shrub) - 0.01*(0.4-c.moist));
+        c.veg.shrubThorn=clamp01(c.veg.shrubThorn + 0.035*c.moist*(1-c.veg.shrubThorn) - 0.012*(0.45-c.moist));
+        c.veg.tree=clamp01(c.veg.tree + 0.02*c.moist*(1-c.veg.tree) - 0.008*(0.35-c.moist));
+        const afterVeg=c.veg.grass+c.veg.poison+c.veg.shrub+c.veg.shrubThorn+c.veg.tree; state.vegGrowth+=Math.max(0, afterVeg-beforeVeg);
+        if(c.river) riverCount++; moistSum+=c.moist; vegSum+=afterVeg;
+      });
+      state.lastRiverCount=riverCount; state.lastMoistAvg=moistSum/state.cells.length; state.lastVegAvg=vegSum/state.cells.length; state.needsBgRedraw=true;
+    } else {
+      riverCount=state.lastRiverCount||0; moistSum=(state.lastMoistAvg||0)*state.cells.length; vegSum=(state.lastVegAvg||0)*state.cells.length;
+    }
     state.spawnBuffer=[]; const animalsAlive=[]; state.births=0; state.deaths=0; state.kills=0;
     for(const a of state.animals){ if(!a.alive) continue; a.update(state); if(a.alive){ animalsAlive.push(a); state.density[Math.floor(a.y)*w+Math.floor(a.x)]++; } }
     state.spawnBuffer.forEach(child=>{ animalsAlive.push(child); state.density[Math.floor(child.y)*w+Math.floor(child.x)]++; });
     births=state.births; deaths=state.deaths;
     vegSum=Math.max(0,vegSum);
-    let vegMin=Infinity, vegMax=0; state.cells.forEach(c=>{const t=c.veg.grass+c.veg.poison+c.veg.shrub+c.veg.shrubThorn+c.veg.tree; vegMin=Math.min(vegMin,t); vegMax=Math.max(vegMax,t);});
-    state.vegMin=vegMin; state.vegMax=vegMax; state.vegMean=vegSum/state.cells.length; state.zeroMoveStreak=state.movedAgents===0?state.zeroMoveStreak+1:0;
+    if(updateVeg){
+      let vegMin=Infinity, vegMax=0; state.cells.forEach(c=>{const t=c.veg.grass+c.veg.poison+c.veg.shrub+c.veg.shrubThorn+c.veg.tree; vegMin=Math.min(vegMin,t); vegMax=Math.max(vegMax,t);});
+      state.vegMin=vegMin; state.vegMax=vegMax;
+    }
+    state.vegMean=vegSum/state.cells.length; state.zeroMoveStreak=state.movedAgents===0?state.zeroMoveStreak+1:0;
     state.animals=animalsAlive;
     const kills=state.kills;
     const counts=speciesCounts();
@@ -639,15 +673,35 @@
   function updateStabilityMetric(totalPop){ const window=state.stabilityWindow; window.push(totalPop); if(window.length>180) window.shift(); if(window.length>3){ const avg=window.reduce((s,v)=>s+v,0)/window.length; const variance=window.reduce((s,v)=>s+(v-avg)*(v-avg),0)/window.length; state.stability=1/(1+Math.sqrt(variance)); } else { state.stability=0; } }
 
   // --- RENDER ---
-  let p5inst=null; let canvasW=0, canvasH=0; let selected=null; let overlayLayer=null;
+  let p5inst=null; let canvasW=0, canvasH=0; let selected=null; let overlayLayer=null; let bgLayer=null;
   function startP5(){
     p5inst=new p5(p=>{
-      p.setup=()=>{const host=document.getElementById('canvasHost'); const w=host.clientWidth, h=host.clientHeight; canvasW=w; canvasH=h; p.createCanvas(w,h); overlayLayer=p.createGraphics(w,h); p.noStroke();};
-      p.windowResized=()=>{const host=document.getElementById('canvasHost'); canvasW=host.clientWidth; canvasH=host.clientHeight; p.resizeCanvas(canvasW,canvasH); if(overlayLayer){overlayLayer.resizeCanvas(canvasW,canvasH); overlayLayer.noStroke();}};
-      p.draw=()=>{try{if(state.running){for(let i=0;i<parseInt(document.getElementById('speedSelect').value);i++) stepSimulation();} render(p);}catch(err){state.lastError=err; document.getElementById('renderAlert').style.display='block'; console.error(err);} };
+      p.setup=()=>{const host=document.getElementById('canvasHost'); const w=host.clientWidth, h=host.clientHeight; canvasW=w; canvasH=h; p.createCanvas(w,h); overlayLayer=p.createGraphics(w,h); bgLayer=p.createGraphics(w,h); overlayLayer.noStroke(); bgLayer.noStroke(); state.needsBgRedraw=true;};
+      p.windowResized=()=>{const host=document.getElementById('canvasHost'); canvasW=host.clientWidth; canvasH=host.clientHeight; p.resizeCanvas(canvasW,canvasH); if(overlayLayer){overlayLayer.resizeCanvas(canvasW,canvasH); overlayLayer.noStroke();} if(bgLayer){bgLayer.resizeCanvas(canvasW,canvasH); bgLayer.noStroke(); state.needsBgRedraw=true;}};
+      p.draw=()=>{try{if(state.running){for(let i=0;i<parseInt(document.getElementById('speedSelect').value);i++) stepSimulation();} render(p);}catch(err){state.lastError=err; document.getElementById('renderAlert').style.display='block'; console.error(err);} }; 
       p.mouseMoved=()=>{handleHover(p);};
       p.mousePressed=()=>{handleSelect(p);};
     },'canvasHost');
+  }
+
+  function redrawBackground(){
+    if(!bgLayer) return; const cellSize=params.cellSize; bgLayer.clear();
+    for(let y=0;y<params.gridH;y++){
+      for(let x=0;x<params.gridW;x++){
+        const c=state.cells[y*params.gridW+x]; const elevColor=bgLayer.lerpColor(bgLayer.color('#1b2b1e'), bgLayer.color('#5fa470'), c.elev); const treeShade=bgLayer.lerpColor(elevColor, bgLayer.color('#28442f'), c.veg.tree*0.6);
+        bgLayer.noStroke(); bgLayer.fill(treeShade); bgLayer.rect(x*cellSize,y*cellSize,cellSize,cellSize);
+        const vegLevel=c.veg.grass+c.veg.shrub+c.veg.tree;
+        if(vegLevel>0.18){
+          const grassAlpha=clamp01(c.veg.grass*0.9);
+          const dense=vegLevel>0.38;
+          bgLayer.fill(110,200,120,grassAlpha*140);
+          bgLayer.circle(x*cellSize+cellSize*0.3,y*cellSize+cellSize*0.25,1.5);
+          if(dense){ bgLayer.circle(x*cellSize+cellSize*0.65,y*cellSize+cellSize*0.65,1.8); bgLayer.circle(x*cellSize+cellSize*0.4,y*cellSize+cellSize*0.7,1.2); }
+        }
+        if(c.river){bgLayer.fill(70,160,255,180); bgLayer.rect(x*cellSize,y*cellSize,cellSize,cellSize);} else if(c.shore){bgLayer.fill(90,140,200,60); bgLayer.rect(x*cellSize,y*cellSize,cellSize,cellSize);}
+      }
+    }
+    state.needsBgRedraw=false;
   }
   function handleHover(p){
     const cellTooltip=document.getElementById('cellTooltip'); const x=Math.floor(p.mouseX/params.cellSize), y=Math.floor(p.mouseY/params.cellSize);
@@ -697,23 +751,9 @@
     const cellSize=params.cellSize; p.background('#050910');
     const dimTerrain=document.getElementById('dimTerrain').checked;
     const activeOverlay=state.overlay;
-    // base terrain
-    for(let y=0;y<params.gridH;y++){
-      for(let x=0;x<params.gridW;x++){
-        const c=state.cells[y*params.gridW+x]; const elevColor=p.lerpColor(p.color('#1b2b1e'), p.color('#5fa470'), c.elev); const treeShade=p.lerpColor(elevColor, p.color('#28442f'), c.veg.tree*0.6);
-        const dim=dimTerrain && activeOverlay.startsWith('vegetation') ? 0.55 :1;
-        p.noStroke(); p.fill(p.color(p.red(treeShade)*dim, p.green(treeShade)*dim, p.blue(treeShade)*dim)); p.rect(x*cellSize,y*cellSize,cellSize,cellSize);
-        const vegLevel=c.veg.grass+c.veg.shrub+c.veg.tree;
-        if(vegLevel>0.18){
-          const grassAlpha=clamp01(c.veg.grass*0.9);
-          const dense=vegLevel>0.38;
-          p.fill(110,200,120,grassAlpha*140);
-          p.circle(x*cellSize+cellSize*0.3,y*cellSize+cellSize*0.25,1.5);
-          if(dense){ p.circle(x*cellSize+cellSize*0.65,y*cellSize+cellSize*0.65,1.8); p.circle(x*cellSize+cellSize*0.4,y*cellSize+cellSize*0.7,1.2); }
-        }
-        if(c.river){p.fill(70,160,255,180); p.rect(x*cellSize,y*cellSize,cellSize,cellSize);} else if(c.shore){p.fill(90,140,200,60); p.rect(x*cellSize,y*cellSize,cellSize,cellSize);}        
-      }
-    }
+    if(state.needsBgRedraw) redrawBackground();
+    if(bgLayer) p.image(bgLayer,0,0);
+    if(dimTerrain && activeOverlay.startsWith('vegetation')){ p.fill(5,9,16,130); p.noStroke(); p.rect(0,0,canvasW,canvasH); }
     drawOverlay(p, state.overlay, parseFloat(document.getElementById('overlayAlpha').value||'0.6'));
     // animals
     for(const a of state.animals){ if(!a.alive) continue; drawAnimal(p,a); }
@@ -728,6 +768,7 @@
   }
   function drawAnimal(p,a){
     const sp=state.species.find(s=>s.id===a.speciesId); const size=sp.trophic==='carn'?9:8; const screenX=a.x*params.cellSize+params.cellSize/2; const screenY=a.y*params.cellSize+params.cellSize/2;
+    if(screenX<-16||screenX>canvasW+16||screenY<-16||screenY>canvasH+16) return;
     const baseColor=p.color(sp.color);
     let color=baseColor;
     if(a.state===AnimalStates.DRINK){ color=p.lerpColor(baseColor,p.color('#6fa4ff'),0.45); }
