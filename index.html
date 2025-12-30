@@ -415,7 +415,7 @@
       this.energy=0.8+rng()*0.15; this.hydration=0.8+rng()*0.15; this.age=0; this.sex=rng()<0.5?'F':'M';
       this.behavior='wander'; this.state=AnimalStates.WANDER; this.stateTimer=0; this.lastEvent='-';
       this.genes=defaultGenes(); this.trail=[]; this.alive=true; this.vx=0; this.vy=0; this.waterCooldown=0; this.target=null;
-      this.lastSafeX=0; this.lastSafeY=0; this.headingX=1; this.headingY=0; this.wanderAngle=rng()*Math.PI*2; this.mateCooldown=0;
+      this.lastSafeX=this.x; this.lastSafeY=this.y; this.headingX=1; this.headingY=0; this.wanderAngle=rng()*Math.PI*2; this.mateCooldown=0;
     }
 
     getSpecies(){ return state.species.find(s=>s.id===this.speciesId); }
@@ -582,6 +582,7 @@
       if(rng()<0.12*fert){
         this.energy*=0.7; partner.energy*=0.7; this.mateCooldown=180; partner.mateCooldown=180; this.stateTimer=Math.max(this.stateTimer,40); partner.stateTimer=Math.max(partner.stateTimer,40);
         const child=createAnimal(sp,rng); const angle=rng()*Math.PI*2; const dist=1.2+rng()*1.5; child.x=wrap(this.x+Math.cos(angle)*dist,params.gridW); child.y=wrap(this.y+Math.sin(angle)*dist,params.gridH);
+        child.lastSafeX=child.x; child.lastSafeY=child.y;
         child.genes=combineGenes(this.genes,partner.genes);
         state.spawnBuffer.push(child); state.births++; state.events.push({type:'birth', species:sp.id});
         this.lastEvent='繁殖'; partner.lastEvent='繁殖'; child.lastEvent='誕生'; this.behavior='seek-mate'; partner.behavior='seek-mate';
