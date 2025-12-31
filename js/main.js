@@ -180,8 +180,13 @@
   const AnimalStates={WANDER:'WANDER', DRINK:'DRINK', EAT:'EAT', MATE:'MATE'};
 
   class Animal{
-    constructor(sp, rng, id){
-      const w=params.gridW, h=params.gridH; this.id=`A${id}`; this.speciesId=sp.id; this.x=rng()*w; this.y=rng()*h;
+    constructor(sp, rng, id, x, y){
+      const w=params.gridW, h=params.gridH; this.id=`A${id}`; this.speciesId=sp.id;
+      const randX=()=>rng()*w; const randY=()=>rng()*h;
+      const initialX=Number.isFinite(x)?x:randX();
+      const initialY=Number.isFinite(y)?y:randY();
+      if(Math.abs(initialX)<1e-6 && Math.abs(initialY)<1e-6){ this.x=randX(); this.y=randY(); }
+      else { this.x=wrap(initialX,w); this.y=wrap(initialY,h); }
       this.energy=0.8+rng()*0.15; this.hydration=0.8+rng()*0.15; this.age=0; this.sex=rng()<0.5?'F':'M';
       this.behavior='wander'; this.state=AnimalStates.WANDER; this.stateTimer=0; this.lastEvent='-';
       this.genes=defaultGenes(); this.trail=[]; this.alive=true; this.vx=0; this.vy=0; this.waterCooldown=0; this.target=null;
@@ -198,6 +203,18 @@
       this.consumeAndMetabolize(state);
       this.handleReproduction(state);
       this.trail.push({x:this.x,y:this.y}); if(this.trail.length>40) this.trail.shift();
+
+      const w=params.gridW, h=params.gridH;
+      const needsTeleport=()=>{
+        if(!Number.isFinite(this.x)||!Number.isFinite(this.y)) return true;
+        if(this.x<=0 && this.y<=0) return true;
+        return this.x<0 || this.y<0 || this.x> w || this.y> h;
+      };
+      if(needsTeleport()){
+        console.warn("Corner bug detected. Teleporting animal.");
+        const rx=state.rng()*w, ry=state.rng()*h;
+        this.x=rx; this.y=ry; this.vx=0; this.vy=0; this.lastSafeX=rx; this.lastSafeY=ry; this.lastEvent='corner-teleport';
+      }
     }
 
     decideState(state){
@@ -297,8 +314,19 @@
       this.moveMul=this.state===AnimalStates.WANDER?0.65:(this.state===AnimalStates.DRINK?0.5:(this.state===AnimalStates.MATE?0.7:0.6));
       const targetVx=steerX*speed*this.moveMul; const targetVy=steerY*speed*this.moveMul;
       const inertia=0.82; const accel=0.18;
+      const prevVx=this.vx, prevVy=this.vy;
       this.vx=this.vx*inertia + targetVx*accel;
       this.vy=this.vy*inertia + targetVy*accel;
+
+      const maxSpeed=Math.max(0.4, speed*1.6);
+      const maxForce=Math.max(0.05, speed*0.6);
+      const ax=this.vx-prevVx, ay=this.vy-prevVy; const aMag=safeNorm(ax,ay);
+      if(aMag && aMag>maxForce){
+        this.vx=prevVx+ax/aMag*maxForce;
+        this.vy=prevVy+ay/aMag*maxForce;
+      }
+      const vMag=safeNorm(this.vx,this.vy);
+      if(vMag && vMag>maxSpeed){ this.vx=this.vx/vMag*maxSpeed; this.vy=this.vy/vMag*maxSpeed; }
     }
 
     move(state){
@@ -359,7 +387,7 @@
       if(!partner) return;
       if(rng()<0.12*fert){
         this.energy*=0.7; partner.energy*=0.7; this.mateCooldown=180; partner.mateCooldown=180; this.stateTimer=Math.max(this.stateTimer,40); partner.stateTimer=Math.max(partner.stateTimer,40);
-        const child=createAnimal(sp,rng); const angle=rng()*Math.PI*2; const dist=1.2+rng()*1.5; child.x=wrap(this.x+Math.cos(angle)*dist,params.gridW); child.y=wrap(this.y+Math.sin(angle)*dist,params.gridH);
+        const child=createAnimal(sp,rng,this.x,this.y); const angle=rng()*Math.PI*2; const dist=1.2+rng()*1.5; child.x=wrap(this.x+Math.cos(angle)*dist,params.gridW); child.y=wrap(this.y+Math.sin(angle)*dist,params.gridH);
         child.lastSafeX=child.x; child.lastSafeY=child.y;
         child.genes=combineGenes(this.genes,partner.genes);
         state.spawnBuffer.push(child); state.births++; state.events.push({type:'birth', species:sp.id});
@@ -368,8 +396,8 @@
     }
   }
 
-  function createAnimal(sp, rng){
-    return new Animal(sp, rng, state.idCounter++);
+  function createAnimal(sp, rng, x, y){
+    return new Animal(sp, rng, state.idCounter++, x, y);
   }
 
   // --- ENGINE ---
