@@ -18,7 +18,7 @@
   const lerp=(a,b,t)=>a+(b-a)*t;
   const wrap=(v,max)=>{ if(!Number.isFinite(v)) return 0; return ((v%max)+max)%max; };
   const torusDelta=(a,b,size)=>{ const d=((a-b+size/2)%size)-size/2; return Number.isFinite(d)?d:0; };
-  const safeNorm=(x,y)=>{const d=Math.hypot(x,y); return d<1e-9?null:d;};
+  const safeNorm=(x,y)=>{const d=Math.hypot(x,y); if(!Number.isFinite(d) || d<1e-9) return null; return d;};
   const toId=str=>str.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')||`sp_${Date.now()}`;
   const parseDiet=str=>{ const [g,p,s,t]=str.split(',').map(v=>parseFloat(v)||0); return {grass:clamp01(g||0), poison:clamp01(p||0), shrub:clamp01(s||0), tree:clamp01(t||0)}; };
   const createAnimalGrid=()=>Array.from({length:params.gridW*params.gridH},()=>[]);
@@ -304,10 +304,18 @@
     move(state){
       const w=params.gridW, h=params.gridH; const prevX=this.x, prevY=this.y; const nx=this.x + this.vx; const ny=this.y + this.vy;
       this.lastSafeX=prevX; this.lastSafeY=prevY;
+      const rng=state.rng;
+      const corrupted=()=>{
+        console.warn('Coordinate corruption detected. Resetting position.');
+        this.x=rng()*w; this.y=rng()*h; this.vx=0; this.vy=0; this.lastEvent='pos-teleport';
+        state.nanAgents++; state.events.push({type:'nan', id:this.id, x:this.x,y:this.y});
+      };
+      if(!Number.isFinite(nx) || !Number.isFinite(ny) || Math.abs(nx)>w*5 || Math.abs(ny)>h*5){ corrupted(); return; }
       if(state.boundaryMode==='wrap'){ this.x=wrap(nx,w); this.y=wrap(ny,h);} else {
         this.x=clampRange(nx,0,w-0.01); this.y=clampRange(ny,0,h-0.01);
         if(nx<=0||nx>=w) this.vx*=-0.4; if(ny<=0||ny>=h) this.vy*=-0.4;
       }
+      if(Number.isNaN(this.x) || Number.isNaN(this.y)){ corrupted(); return; }
       moveAnimalInGrid(this,state);
       if(Math.hypot(this.x-prevX,this.y-prevY)>0.001) state.movedAgents++;
     }
