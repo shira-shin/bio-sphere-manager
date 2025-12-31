@@ -48,6 +48,7 @@
 
   // --- STATE ---
   const params={gridW:96, gridH:64, cellSize:8};
+  const POPULATION_LIMIT=2000;
   const VEG_UPDATE_INTERVAL=30;
   const baseSpecies=[
     {id:'hare', name:'ウサギ', trophic:'herb', color:'#a7f18c', shape:'ellipse', baseSpeed:1.25, vision:5, metabolism:0.8, waterNeed:0.6, fertility:0.7, socialMode:'herd', preyList:[],
@@ -76,7 +77,7 @@
       running:false, step:0, season:'雨季', seasonCounter:0, events:[], idCounter:0, lastError:null, renderSimple:false, logs:[], chartData:[], averages:[], births:0, deaths:0, kills:0, spawnBuffer:[], density:new Float32Array(params.gridW*params.gridH),
       movedAgents:0, nanAgents:0, zeroMoveStreak:0, vegMin:0, vegMax:0, vegMean:0, vegGrowth:0, vegConsumed:0,
       shannon:0, genetic:0, stability:0, extinction:0, stabilityWindow:[], prevCounts:{},
-      animalGrid:[], needsBgRedraw:true, lastRiverCount:0, lastMoistAvg:0, lastVegAvg:0};
+      animalGrid:[], needsBgRedraw:true, lastRiverCount:0, lastMoistAvg:0, lastVegAvg:0, aliveCount:0};
   }
   let state=createState('bs-demo');
   let uiParams={...initialUiParams};
@@ -176,6 +177,7 @@
     state.idCounter=state.animals.length;
     state.animalGrid=createAnimalGrid();
     state.animals.forEach(a=>registerAnimalToGrid(a,state));
+    state.aliveCount=state.animals.length;
   }
   function applyPreset(key){
     const preset=presets[key]; if(!preset) return;
@@ -199,12 +201,14 @@
       this.behavior='wander'; this.state=AnimalStates.WANDER; this.stateTimer=0; this.lastEvent=spawnFallback?'spawn-relocate':'-';
       this.genes=defaultGenes(); this.trail=[]; this.alive=true; this.vx=0; this.vy=0; this.waterCooldown=0; this.target=null;
       this.lastSafeX=this.x; this.lastSafeY=this.y; this.headingX=1; this.headingY=0; this.wanderAngle=rng()*Math.PI*2; this.mateCooldown=0;
+      this.reproCooldown=0;
     }
 
     getSpecies(){ return state.species.find(s=>s.id===this.speciesId); }
 
     update(state){
       if(!this.alive) return;
+      if(this.reproCooldown>0) this.reproCooldown--;
       this.decideState(state);
       this.applyForces(state);
       this.move(state);
@@ -238,7 +242,7 @@
       }
       if(this.stateTimer>0) return;
 
-      const mateReady=this.energy>0.7 && thirstPct<35 && this.mateCooldown<=0;
+      const mateReady=this.energy>0.7 && thirstPct<35 && this.mateCooldown<=0 && this.reproCooldown<=0;
       const drinkNeed=thirstPct>60 && this.waterCooldown<=0;
       const foodNearby=this.hasFoodNearby(state,vision);
 
@@ -385,16 +389,22 @@
         this.x=this.lastSafeX; this.y=this.lastSafeY; this.vx=0; this.vy=0; state.nanAgents++; this.lastEvent='NaN rollback'; state.events.push({type:'nan', id:this.id, x:this.x,y:this.y});
       }
 
-      if(this.energy<=0||this.hydration<=0){this.alive=false; state.deaths++; removeAnimalFromGrid(this,state); state.events.push({type:'death', id:this.id}); this.lastEvent='死亡'; return;}
+      if(this.energy<=0||this.hydration<=0){this.alive=false; state.deaths++; state.aliveCount=Math.max(0,state.aliveCount-1); removeAnimalFromGrid(this,state); state.events.push({type:'death', id:this.id}); this.lastEvent='死亡'; return;}
     }
 
     handleReproduction(state){
       if(!this.alive || this.state!==AnimalStates.MATE) return;
       const sp=this.getSpecies(); const rng=state.rng; const fert=clampRange(sp.fertility*lerp(0.7,1.3,this.genes.g_fertility),0,1);
-      const partner=getNeighbors(this,state,1).find(o=>o.speciesId===this.speciesId && o.sex!==this.sex && o.state===AnimalStates.MATE && Math.hypot(torusDelta(o.x,this.x,params.gridW), torusDelta(o.y,this.y,params.gridH))<0.9);
+      const partner=getNeighbors(this,state,1).find(o=>o.speciesId===this.speciesId && o.sex!==this.sex && o.state===AnimalStates.MATE && Math.hypot(torusDelta(o.x,this.x,params.gridW), torusDelta(o.y,this.y,params.gridH))<0.9 && o.reproCooldown<=0);
       if(!partner) return;
+      if(this.reproCooldown>0 || this.mateCooldown>0 || partner.mateCooldown>0) return;
+      const minEnergy=0.6; const energyCost=0.3;
+      if(this.energy<minEnergy || partner.energy<minEnergy) return;
+      const projectedPop=state.aliveCount + state.spawnBuffer.length;
+      if(projectedPop>=POPULATION_LIMIT) return;
       if(rng()<0.12*fert){
-        this.energy*=0.7; partner.energy*=0.7; this.mateCooldown=180; partner.mateCooldown=180; this.stateTimer=Math.max(this.stateTimer,40); partner.stateTimer=Math.max(partner.stateTimer,40);
+        this.energy=Math.max(0,this.energy-energyCost); partner.energy=Math.max(0,partner.energy-energyCost);
+        this.mateCooldown=300; partner.mateCooldown=300; this.reproCooldown=300; partner.reproCooldown=300; this.stateTimer=Math.max(this.stateTimer,40); partner.stateTimer=Math.max(partner.stateTimer,40);
         const child=createAnimal(sp,rng,this.x,this.y); const angle=rng()*Math.PI*2; const dist=1.2+rng()*1.5; child.x=wrap(this.x+Math.cos(angle)*dist,params.gridW); child.y=wrap(this.y+Math.sin(angle)*dist,params.gridH);
         child.lastSafeX=child.x; child.lastSafeY=child.y;
         child.genes=combineGenes(this.genes,partner.genes);
@@ -414,7 +424,7 @@
     let births=0; let deaths=0;
     const rng=state.rng; const w=params.gridW, h=params.gridH; state.events=[]; state.step++; state.seasonCounter++;
     state.movedAgents=0; state.nanAgents=0; state.vegGrowth=0; state.vegConsumed=0;
-    state.animalGrid=createAnimalGrid(); state.animals.forEach(a=>{ if(a.alive) registerAnimalToGrid(a,state); });
+    state.animalGrid=createAnimalGrid(); state.aliveCount=0; state.animals.forEach(a=>{ if(a.alive){ registerAnimalToGrid(a,state); state.aliveCount++; } });
     const seasonLen=state.season==='雨季'?uiParams.rainyLen:uiParams.dryLen; if(state.seasonCounter>seasonLen){state.season=state.season==='雨季'?'乾季':'雨季'; state.seasonCounter=0; logMsg(`季節が${state.season}に切替`);} 
     const moistGain=state.season==='雨季'?0.05:0.015; const moistLoss=state.season==='雨季'?0.008:0.03;
     let riverCount=0, moistSum=0, vegSum=0;
