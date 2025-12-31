@@ -21,6 +21,13 @@
   const safeNorm=(x,y)=>{const d=Math.hypot(x,y); if(!Number.isFinite(d) || d<1e-9) return null; return d;};
   const toId=str=>str.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')||`sp_${Date.now()}`;
   const parseDiet=str=>{ const [g,p,s,t]=str.split(',').map(v=>parseFloat(v)||0); return {grass:clamp01(g||0), poison:clamp01(p||0), shrub:clamp01(s||0), tree:clamp01(t||0)}; };
+  const randomPositionWithinMargin=(rng, w, h)=>{
+    const margin=Math.max(0.5, Math.min(w, h)*0.05);
+    const usableW=Math.max(0, w-margin*2);
+    const usableH=Math.max(0, h-margin*2);
+    return {x:usableW>0?margin+rng()*usableW:rng()*w, y:usableH>0?margin+rng()*usableH:rng()*h};
+  };
+  const isInvalidSpawn=(x,y)=>!Number.isFinite(x)||!Number.isFinite(y)|| (Math.abs(x)<1e-6 && Math.abs(y)<1e-6);
   const createAnimalGrid=()=>Array.from({length:params.gridW*params.gridH},()=>[]);
   const gridIndex=(x,y,boundary)=>{ const w=params.gridW, h=params.gridH; const wrapX=boundary==='wrap'?wrap(x,w):clampRange(x,0,w-1e-3); const wrapY=boundary==='wrap'?wrap(y,h):clampRange(y,0,h-1e-3); return Math.floor(wrapY)*w+Math.floor(wrapX); };
   const registerAnimalToGrid=(animal, state)=>{ const idx=gridIndex(animal.x, animal.y, state.boundaryMode); animal.gridIdx=idx; state.animalGrid[idx].push(animal); };
@@ -182,13 +189,14 @@
   class Animal{
     constructor(sp, rng, id, x, y){
       const w=params.gridW, h=params.gridH; this.id=`A${id}`; this.speciesId=sp.id;
-      const randX=()=>rng()*w; const randY=()=>rng()*h;
-      const initialX=Number.isFinite(x)?x:randX();
-      const initialY=Number.isFinite(y)?y:randY();
-      if(Math.abs(initialX)<1e-6 && Math.abs(initialY)<1e-6){ this.x=randX(); this.y=randY(); }
-      else { this.x=wrap(initialX,w); this.y=wrap(initialY,h); }
+      const spawnFallback=isInvalidSpawn(x,y);
+      const fallbackPos=randomPositionWithinMargin(rng, w, h);
+      const validX=spawnFallback?fallbackPos.x:x;
+      const validY=spawnFallback?fallbackPos.y:y;
+      if(spawnFallback){ console.warn('Invalid spawn detected. Relocating to safe random position.'); }
+      this.x=wrap(validX,w); this.y=wrap(validY,h);
       this.energy=0.8+rng()*0.15; this.hydration=0.8+rng()*0.15; this.age=0; this.sex=rng()<0.5?'F':'M';
-      this.behavior='wander'; this.state=AnimalStates.WANDER; this.stateTimer=0; this.lastEvent='-';
+      this.behavior='wander'; this.state=AnimalStates.WANDER; this.stateTimer=0; this.lastEvent=spawnFallback?'spawn-relocate':'-';
       this.genes=defaultGenes(); this.trail=[]; this.alive=true; this.vx=0; this.vy=0; this.waterCooldown=0; this.target=null;
       this.lastSafeX=this.x; this.lastSafeY=this.y; this.headingX=1; this.headingY=0; this.wanderAngle=rng()*Math.PI*2; this.mateCooldown=0;
     }
