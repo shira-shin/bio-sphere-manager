@@ -135,3 +135,4 @@ export default class Animal {
         colorMode(RGB); // 戻す
     }
 }
+
