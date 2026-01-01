@@ -1,3 +1,5 @@
+  import {makeDraggable} from './ui/Draggable.js';
+
   // --- UTILITIES ---
   function createRng(seedStr){
     let h=1779033703^seedStr.length; for(let i=0;i<seedStr.length;i++){h=Math.imul(h^seedStr.charCodeAt(i),3432918353); h=h<<13|h>>>19;}
@@ -33,6 +35,18 @@
   const registerAnimalToGrid=(animal, state)=>{ const idx=gridIndex(animal.x, animal.y, state.boundaryMode); animal.gridIdx=idx; state.animalGrid[idx].push(animal); };
   const moveAnimalInGrid=(animal, state)=>{ const newIdx=gridIndex(animal.x, animal.y, state.boundaryMode); if(animal.gridIdx===newIdx) return; const cell=state.animalGrid[animal.gridIdx]||[]; const pos=cell.indexOf(animal); if(pos>=0) cell.splice(pos,1); animal.gridIdx=newIdx; state.animalGrid[newIdx].push(animal); };
   const removeAnimalFromGrid=(animal, state)=>{ const cell=state.animalGrid[animal.gridIdx]; if(!cell) return; const idx=cell.indexOf(animal); if(idx>=0) cell.splice(idx,1); };
+  const countVegNeighbors=(x,y,cells)=>{
+    const w=params.gridW, h=params.gridH; let count=0, density=0;
+    for(let dy=-1;dy<=1;dy++){
+      for(let dx=-1;dx<=1;dx++){
+        if(dx===0 && dy===0) continue;
+        const nx=wrap(x+dx,w), ny=wrap(y+dy,h); const veg=cells[ny*w+nx].veg;
+        const total=veg.grass+veg.poison+veg.shrub+veg.shrubThorn+veg.tree;
+        if(total>0.08) count++; density+=total;
+      }
+    }
+    return {count,density};
+  };
   function getNeighbors(animal, state, radius){
     const w=params.gridW, h=params.gridH; const cellRange=Math.ceil(radius); const cx=Math.floor(animal.x), cy=Math.floor(animal.y); const res=[];
     for(let dy=-cellRange; dy<=cellRange; dy++){
@@ -51,17 +65,17 @@
   const POPULATION_LIMIT=2000;
   const VEG_UPDATE_INTERVAL=30;
   const baseSpecies=[
-    {id:'hare', name:'ウサギ', trophic:'herb', color:'#a7f18c', shape:'ellipse', baseSpeed:1.25, vision:5, metabolism:0.8, waterNeed:0.6, fertility:0.7, socialMode:'herd', preyList:[],
+    {id:'hare', name:'ウサギ', trophic:'herb', color:'#a7f18c', shape:'ellipse', baseSpeed:1.25, vision:5, metabolism:0.75, waterNeed:0.6, fertility:0.7, reproThreshold:0.68, reproCost:0.28, socialMode:'herd', preyList:[],
       poisonTolerance:0.4, thornHandling:0.4, dietPreference:{grass:0.72,poison:0.1,shrub:0.13,tree:0.05}},
-    {id:'deer', name:'シカ', trophic:'herb', color:'#c5d16f', shape:'antler', baseSpeed:1.0, vision:6.5, metabolism:0.9, waterNeed:0.8, fertility:0.48, socialMode:'herd', preyList:[],
+    {id:'deer', name:'シカ', trophic:'herb', color:'#c5d16f', shape:'antler', baseSpeed:1.0, vision:6.5, metabolism:0.82, waterNeed:0.8, fertility:0.48, reproThreshold:0.7, reproCost:0.3, socialMode:'herd', preyList:[],
       poisonTolerance:0.5, thornHandling:0.55, dietPreference:{grass:0.55,poison:0.1,shrub:0.3,tree:0.15}},
-    {id:'boar', name:'イノシシ', trophic:'omn', color:'#d3aa7c', shape:'tusk', baseSpeed:1.05, vision:5.5, metabolism:1.05, waterNeed:0.75, fertility:0.5, socialMode:'pair', preyList:['hare'],
+    {id:'boar', name:'イノシシ', trophic:'omn', color:'#d3aa7c', shape:'tusk', baseSpeed:1.05, vision:5.5, metabolism:0.95, waterNeed:0.75, fertility:0.5, reproThreshold:0.74, reproCost:0.34, socialMode:'pair', preyList:['hare'],
       poisonTolerance:0.7, thornHandling:0.7, dietPreference:{grass:0.4,poison:0.12,shrub:0.35,tree:0.13}},
-    {id:'wolf', name:'オオカミ', trophic:'carn', color:'#ffad7d', shape:'arrow', baseSpeed:1.3, vision:7.2, metabolism:1.1, waterNeed:0.7, fertility:0.4, socialMode:'pack', preyList:['hare','deer','boar','zebra'],
+    {id:'wolf', name:'オオカミ', trophic:'carn', color:'#ffad7d', shape:'arrow', baseSpeed:1.3, vision:7.2, metabolism:0.95, waterNeed:0.7, fertility:0.32, reproThreshold:0.9, reproCost:0.55, socialMode:'pack', preyList:['hare','deer','boar','zebra'],
       poisonTolerance:0.3, thornHandling:0.4, dietPreference:{}},
-    {id:'bear', name:'クマ', trophic:'carn', color:'#f7c173', shape:'round', baseSpeed:0.95, vision:6, metabolism:1.3, waterNeed:0.85, fertility:0.27, socialMode:'solo', preyList:['hare','deer','boar'],
+    {id:'bear', name:'クマ', trophic:'carn', color:'#f7c173', shape:'round', baseSpeed:0.95, vision:6, metabolism:1.05, waterNeed:0.85, fertility:0.25, reproThreshold:0.88, reproCost:0.6, socialMode:'solo', preyList:['hare','deer','boar'],
       poisonTolerance:0.65, thornHandling:0.75, dietPreference:{grass:0.2,poison:0.05,shrub:0.2,tree:0.55}},
-    {id:'zebra', name:'シマウマ', trophic:'herb', color:'#b5c7ff', shape:'stripe', baseSpeed:1.15, vision:6.2, metabolism:0.95, waterNeed:0.7, fertility:0.52, socialMode:'herd', preyList:[],
+    {id:'zebra', name:'シマウマ', trophic:'herb', color:'#b5c7ff', shape:'stripe', baseSpeed:1.15, vision:6.2, metabolism:0.9, waterNeed:0.7, fertility:0.52, reproThreshold:0.7, reproCost:0.3, socialMode:'herd', preyList:[],
       poisonTolerance:0.45, thornHandling:0.6, dietPreference:{grass:0.68,poison:0.08,shrub:0.18,tree:0.06}},
   ];
   const defaultGenes=()=>({g_speed:1,g_vision:1,g_metabolism:1,g_fertility:1,g_thirstTol:1,g_starveTol:1});
@@ -160,7 +174,8 @@
     const socialMode=document.getElementById('newSpSocial').value;
     const preyList=document.getElementById('newSpPrey').value.split(',').map(s=>s.trim()).filter(Boolean);
     const diet=parseDiet(document.getElementById('newSpDiet').value||'0.5,0,0.3,0.2');
-    const newSp={id,name,trophic,color,shape,baseSpeed,vision,metabolism,fertility,waterNeed,socialMode,preyList,poisonTolerance,thornHandling,dietPreference:diet};
+    const reproDefaults=trophic==='carn'?{threshold:0.88,cost:0.55}:trophic==='omn'?{threshold:0.74,cost:0.34}:{threshold:0.68,cost:0.28};
+    const newSp={id,name,trophic,color,shape,baseSpeed,vision,metabolism,fertility,waterNeed,socialMode,preyList,poisonTolerance,thornHandling,reproThreshold:reproDefaults.threshold,reproCost:reproDefaults.cost,dietPreference:diet};
     state.species.push(newSp);
     resetSpeciesEditor(); spawnAnimals(); logMsg(`種を追加: ${name}`);
   }
@@ -242,7 +257,8 @@
       }
       if(this.stateTimer>0) return;
 
-      const mateReady=this.energy>0.7 && thirstPct<35 && this.mateCooldown<=0 && this.reproCooldown<=0;
+      const mateThreshold=sp.reproThreshold??0.6;
+      const mateReady=this.energy>mateThreshold && thirstPct<35 && this.mateCooldown<=0 && this.reproCooldown<=0;
       const drinkNeed=thirstPct>60 && this.waterCooldown<=0;
       const foodNearby=this.hasFoodNearby(state,vision);
 
@@ -362,7 +378,9 @@
 
     consumeAndMetabolize(state){
       const sp=this.getSpecies(); const genes=this.genes; const w=params.gridW; const rng=state.rng;
-      const metabolism=clampRange(sp.metabolism*genes.g_metabolism,0.2,2); const thirstTol=clampRange(lerp(0.7,1.3,genes.g_thirstTol),0.2,2.0); const waterNeed=clampRange(sp.waterNeed,0.2,2.0);
+      const trophicMeta=sp.trophic==='carn'?2.3:(sp.trophic==='omn'?1.4:1);
+      const metabolism=clampRange(sp.metabolism*genes.g_metabolism*trophicMeta,0.2,3);
+      const thirstTol=clampRange(lerp(0.7,1.3,genes.g_thirstTol),0.2,2.0); const waterNeed=clampRange(sp.waterNeed,0.2,2.0);
       this.age+=1; this.energy-=0.002*metabolism; this.hydration-=0.002*waterNeed*thirstTol; if(this.waterCooldown>0) this.waterCooldown-=1; if(this.mateCooldown>0) this.mateCooldown-=1;
       const cell=state.cells[Math.floor(this.y)*w+Math.floor(this.x)];
 
@@ -378,9 +396,9 @@
 
       if(sp.trophic==='carn'){
         const victim=getNeighbors(this,state,0.8).find(o=>sp.preyList.includes(o.speciesId) && Math.hypot(torusDelta(o.x,this.x,params.gridW), torusDelta(o.y,this.y,params.gridH))<0.6);
-        if(victim){victim.alive=false; removeAnimalFromGrid(victim,state); state.kills++; const pack=getNeighbors(this,state,3).filter(o=>o.speciesId===this.speciesId); const shareBase=0.55/Math.max(1,pack.length);
+        if(victim){victim.alive=false; removeAnimalFromGrid(victim,state); state.kills++; const pack=getNeighbors(this,state,3).filter(o=>o.speciesId===this.speciesId); const shareBase=0.35/Math.max(1,pack.length);
           pack.forEach(o=>{o.energy=Math.min(1,o.energy+shareBase); o.hydration=Math.min(1,o.hydration+0.12);});
-          this.energy=Math.min(1,this.energy+0.15); this.hydration=Math.min(1,this.hydration+0.05);
+          this.energy=Math.min(1,this.energy+0.1); this.hydration=Math.min(1,this.hydration+0.05);
           this.behavior='hunt'; state.events.push({type:'hunt', predator:sp.id, prey:victim.speciesId});
         }
       }
@@ -398,7 +416,7 @@
       const partner=getNeighbors(this,state,1).find(o=>o.speciesId===this.speciesId && o.sex!==this.sex && o.state===AnimalStates.MATE && Math.hypot(torusDelta(o.x,this.x,params.gridW), torusDelta(o.y,this.y,params.gridH))<0.9 && o.reproCooldown<=0);
       if(!partner) return;
       if(this.reproCooldown>0 || this.mateCooldown>0 || partner.mateCooldown>0) return;
-      const minEnergy=0.6; const energyCost=0.3;
+      const minEnergy=clamp01(sp.reproThreshold??0.6); const energyCost=clampRange(sp.reproCost??0.3,0,1);
       if(this.energy<minEnergy || partner.energy<minEnergy) return;
       const projectedPop=state.aliveCount + state.spawnBuffer.length;
       if(projectedPop>=POPULATION_LIMIT) return;
@@ -431,19 +449,31 @@
     const updateVeg=state.step%VEG_UPDATE_INTERVAL===0;
     state.density.fill(0);
     if(updateVeg){
-      state.cells.forEach((c)=>{
-        const beforeVeg=c.veg.grass+c.veg.shrub+c.veg.tree;
-        c.moist=clamp01(c.moist + moistGain*(0.5+c.wet*0.6) - moistLoss + (c.river?0.06:0));
-        const seasonFactor=state.season==='雨季'?1:0.65; const tempFactor=c.elev>0.75?0.7:1;
-        const growBase=0.06*seasonFactor*tempFactor;
-        c.veg.grass=clamp01(c.veg.grass + growBase*c.moist*(1-c.veg.grass) - 0.015*(1-c.moist));
-        c.veg.poison=clamp01(c.veg.poison + 0.04*c.moist*(1-c.veg.poison) - 0.01*(0.5-c.moist));
-        c.veg.shrub=clamp01(c.veg.shrub + 0.04*c.moist*(1-c.veg.shrub) - 0.01*(0.4-c.moist));
-        c.veg.shrubThorn=clamp01(c.veg.shrubThorn + 0.035*c.moist*(1-c.veg.shrubThorn) - 0.012*(0.45-c.moist));
-        c.veg.tree=clamp01(c.veg.tree + 0.02*c.moist*(1-c.veg.tree) - 0.008*(0.35-c.moist));
-        const afterVeg=c.veg.grass+c.veg.poison+c.veg.shrub+c.veg.shrubThorn+c.veg.tree; state.vegGrowth+=Math.max(0, afterVeg-beforeVeg);
-        if(c.river) riverCount++; moistSum+=c.moist; vegSum+=afterVeg;
-      });
+      const w=params.gridW, h=params.gridH;
+      for(let y=0;y<h;y++){
+        for(let x=0;x<w;x++){
+          const idx=y*w+x; const c=state.cells[idx];
+          const beforeVeg=c.veg.grass+c.veg.shrub+c.veg.tree;
+          c.moist=clamp01(c.moist + moistGain*(0.5+c.wet*0.6) - moistLoss + (c.river?0.06:0));
+          const {count:neighborPlants}=countVegNeighbors(x,y,state.cells);
+          const seasonFactor=state.season==='雨季'?1:0.65; const tempFactor=c.elev>0.75?0.7:1;
+          const crowdPenalty=neighborPlants>5? (neighborPlants-5)*0.04:0;
+          const facilitation=neighborPlants>=1 && neighborPlants<=4? neighborPlants*0.012:0;
+          const densityFactor=clampRange(1 - crowdPenalty + facilitation,0.65,1.25);
+          const growBase=0.06*seasonFactor*tempFactor*densityFactor;
+          c.veg.grass=clamp01(c.veg.grass + growBase*c.moist*(1-c.veg.grass) - 0.015*(1-c.moist));
+          c.veg.poison=clamp01(c.veg.poison + 0.04*c.moist*(1-c.veg.poison) - 0.01*(0.5-c.moist));
+          c.veg.shrub=clamp01(c.veg.shrub + 0.04*c.moist*(1-c.veg.shrub) - 0.01*(0.4-c.moist));
+          c.veg.shrubThorn=clamp01(c.veg.shrubThorn + 0.035*c.moist*(1-c.veg.shrubThorn) - 0.012*(0.45-c.moist));
+          c.veg.tree=clamp01(c.veg.tree + 0.02*c.moist*(1-c.veg.tree) - 0.008*(0.35-c.moist));
+          if(neighborPlants>6){
+            const choke=0.01*(neighborPlants-6);
+            ['grass','poison','shrub','shrubThorn','tree'].forEach(k=>{ c.veg[k]=clamp01(c.veg[k]-choke*Math.max(0.35,c.veg[k]*0.5)); });
+          }
+          const afterVeg=c.veg.grass+c.veg.poison+c.veg.shrub+c.veg.shrubThorn+c.veg.tree; state.vegGrowth+=Math.max(0, afterVeg-beforeVeg);
+          if(c.river) riverCount++; moistSum+=c.moist; vegSum+=afterVeg;
+        }
+      }
       state.lastRiverCount=riverCount; state.lastMoistAvg=moistSum/state.cells.length; state.lastVegAvg=vegSum/state.cells.length; state.needsBgRedraw=true;
     } else {
       riverCount=state.lastRiverCount||0; moistSum=(state.lastMoistAvg||0)*state.cells.length; vegSum=(state.lastVegAvg||0)*state.cells.length;
@@ -698,7 +728,15 @@
   }
 
   // --- INIT ---
-  function init(){ resetSpeciesEditor(); if(localStorage.getItem(STORAGE_KEY)){ loadSpeciesLocal(true); } generateTerrain(document.getElementById('patternSelect').value); spawnAnimals(); startP5(); bindUI(); }
+  function init(){
+    resetSpeciesEditor();
+    if(localStorage.getItem(STORAGE_KEY)){ loadSpeciesLocal(true); }
+    generateTerrain(document.getElementById('patternSelect').value);
+    spawnAnimals();
+    startP5();
+    bindUI();
+    makeDraggable('legendPanel');
+  }
   function bindUI(){
     document.querySelectorAll('button[data-action]').forEach(btn=>btn.addEventListener('click',()=>{
       const act=btn.dataset.action; if(act==='start') state.running=true; else if(act==='stop') state.running=false; else if(act==='reset'){ state=createState(document.getElementById('seedInput').value); generateTerrain(document.getElementById('patternSelect').value); spawnAnimals(); selected=null; }

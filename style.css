@@ -39,3 +39,5 @@
     .floating-window{position:absolute; right:12px; top:12px; background:#0e1625; border:1px solid #22344a; border-radius:14px; box-shadow:0 12px 30px rgba(0,0,0,0.45); padding:10px; width:300px; cursor:move;}
     .hidden{display:none;}
     #cellTooltip{position:absolute; pointer-events:none; padding:8px 10px; border-radius:10px; background:rgba(12,18,28,0.9); border:1px solid #22344a; font-size:12px; color:#d7e6ff; z-index:20; white-space:pre;}
+    .draggable-panel{position:absolute; cursor:move; top:76px; left:0; user-select:none; touch-action:none;}
+    .draggable-panel h3{cursor:move;}
