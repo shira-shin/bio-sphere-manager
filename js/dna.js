@@ -10,7 +10,10 @@ export default class DNA {
                 sense: random(50, 150),        // 視界範囲
                 color: random(0, 360),         // 体色（色相）
                 aggression: random(0, 1),      // 攻撃性（0:草食, 1:肉食）
-                fertility: random(0.5, 1.0)    // 繁殖しやすさ
+                fertility: random(0.5, 1.0),   // 繁殖しやすさ
+                cold_tolerance: random(0, 1),  // 低温への強さ
+                heat_tolerance: random(0, 1),  // 高温への強さ
+                water_dependency: random(0.3, 1.2) // 水依存度（低いほど乾燥に強い）
             };
         }
     }
@@ -36,6 +39,9 @@ export default class DNA {
         newGenes.speed = constrain(newGenes.speed, 0.5, 3.0);
         newGenes.color = (newGenes.color + 360) % 360; // 色相環ループ
         newGenes.aggression = constrain(newGenes.aggression, 0, 1);
+        newGenes.cold_tolerance = constrain(newGenes.cold_tolerance, 0, 1.5);
+        newGenes.heat_tolerance = constrain(newGenes.heat_tolerance, 0, 1.5);
+        newGenes.water_dependency = constrain(newGenes.water_dependency, 0.1, 1.5);
 
         return new DNA(newGenes);
     }

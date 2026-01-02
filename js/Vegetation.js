@@ -3,17 +3,40 @@ export default class Vegetation {
         this.pos = createVector(x, y);
         this.energy = 10; // 栄養価
         this.maxEnergy = 50;
-        this.growthRate = 0.1; // 成長速度
+        this.growthRate = 0.1; // 基本成長速度
         this.reproThreshold = 40; // 繁殖可能になるサイズ
         this.age = 0;
+        this.optimalTemp = 25; // 快適温度
+        this.tempSigma = 6;    // 温度ガウスの幅
+        this.lastMoisture = 0.5;
     }
 
-    update() {
+    tempFactor(temp) {
+        // 温度が最適に近いと1.0、離れると減衰するガウス関数
+        const diff = temp - this.optimalTemp;
+        return Math.exp(- (diff * diff) / (2 * this.tempSigma * this.tempSigma));
+    }
+
+    update(env = { moisture: 0.5, temperature: 22 }) {
         this.age++;
-        // 時間経過で成長（最大サイズまで）
+        const moisture = constrain(env.moisture, 0, 1);
+        const tempFactor = this.tempFactor(env.temperature ?? 22);
+        this.lastMoisture = moisture;
+
+        // 環境依存の成長
         if (this.energy < this.maxEnergy) {
-            this.energy += this.growthRate;
+            const growth = this.growthRate * moisture * tempFactor;
+            this.energy += growth;
         }
+
+        // 枯死判定（極端な環境）
+        const extremeDry = moisture < 0.05;
+        const extremeTemp = tempFactor < 0.1;
+        if ((extremeDry || extremeTemp) && random() < 0.02) {
+            this.energy = 0;
+        }
+
+        this.energy = constrain(this.energy, 0, this.maxEnergy);
     }
 
     // 繁殖（種を飛ばす）
@@ -46,7 +69,9 @@ export default class Vegetation {
         // 成長度合いに応じてサイズと色が変わる
         let size = map(this.energy, 0, this.maxEnergy, 2, 12);
         let green = map(this.energy, 0, this.maxEnergy, 100, 255);
-        fill(50, green, 50);
+        // 水分不足時は茶色寄りに変化
+        const drynessTint = this.lastMoisture < 0.25 ? map(this.lastMoisture, 0, 0.25, 100, 20) : 0;
+        fill(50 + drynessTint, green - drynessTint, 50);
         ellipse(this.pos.x, this.pos.y, size);
     }
 }
