@@ -33,6 +33,12 @@
           </ul>
         </div>
       </div>
+      <div id="terrainToolbar">
+        <button type="button" id="terrainModeToggle">地形編集 OFF</button>
+        <label>ブラシサイズ <span id="brushSizeValue">1</span><input id="brushSize" type="range" min="1" max="5" step="1" value="2"></label>
+        <label>水面レベル<input id="waterLevel" type="range" min="-0.5" max="0.5" step="0.05" value="0"></label>
+        <span class="hint">左ドラッグ:陸地 / 右クリック or Shift: 水域</span>
+      </div>
       <div id="cellTooltip" class="hidden"></div>
       <div id="renderAlert">描画エラーが発生したため簡易描画に切替えました</div>
     </section>
