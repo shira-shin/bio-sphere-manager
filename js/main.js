@@ -581,7 +581,7 @@
   function updateStabilityMetric(totalPop){ const window=state.stabilityWindow; window.push(totalPop); if(window.length>180) window.shift(); if(window.length>3){ const avg=window.reduce((s,v)=>s+v,0)/window.length; const variance=window.reduce((s,v)=>s+(v-avg)*(v-avg),0)/window.length; state.stability=1/(1+Math.sqrt(variance)); } else { state.stability=0; } }
 
   // --- RENDER ---
-  let p5inst=null; let canvasW=0, canvasH=0; let selected=null; let overlayLayer=null; let bgLayer=null;
+  let p5inst=null; let canvasW=0, canvasH=0; let selectedAnimal=null; let overlayLayer=null; let bgLayer=null; let currentWeather=null;
   function startP5(){
     p5inst=new p5(p=>{
       p.setup=()=>{const host=document.getElementById('canvasHost'); const w=host.clientWidth, h=host.clientHeight; canvasW=w; canvasH=h; p.createCanvas(w,h); overlayLayer=p.createGraphics(w,h); bgLayer=p.createGraphics(w,h); overlayLayer.noStroke(); bgLayer.noStroke(); state.needsBgRedraw=true; ensureP5Globals(p); if(plants.length===0) seedPlants();};
@@ -619,7 +619,7 @@
   }
   function handleSelect(p){
     const mx=p.mouseX/params.cellSize, my=p.mouseY/params.cellSize; const found=state.animals.find(a=>a.alive && Math.hypot(a.x*params.cellSize-mx*params.cellSize,a.y*params.cellSize-my*params.cellSize)<8);
-    if(found){selected=found; updateInspector();}
+    if(found){selectedAnimal=found; updateInspector(currentWeather);}
   }
   function overlayLabelText(mode){
     const map={base:'地形+植生', river:'河川(流路)', moisture:'水分', vegetation_total:'植生合計', vegetation_grass:'草(密度ヒート)', vegetation_poison:'毒草', vegetation_shrub:'低木', vegetation_shrubThorn:'トゲ低木', vegetation_tree:'樹木', animals_all:'動物(全)', animals_filter:'動物(種別)', density_heatmap:'密度ヒート'}; return map[mode]||mode;
@@ -655,6 +655,44 @@
     }
     p.image(overlayLayer,0,0);
   }
+
+  function getWeatherSnapshot(){
+    const weather=state.season==='雨季'?'RAINY':'DRY';
+    const tempBase=weather==='RAINY'?23:31;
+    const temp=tempBase + Math.sin(state.step*0.01)*1.8;
+    const moistureLog=state.logs[state.logs.length-1];
+    const humidity=clamp01(moistureLog?.moist ?? 0.5);
+    return {weather, temperature:temp, humidity};
+  }
+
+  function drawWeatherOverlay(p, weather){
+    if(!weather) return;
+    const w=canvasW||p.width; const h=canvasH||p.height;
+    p.push();
+    if(weather.weather==='RAINY'){
+      p.noStroke();
+      p.fill(0,0,100,25);
+      p.rect(0,0,w,h);
+      p.stroke(120,170,255,180);
+      p.strokeWeight(1);
+      for(let i=0;i<50;i++){
+        const x=p.random(w); const y=p.random(h); const len=p.random(8,16);
+        p.line(x,y,x,y+len);
+      }
+    } else if(weather.weather==='DRY'){
+      p.noStroke();
+      p.fill(255,100,0,13);
+      p.rect(0,0,w,h);
+    }
+
+    const icon=weather.weather==='RAINY'?'🌧️':'☀️';
+    p.textAlign(p.RIGHT,p.TOP);
+    p.textSize(26);
+    p.noStroke();
+    p.fill(255,255,255,230);
+    p.text(`${icon} ${weather.temperature.toFixed(1)}°C`, w-12, 12);
+    p.pop();
+  }
   function render(p){
     const cellSize=params.cellSize; p.background('#050910');
     const dimTerrain=document.getElementById('dimTerrain').checked;
@@ -667,13 +705,15 @@
     // animals
     for(const a of state.animals){ if(!a.alive) continue; drawAnimal(p,a); }
     // trails
-    if(document.getElementById('trailToggle').checked && selected){ p.stroke(255,255,255,120); p.noFill(); p.beginShape(); selected.trail.forEach(pt=>p.vertex(pt.x*cellSize+cellSize/2, pt.y*cellSize+cellSize/2)); p.endShape(); }
-    if(selected){ p.noFill(); p.stroke('#ffea8a'); p.rect(Math.floor(selected.x)*cellSize, Math.floor(selected.y)*cellSize, cellSize, cellSize); }
+    if(document.getElementById('trailToggle').checked && selectedAnimal){ p.stroke(255,255,255,120); p.noFill(); p.beginShape(); selectedAnimal.trail.forEach(pt=>p.vertex(pt.x*cellSize+cellSize/2, pt.y*cellSize+cellSize/2)); p.endShape(); }
+    if(selectedAnimal){ p.noFill(); p.stroke('#ffea8a'); p.rect(Math.floor(selectedAnimal.x)*cellSize, Math.floor(selectedAnimal.y)*cellSize, cellSize, cellSize); }
+    currentWeather=getWeatherSnapshot();
+    drawWeatherOverlay(p,currentWeather);
     // overlay label
     const overlay=state.overlay;
     const label=document.getElementById('layerLabel'); label.textContent=`レイヤー: ${overlayLabelText(overlay)}`; label.innerHTML=`レイヤー: ${overlayLabelText(overlay)}<small>表示中: ${overlayLabelText(overlay)}</small>`;
     drawColorbar(p, overlay);
-    updateHud(); updateInspector(); updateChart();
+    updateHud(); updateInspector(currentWeather); updateChart();
   }
   function drawAnimal(p,a){
     const sp=state.species.find(s=>s.id===a.speciesId); const size=sp.trophic==='carn'?9:8; const screenX=a.x*params.cellSize+params.cellSize/2; const screenY=a.y*params.cellSize+params.cellSize/2;
@@ -695,6 +735,7 @@
       p.stroke(a.state===AnimalStates.DRINK?'#6fa4ff':stroke); p.fill(color);
     }
     if(document.getElementById('haloToggle').checked){ if(a.behavior==='graze') {p.noFill(); p.stroke(50,200,120,160); p.circle(0,0,size+6);} else if(a.behavior==='chase'){p.noFill(); p.stroke(255,80,80,180); p.circle(0,0,size+6);} else if(a.behavior==='water'){p.noFill(); p.stroke(80,160,255,200); p.circle(0,0,size+7);} else if(a.behavior==='seek-mate'){p.noStroke(); p.fill(255,180,200,200); p.text('♡',-4,4);} }
+    if(selectedAnimal && selectedAnimal.id===a.id){ p.noFill(); p.stroke(255); p.strokeWeight(2); p.circle(0,0,size+8); }
     p.pop();
   }
 
@@ -718,10 +759,34 @@
     document.getElementById('hudExtinct').textContent=state.extinction;
     const warn=document.getElementById('movementWarning'); if(state.zeroMoveStreak>=2){warn.classList.remove('hidden');} else {warn.classList.add('hidden');}
   }
-  function updateInspector(){
-    const box=document.getElementById('selectedInfo'); if(!selected||!selected.alive){box.textContent='クリックで個体情報を表示'; return;}
-    const sp=state.species.find(s=>s.id===selected.speciesId); const hunger=(1-selected.energy), thirst=(1-selected.hydration);
-    box.textContent=`種: ${sp.name}\n性別: ${selected.sex}\n年齢: ${selected.age}\n状態: ${selected.state} / 行動:${selected.behavior}\n飢え:${hunger.toFixed(2)} 渇き:${thirst.toFixed(2)}\nE:${selected.energy.toFixed(2)} H:${selected.hydration.toFixed(2)}\n直近イベント:${selected.lastEvent}\ngenes:${Object.entries(selected.genes).map(([k,v])=>`${k}:${v.toFixed(2)}`).join(' ')}`;
+  function updateInspector(weather=currentWeather){
+    const box=document.getElementById('selectedInfo');
+    const inspector=document.getElementById('inspector');
+    if(!selectedAnimal||!selectedAnimal.alive){
+      box.textContent='クリックで個体情報を表示';
+      if(inspector){ inspector.innerHTML='<div class="inspector-empty">個体をクリックするとDNAと状態を表示します</div>'; }
+      return;
+    }
+    const sp=state.species.find(s=>s.id===selectedAnimal.speciesId); const hunger=(1-selectedAnimal.energy), thirst=(1-selectedAnimal.hydration);
+    box.textContent=`種: ${sp.name}\n性別: ${selectedAnimal.sex}\n年齢: ${selectedAnimal.age}\n状態: ${selectedAnimal.state} / 行動:${selectedAnimal.behavior}\n飢え:${hunger.toFixed(2)} 渇き:${thirst.toFixed(2)}\nE:${selectedAnimal.energy.toFixed(2)} H:${selectedAnimal.hydration.toFixed(2)}\n直近イベント:${selectedAnimal.lastEvent}\ngenes:${Object.entries(selectedAnimal.genes).map(([k,v])=>`${k}:${v.toFixed(2)}`).join(' ')}`;
+    if(!inspector) return;
+
+    const speed=clampRange(sp.baseSpeed*lerp(0.7,1.3,selectedAnimal.genes.g_speed),0.2,2.5);
+    const vision=clampRange(sp.vision*lerp(0.7,1.3,selectedAnimal.genes.g_vision),2,12);
+    const metabolism=clampRange(sp.metabolism*selectedAnimal.genes.g_metabolism,0.2,3);
+    const mutationRate=parseFloat(document.getElementById('mutRate').value)||0;
+    const statusIcon=selectedAnimal.state===AnimalStates.MATE?'❤️':(selectedAnimal.state===AnimalStates.DRINK?'💧':(selectedAnimal.state===AnimalStates.EAT?'🍃':'🚶'));
+    const weatherIcon=weather?.weather==='RAINY'?'🌧️':'☀️';
+    const temperature=weather?.temperature ?? 0;
+    inspector.innerHTML=`
+      <div class="inspector-heading">${sp.name} <small>(${sp.id})</small></div>
+      <div class="inspector-row"><span>状態</span><span>${selectedAnimal.state} ${statusIcon} / ${selectedAnimal.behavior}</span></div>
+      <div class="inspector-row"><span>年齢</span><span>${selectedAnimal.age}</span></div>
+      <div class="inspector-row"><span>エネルギー</span><span>${(selectedAnimal.energy*100).toFixed(0)}% / 水分 ${(selectedAnimal.hydration*100).toFixed(0)}%</span></div>
+      <div class="inspector-row"><span>突然変異</span><span>${(1+mutationRate).toFixed(2)}x</span></div>
+      <div class="inspector-row"><span>気候</span><span>${weatherIcon} ${temperature.toFixed(1)}°C</span></div>
+      <div class="inspector-row genetics"><span>DNA</span><span>速度:${speed.toFixed(2)}  視野:${vision.toFixed(2)}  代謝:${metabolism.toFixed(2)}  渇き耐性:${selectedAnimal.genes.g_thirstTol.toFixed(2)}  空腹耐性:${selectedAnimal.genes.g_starveTol.toFixed(2)}</span></div>
+    `;
   }
   function logMsg(msg){ const logBox=document.getElementById('logBox'); const t=`[${state.step}] ${msg}`; state.events.push({type:'log', msg}); logBox.textContent += t+'\n'; logBox.scrollTop=logBox.scrollHeight; }
   function updateChart(){
@@ -793,7 +858,7 @@
   }
   function bindUI(){
     document.querySelectorAll('button[data-action]').forEach(btn=>btn.addEventListener('click',()=>{
-      const act=btn.dataset.action; if(act==='start') state.running=true; else if(act==='stop') state.running=false; else if(act==='reset'){ state=createState(document.getElementById('seedInput').value); generateTerrain(document.getElementById('patternSelect').value); spawnAnimals(); selected=null; seedPlants(); }
+      const act=btn.dataset.action; if(act==='start') state.running=true; else if(act==='stop') state.running=false; else if(act==='reset'){ state=createState(document.getElementById('seedInput').value); generateTerrain(document.getElementById('patternSelect').value); spawnAnimals(); selectedAnimal=null; seedPlants(); }
       else if(act==='regen'){ state.seed=document.getElementById('seedInput').value; state.rng=createRng(state.seed); generateTerrain(document.getElementById('patternSelect').value); seedPlants(); }
       else if(act==='download-csv') downloadCsv(); else if(act==='run-test') runTest(); else if(act==='self-test') runSelfTest(); else if(act==='headless-3000') runHeadless3000();
       else if(act==='add-species') addCustomSpeciesFromForm(); else if(act==='export-species') exportSpeciesJSON(); else if(act==='import-species') importSpeciesJSON(); else if(act==='save-species') saveSpeciesLocal(); else if(act==='load-species') loadSpeciesLocal();

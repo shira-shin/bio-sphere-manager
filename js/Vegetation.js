@@ -1,3 +1,5 @@
+import { WORLD_WIDTH, WORLD_HEIGHT } from './constants.js';
+
 export default class Vegetation {
     constructor(x, y) {
         this.pos = createVector(x, y);
@@ -49,8 +51,8 @@ export default class Vegetation {
             let newY = this.pos.y + sin(angle) * dist;
             
             // 画面内チェック
-            newX = constrain(newX, 0, width);
-            newY = constrain(newY, 0, height);
+            newX = constrain(newX, 0, WORLD_WIDTH);
+            newY = constrain(newY, 0, WORLD_HEIGHT);
             
             return new Vegetation(newX, newY);
         }
