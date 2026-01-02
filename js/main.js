@@ -119,13 +119,14 @@
       running:false, step:0, season:'雨季', seasonCounter:0, events:[], idCounter:0, lastError:null, renderSimple:false, logs:[], chartData:[], averages:[], births:0, deaths:0, kills:0, spawnBuffer:[], density:new Float32Array(params.gridW*params.gridH),
       movedAgents:0, nanAgents:0, zeroMoveStreak:0, vegMin:0, vegMax:0, vegMean:0, vegGrowth:0, vegConsumed:0,
       shannon:0, genetic:0, stability:0, extinction:0, stabilityWindow:[], prevCounts:{},
-      animalGrid:[], needsBgRedraw:true, lastRiverCount:0, lastMoistAvg:0, lastVegAvg:0, aliveCount:0};
+      animalGrid:[], needsBgRedraw:true, lastRiverCount:0, lastMoistAvg:0, lastVegAvg:0, aliveCount:0, waterLevel:0};
   }
   let state=createState('bs-demo');
   let uiParams={...initialUiParams};
 
   // --- TERRAIN ---
   function generateTerrain(pattern){
+    const waterSlider=document.getElementById('waterLevel'); if(waterSlider){ state.waterLevel=parseFloat(waterSlider.value)||0; }
     const rng=state.rng; const perlin=createPerlin(rng); state.perlin=perlin; const w=params.gridW, h=params.gridH; const arr=new Array(w*h);
     for(let y=0;y<h;y++) for(let x=0;x<w;x++){const idx=y*w+x; arr[idx]={elev:0, wet:0, moist:0.5, river:false, riverWidth:0,
       veg:{grass:0.28+rng()*0.18, poison:0.05+rng()*0.08, shrub:0.15+rng()*0.1, shrubThorn:0.08+rng()*0.08, tree:0.1+rng()*0.05}, terrain:'平地'};}
@@ -142,6 +143,7 @@
   }
   function updateRivers(pattern){
     const w=params.gridW, h=params.gridH; const riverFactor=parseFloat(document.getElementById('riverThresh').value)||1.2; const widthCtrl=parseFloat(document.getElementById('riverWidthCtrl').value)||1;
+    const waterLevel=parseFloat(state.waterLevel||0);
     let riverCount=0;
     for(let y=0;y<h;y++){
       for(let x=0;x<w;x++){
@@ -149,7 +151,7 @@
         const riverNoise=state.perlin.noise((x+50)*0.07,(y-40)*0.07);
         const meander=Math.sin(y*0.07+x*0.05)*0.08;
         const riverScore=(1-c.elev)*0.9 + c.wet*0.4 + noise*0.4 + riverNoise*0.3 + meander;
-        const active=riverScore>riverFactor;
+        const active=riverScore>riverFactor-waterLevel;
         c.river=active; c.riverWidth=active?clamp01((riverScore-riverFactor)*widthCtrl):0;
         const moistBase=0.35 + c.wet*0.4 + (c.river?0.25:0);
         c.moist=clamp01(moistBase);
@@ -244,7 +246,7 @@
       this.behavior='wander'; this.state=AnimalStates.WANDER; this.stateTimer=0; this.lastEvent=spawnFallback?'spawn-relocate':'-';
       this.genes=defaultGenes(); this.trail=[]; this.alive=true; this.vx=0; this.vy=0; this.waterCooldown=0; this.target=null;
       this.lastSafeX=this.x; this.lastSafeY=this.y; this.headingX=1; this.headingY=0; this.wanderAngle=rng()*Math.PI*2; this.mateCooldown=0;
-      this.reproCooldown=0;
+      this.reproCooldown=0; this.emote=''; this.emoteTimer=0;
     }
 
     getSpecies(){ return state.species.find(s=>s.id===this.speciesId); }
@@ -270,7 +272,10 @@
         const rx=state.rng()*w, ry=state.rng()*h;
         this.x=rx; this.y=ry; this.vx=0; this.vy=0; this.lastSafeX=rx; this.lastSafeY=ry; this.lastEvent='corner-teleport';
       }
+      if(this.emoteTimer>0) this.emoteTimer--;
     }
+
+    showEmote(icon, duration=60){ this.emote=icon; this.emoteTimer=duration; }
 
     decideState(state){
       const sp=this.getSpecies(); const genes=this.genes; const rng=state.rng;
@@ -582,13 +587,16 @@
 
   // --- RENDER ---
   let p5inst=null; let canvasW=0, canvasH=0; let selectedAnimal=null; let overlayLayer=null; let bgLayer=null; let currentWeather=null;
+  let terrainEditMode=false;
   function startP5(){
     p5inst=new p5(p=>{
       p.setup=()=>{const host=document.getElementById('canvasHost'); const w=host.clientWidth, h=host.clientHeight; canvasW=w; canvasH=h; p.createCanvas(w,h); overlayLayer=p.createGraphics(w,h); bgLayer=p.createGraphics(w,h); overlayLayer.noStroke(); bgLayer.noStroke(); state.needsBgRedraw=true; ensureP5Globals(p); if(plants.length===0) seedPlants();};
       p.windowResized=()=>{const host=document.getElementById('canvasHost'); canvasW=host.clientWidth; canvasH=host.clientHeight; p.resizeCanvas(canvasW,canvasH); if(overlayLayer){overlayLayer.resizeCanvas(canvasW,canvasH); overlayLayer.noStroke();} if(bgLayer){bgLayer.resizeCanvas(canvasW,canvasH); bgLayer.noStroke(); state.needsBgRedraw=true;} ensureP5Globals(p);};
       p.draw=()=>{try{ensureP5Globals(p); if(state.running){for(let i=0;i<parseInt(document.getElementById('speedSelect').value);i++) stepSimulation();} render(p);}catch(err){state.lastError=err; document.getElementById('renderAlert').style.display='block'; console.error(err);} };
       p.mouseMoved=()=>{handleHover(p);};
-      p.mousePressed=()=>{handleSelect(p);};
+      p.mousePressed=()=>{ if(handleBrush(p)) return; handleSelect(p); };
+      p.mouseDragged=()=>{ handleBrush(p); };
+      p.keyPressed=()=>{ if(p.key==='e' || p.key==='E'){ state.animals.forEach(a=>{ if(a.alive && typeof a.showEmote==='function') a.showEmote('❤️',90); }); } };
     },'canvasHost');
   }
 
@@ -620,6 +628,36 @@
   function handleSelect(p){
     const mx=p.mouseX/params.cellSize, my=p.mouseY/params.cellSize; const found=state.animals.find(a=>a.alive && Math.hypot(a.x*params.cellSize-mx*params.cellSize,a.y*params.cellSize-my*params.cellSize)<8);
     if(found){selectedAnimal=found; updateInspector(currentWeather);}
+  }
+
+  function applyBrush(cx,cy,isWater){
+    const size=parseInt(document.getElementById('brushSize').value||'1'); const half=size-1;
+    for(let dy=-half; dy<=half; dy++){
+      for(let dx=-half; dx<=half; dx++){
+        const nx=cx+dx, ny=cy+dy; if(nx<0||ny<0||nx>=params.gridW||ny>=params.gridH) continue; const idx=ny*params.gridW+nx; const c=state.cells[idx]; if(!c) continue;
+        if(isWater){
+          c.river=true; c.shore=false; c.moist=1; c.wet=1; c.terrain='水域'; c.veg={grass:0,poison:0,shrub:0,shrubThorn:0,tree:0};
+        } else {
+          c.river=false; c.shore=false; c.moist=Math.max(0.2,c.moist*0.6); c.wet=Math.max(0.15,c.wet*0.5); c.terrain='陸地';
+          c.veg.grass=Math.max(c.veg.grass,0.05); c.veg.tree=Math.max(c.veg.tree,0.02);
+        }
+      }
+    }
+    state.needsBgRedraw=true;
+  }
+
+  function handleBrush(p){
+    if(!terrainEditMode) return false; if(p.mouseX<0||p.mouseY<0||p.mouseX>canvasW||p.mouseY>canvasH) return false;
+    const isWater=p.mouseButton===p.RIGHT || p.keyIsDown(16);
+    const cx=Math.floor(p.mouseX/params.cellSize); const cy=Math.floor(p.mouseY/params.cellSize);
+    applyBrush(cx,cy,isWater);
+    return true;
+  }
+
+  function updateTerrainEditButton(){
+    const btn=document.getElementById('terrainModeToggle'); if(!btn) return;
+    btn.textContent=terrainEditMode?'地形編集 ON':'地形編集 OFF';
+    btn.classList.toggle('active', terrainEditMode);
   }
   function overlayLabelText(mode){
     const map={base:'地形+植生', river:'河川(流路)', moisture:'水分', vegetation_total:'植生合計', vegetation_grass:'草(密度ヒート)', vegetation_poison:'毒草', vegetation_shrub:'低木', vegetation_shrubThorn:'トゲ低木', vegetation_tree:'樹木', animals_all:'動物(全)', animals_filter:'動物(種別)', density_heatmap:'密度ヒート'}; return map[mode]||mode;
@@ -709,14 +747,26 @@
     if(selectedAnimal){ p.noFill(); p.stroke('#ffea8a'); p.rect(Math.floor(selectedAnimal.x)*cellSize, Math.floor(selectedAnimal.y)*cellSize, cellSize, cellSize); }
     currentWeather=getWeatherSnapshot();
     drawWeatherOverlay(p,currentWeather);
+    drawMiniMap(p);
     // overlay label
     const overlay=state.overlay;
     const label=document.getElementById('layerLabel'); label.textContent=`レイヤー: ${overlayLabelText(overlay)}`; label.innerHTML=`レイヤー: ${overlayLabelText(overlay)}<small>表示中: ${overlayLabelText(overlay)}</small>`;
     drawColorbar(p, overlay);
     updateHud(); updateInspector(currentWeather); updateChart();
   }
+
+  function drawMiniMap(p){
+    const mapW=150, mapH=100; const margin=16; const x=canvasW-mapW-margin; const y=canvasH-mapH-margin;
+    p.push(); p.translate(x,y);
+    p.noStroke(); p.fill(0,160); p.rect(0,0,mapW,mapH,10);
+    const scaleX=mapW/params.gridW, scaleY=mapH/params.gridH;
+    for(const a of state.animals){ if(!a.alive) continue; const sp=state.species.find(s=>s.id===a.speciesId); const px=clampRange(a.x,0,params.gridW); const py=clampRange(a.y,0,params.gridH); const dotX=px*scaleX; const dotY=py*scaleY; p.noStroke(); p.fill(sp.trophic==='carn'?'#ff6b6b':'#6be38f'); p.circle(dotX,dotY,3); }
+    p.noFill(); p.stroke(255); const viewW=Math.min(mapW, canvasW/params.cellSize*scaleX); const viewH=Math.min(mapH, canvasH/params.cellSize*scaleY); p.rect(0,0,viewW,viewH);
+    p.pop();
+  }
   function drawAnimal(p,a){
     const sp=state.species.find(s=>s.id===a.speciesId); const size=sp.trophic==='carn'?9:8; const screenX=a.x*params.cellSize+params.cellSize/2; const screenY=a.y*params.cellSize+params.cellSize/2;
+    if(a.x<0||a.x>params.gridW||a.y<0||a.y>params.gridH) return;
     if(screenX<-16||screenX>canvasW+16||screenY<-16||screenY>canvasH+16) return;
     const baseColor=p.color(sp.color);
     let color=baseColor;
@@ -735,6 +785,7 @@
       p.stroke(a.state===AnimalStates.DRINK?'#6fa4ff':stroke); p.fill(color);
     }
     if(document.getElementById('haloToggle').checked){ if(a.behavior==='graze') {p.noFill(); p.stroke(50,200,120,160); p.circle(0,0,size+6);} else if(a.behavior==='chase'){p.noFill(); p.stroke(255,80,80,180); p.circle(0,0,size+6);} else if(a.behavior==='water'){p.noFill(); p.stroke(80,160,255,200); p.circle(0,0,size+7);} else if(a.behavior==='seek-mate'){p.noStroke(); p.fill(255,180,200,200); p.text('♡',-4,4);} }
+    if(a.emoteTimer>0 && a.emote){ p.textAlign(p.CENTER,p.BOTTOM); p.textSize(18); p.stroke(0); p.strokeWeight(2); p.fill(255); p.text(a.emote,0,-size-4); }
     if(selectedAnimal && selectedAnimal.id===a.id){ p.noFill(); p.stroke(255); p.strokeWeight(2); p.circle(0,0,size+8); }
     p.pop();
   }
@@ -852,6 +903,7 @@
     if(localStorage.getItem(STORAGE_KEY)){ loadSpeciesLocal(true); }
     generateTerrain(document.getElementById('patternSelect').value);
     spawnAnimals();
+    const canvasHost=document.getElementById('canvasHost'); if(canvasHost){ canvasHost.addEventListener('contextmenu',e=>{ if(terrainEditMode) e.preventDefault(); }); }
     startP5();
     bindUI();
     makeDraggable('legendPanel');
@@ -869,6 +921,11 @@
     document.getElementById('boundaryMode').addEventListener('change',e=>{state.boundaryMode=e.target.value;});
     document.getElementById('riverThresh').addEventListener('change',()=>updateRivers(document.getElementById('patternSelect').value));
     document.getElementById('riverWidthCtrl').addEventListener('input',()=>updateRivers(document.getElementById('patternSelect').value));
+    const waterSlider=document.getElementById('waterLevel');
+    if(waterSlider){ waterSlider.addEventListener('input',()=>{ state.waterLevel=parseFloat(waterSlider.value)||0; updateRivers(document.getElementById('patternSelect').value); }); state.waterLevel=parseFloat(waterSlider.value)||0; }
+    const brushSlider=document.getElementById('brushSize'); const brushLabel=document.getElementById('brushSizeValue');
+    if(brushSlider && brushLabel){ const sync=()=>brushLabel.textContent=brushSlider.value; brushSlider.addEventListener('input',sync); sync(); }
+    const terrainBtn=document.getElementById('terrainModeToggle'); if(terrainBtn){ terrainBtn.addEventListener('click',()=>{ terrainEditMode=!terrainEditMode; updateTerrainEditButton(); }); updateTerrainEditButton(); }
     document.getElementById('speciesEditor').addEventListener('input',e=>{
       const kind=e.target.dataset.kind; const id=e.target.dataset.id; if(kind==='param'){ const sp=state.species.find(s=>s.id===id); sp[e.target.dataset.field]=parseFloat(e.target.value); }
     });

@@ -18,6 +18,10 @@
     .swatch.base{background:linear-gradient(135deg,#2c6a2c,#2b3d2b);} .swatch.river{background:#4da7ff;} .swatch.moist{background:linear-gradient(90deg,#2f3a70,#6fa4ff);} .swatch.plant{background:linear-gradient(135deg,#2d5f39,#5ad17f);} .swatch.herb{background:#a7f18c; border:1px solid #f5ffe7; box-shadow:0 0 0 1px #0b0f18;} .swatch.carn{background:#ffad7d; border:1px solid #fff2e7; box-shadow:0 0 0 1px #0b0f18;}
     #mapStage canvas{display:block; width:100%; height:100%;}
     #renderAlert{position:absolute; left:18px; bottom:18px; background:rgba(60,12,12,0.85); border:1px solid rgba(255,120,120,0.4); padding:10px 12px; border-radius:12px; font-weight:700; color:#ffb4b4; z-index:5; display:none;}
+    #terrainToolbar{position:absolute; left:16px; bottom:16px; display:flex; gap:10px; align-items:center; background:rgba(8,12,18,0.88); border:1px solid #1f2c44; border-radius:12px; padding:8px 10px; box-shadow:0 10px 20px rgba(0,0,0,0.4); z-index:8;}
+    #terrainToolbar label{gap:4px;}
+    #terrainToolbar .hint{font-size:11px; color:#9fb0c3;}
+    #terrainToolbar button.active{background:#1f4b2f; border-color:#2d6d42;}
     aside{background:#0b1018; border-left:1px solid #162030; display:flex; flex-direction:column;}
     .panel{padding:12px 14px; border-bottom:1px solid #162030;}
     .panel h2{margin:0 0 6px; font-size:16px; letter-spacing:0.04em;}

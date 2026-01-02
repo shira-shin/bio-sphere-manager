@@ -130,6 +130,7 @@ export default class Animal {
     }
 
     draw() {
+        if (this.pos.x < 0 || this.pos.x > WORLD_WIDTH || this.pos.y < 0 || this.pos.y > WORLD_HEIGHT) return;
         push();
         translate(this.pos.x, this.pos.y);
         
@@ -150,9 +151,12 @@ export default class Animal {
 
         // エモート描画
         if (this.emoteTimer > 0) {
-            textSize(15);
-            textAlign(CENTER);
-            text(this.emote, 0, -this.size - 5);
+            textSize(20);
+            textAlign(CENTER, BOTTOM);
+            stroke(0);
+            strokeWeight(2);
+            fill(255);
+            text(this.emote, 0, -this.size);
         }
 
         pop();
