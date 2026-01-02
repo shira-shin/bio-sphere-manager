@@ -614,7 +614,7 @@
   function updateStabilityMetric(totalPop){ const window=state.stabilityWindow; window.push(totalPop); if(window.length>180) window.shift(); if(window.length>3){ const avg=window.reduce((s,v)=>s+v,0)/window.length; const variance=window.reduce((s,v)=>s+(v-avg)*(v-avg),0)/window.length; state.stability=1/(1+Math.sqrt(variance)); } else { state.stability=0; } }
 
   // --- RENDER ---
-  let p5inst=null; let canvasW=0, canvasH=0; let selectedAnimal=null; let overlayLayer=null; let bgLayer=null; let currentWeather=null;
+  let p5inst=null; let canvasW=0, canvasH=0; let selectedAnimal=null; let overlayLayer=null; let bgLayer=null; let currentWeather=null; let lastMutationMapStep=-1;
   let terrainEditMode=false;
   function startP5(){
     p5inst=new p5(p=>{
@@ -781,6 +781,7 @@
     const label=document.getElementById('layerLabel'); label.textContent=`レイヤー: ${overlayLabelText(overlay)}`; label.innerHTML=`レイヤー: ${overlayLabelText(overlay)}<small>表示中: ${overlayLabelText(overlay)}</small>`;
     drawColorbar(p, overlay);
     updateHud(); updateInspector(currentWeather); updateChart();
+    if(lastMutationMapStep!==state.step){ renderMutationMap(); lastMutationMapStep=state.step; }
   }
 
   function drawMiniMap(p){
@@ -866,6 +867,61 @@
       <div class="inspector-row"><span>気候</span><span>${weatherIcon} ${temperature.toFixed(1)}°C</span></div>
       <div class="inspector-row genetics"><span>DNA</span><span>速度:${speed.toFixed(2)}  視野:${vision.toFixed(2)}  代謝:${metabolism.toFixed(2)}  渇き耐性:${selectedAnimal.genes.g_thirstTol.toFixed(2)}  空腹耐性:${selectedAnimal.genes.g_starveTol.toFixed(2)}</span></div>
     `;
+  }
+  const mutationGeneList=[
+    {key:'g_speed', label:'速度'},
+    {key:'g_vision', label:'視野'},
+    {key:'g_metabolism', label:'代謝'},
+    {key:'g_fertility', label:'繁殖'},
+    {key:'g_thirstTol', label:'渇き耐性'},
+    {key:'g_starveTol', label:'飢餓耐性'},
+  ];
+  function summarizeMutations(){
+    const baseline=defaultGenes();
+    const alive=state.animals.filter(a=>a.alive);
+    const map=new Map();
+    alive.forEach(a=>{
+      const entry=map.get(a.speciesId) || {count:0, sums:{}};
+      entry.count++;
+      mutationGeneList.forEach(g=>{ entry.sums[g.key]=(entry.sums[g.key]||0)+(a.genes[g.key]??baseline[g.key]??1); });
+      map.set(a.speciesId, entry);
+    });
+    return state.species.map(sp=>{
+      const entry=map.get(sp.id); if(!entry||entry.count===0) return {species:sp, count:0, averages:null};
+      const averages={}; mutationGeneList.forEach(g=>{ averages[g.key]=(entry.sums[g.key]||0)/entry.count; });
+      return {species:sp, count:entry.count, averages};
+    });
+  }
+  function mutationColor(delta){
+    if(delta>0.35) return '#f6b26b';
+    if(delta>0.15) return '#d6e96b';
+    if(delta<-0.2) return '#6ca7ff';
+    if(delta<-0.08) return '#8bc4ff';
+    return '#68e38f';
+  }
+  function renderMutationMap(){
+    const host=document.getElementById('mutationMap'); if(!host) return;
+    const summary=summarizeMutations();
+    if(!summary.length){ host.textContent='データなし'; return; }
+    const hasLiving=summary.some(s=>s.count>0);
+    if(!hasLiving){ host.textContent='生存個体がいません'; return; }
+    host.innerHTML='';
+    summary.forEach(item=>{
+      if(!item.averages) return;
+      const row=document.createElement('div'); row.className='mutation-row';
+      const head=document.createElement('div'); head.className='mutation-head';
+      head.innerHTML=`<span>${item.species.name}</span><span>${item.count} 個体</span>`;
+      const bars=document.createElement('div'); bars.className='gene-bars';
+      mutationGeneList.forEach(g=>{
+        const val=item.averages[g.key]; if(!Number.isFinite(val)) return;
+        const delta=val-1; const pct=Math.round(delta*100);
+        const bar=document.createElement('div'); bar.className='gene-bar';
+        bar.style.setProperty('--bar-color', mutationColor(delta));
+        bar.innerHTML=`<strong>${g.label}</strong><span>${val.toFixed(2)} (${pct>=0?'+':''}${pct}%)</span>`;
+        bars.appendChild(bar);
+      });
+      row.appendChild(head); row.appendChild(bars); host.appendChild(row);
+    });
   }
   function logMsg(msg){ const logBox=document.getElementById('logBox'); const t=`[${state.step}] ${msg}`; state.events.push({type:'log', msg}); logBox.textContent += t+'\n'; logBox.scrollTop=logBox.scrollHeight; }
   function updateChart(){
