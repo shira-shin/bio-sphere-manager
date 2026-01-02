@@ -1,4 +1,5 @@
   import {makeDraggable} from './ui/Draggable.js';
+  import Vegetation from './Vegetation.js';
 
   // --- UTILITIES ---
   function createRng(seedStr){
@@ -23,6 +24,32 @@
   const safeNorm=(x,y)=>{const d=Math.hypot(x,y); if(!Number.isFinite(d) || d<1e-9) return null; return d;};
   const toId=str=>str.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')||`sp_${Date.now()}`;
   const parseDiet=str=>{ const [g,p,s,t]=str.split(',').map(v=>parseFloat(v)||0); return {grass:clamp01(g||0), poison:clamp01(p||0), shrub:clamp01(s||0), tree:clamp01(t||0)}; };
+  function ensureP5Globals(p){
+    if(!p) return;
+    window.width=p.width; window.height=p.height;
+    window.TWO_PI=window.TWO_PI??Math.PI*2;
+    if(typeof window.random!=='function') window.random=(min,max)=>{
+      if(typeof max==='undefined'){ return typeof min==='undefined'?p.random():p.random(min); }
+      return p.random(min,max);
+    };
+    if(typeof window.constrain!=='function') window.constrain=(n,low,high)=>Math.min(Math.max(n,low),high);
+    if(typeof window.map!=='function') window.map=(n,a,b,c,d)=>c+(d-c)*((n-a)/(b-a));
+    if(typeof window.cos!=='function') window.cos=Math.cos;
+    if(typeof window.sin!=='function') window.sin=Math.sin;
+    if(typeof window.createVector!=='function' && p.createVector) window.createVector=p.createVector.bind(p);
+    if(typeof window.noStroke!=='function') window.noStroke=p.noStroke.bind(p);
+    if(typeof window.fill!=='function') window.fill=p.fill.bind(p);
+    if(typeof window.ellipse!=='function') window.ellipse=p.ellipse.bind(p);
+    if(typeof window.push!=='function') window.push=p.push.bind(p);
+    if(typeof window.pop!=='function') window.pop=p.pop.bind(p);
+    if(typeof window.translate!=='function') window.translate=p.translate.bind(p);
+    if(typeof window.rotate!=='function') window.rotate=p.rotate.bind(p);
+    if(typeof window.triangle!=='function') window.triangle=p.triangle.bind(p);
+    if(typeof window.text!=='function') window.text=p.text.bind(p);
+    if(typeof window.textSize!=='function') window.textSize=p.textSize.bind(p);
+    if(typeof window.textAlign!=='function') window.textAlign=p.textAlign.bind(p);
+    if(typeof window.colorMode!=='function') window.colorMode=p.colorMode.bind(p);
+  }
   const randomPositionWithinMargin=(rng, w, h)=>{
     const margin=Math.max(0.5, Math.min(w, h)*0.05);
     const usableW=Math.max(0, w-margin*2);
@@ -64,6 +91,7 @@
   const params={gridW:96, gridH:64, cellSize:8};
   const POPULATION_LIMIT=2000;
   const VEG_UPDATE_INTERVAL=30;
+  let plants=[];
   const baseSpecies=[
     {id:'hare', name:'ウサギ', trophic:'herb', color:'#a7f18c', shape:'ellipse', baseSpeed:1.25, vision:5, metabolism:0.75, waterNeed:0.6, fertility:0.7, reproThreshold:0.68, reproCost:0.28, socialMode:'herd', preyList:[],
       poisonTolerance:0.4, thornHandling:0.4, dietPreference:{grass:0.72,poison:0.1,shrub:0.13,tree:0.05}},
@@ -436,12 +464,37 @@
     return new Animal(sp, rng, state.idCounter++, x, y);
   }
 
+  // --- VEGETATION ENTITIES ---
+  function seedPlants(count=80){
+    plants=[];
+    const w=width||params.gridW*params.cellSize; const h=height||params.gridH*params.cellSize;
+    for(let i=0;i<count;i++){
+      plants.push(new Vegetation(random(w), random(h)));
+    }
+  }
+
+  function updatePlants(){
+    const newborns=[];
+    plants.forEach(plant=>{
+      plant.update();
+      const child=plant.reproduce();
+      if(child) newborns.push(child);
+    });
+    plants=plants.filter(p=>p.energy>0);
+    plants.push(...newborns);
+  }
+
+  function drawPlants(){
+    plants.forEach(p=>p.draw());
+  }
+
   // --- ENGINE ---
   
   function stepSimulation(){
     let births=0; let deaths=0;
     const rng=state.rng; const w=params.gridW, h=params.gridH; state.events=[]; state.step++; state.seasonCounter++;
     state.movedAgents=0; state.nanAgents=0; state.vegGrowth=0; state.vegConsumed=0;
+    updatePlants();
     state.animalGrid=createAnimalGrid(); state.aliveCount=0; state.animals.forEach(a=>{ if(a.alive){ registerAnimalToGrid(a,state); state.aliveCount++; } });
     const seasonLen=state.season==='雨季'?uiParams.rainyLen:uiParams.dryLen; if(state.seasonCounter>seasonLen){state.season=state.season==='雨季'?'乾季':'雨季'; state.seasonCounter=0; logMsg(`季節が${state.season}に切替`);} 
     const moistGain=state.season==='雨季'?0.05:0.015; const moistLoss=state.season==='雨季'?0.008:0.03;
@@ -531,9 +584,9 @@
   let p5inst=null; let canvasW=0, canvasH=0; let selected=null; let overlayLayer=null; let bgLayer=null;
   function startP5(){
     p5inst=new p5(p=>{
-      p.setup=()=>{const host=document.getElementById('canvasHost'); const w=host.clientWidth, h=host.clientHeight; canvasW=w; canvasH=h; p.createCanvas(w,h); overlayLayer=p.createGraphics(w,h); bgLayer=p.createGraphics(w,h); overlayLayer.noStroke(); bgLayer.noStroke(); state.needsBgRedraw=true;};
-      p.windowResized=()=>{const host=document.getElementById('canvasHost'); canvasW=host.clientWidth; canvasH=host.clientHeight; p.resizeCanvas(canvasW,canvasH); if(overlayLayer){overlayLayer.resizeCanvas(canvasW,canvasH); overlayLayer.noStroke();} if(bgLayer){bgLayer.resizeCanvas(canvasW,canvasH); bgLayer.noStroke(); state.needsBgRedraw=true;}};
-      p.draw=()=>{try{if(state.running){for(let i=0;i<parseInt(document.getElementById('speedSelect').value);i++) stepSimulation();} render(p);}catch(err){state.lastError=err; document.getElementById('renderAlert').style.display='block'; console.error(err);} }; 
+      p.setup=()=>{const host=document.getElementById('canvasHost'); const w=host.clientWidth, h=host.clientHeight; canvasW=w; canvasH=h; p.createCanvas(w,h); overlayLayer=p.createGraphics(w,h); bgLayer=p.createGraphics(w,h); overlayLayer.noStroke(); bgLayer.noStroke(); state.needsBgRedraw=true; ensureP5Globals(p); if(plants.length===0) seedPlants();};
+      p.windowResized=()=>{const host=document.getElementById('canvasHost'); canvasW=host.clientWidth; canvasH=host.clientHeight; p.resizeCanvas(canvasW,canvasH); if(overlayLayer){overlayLayer.resizeCanvas(canvasW,canvasH); overlayLayer.noStroke();} if(bgLayer){bgLayer.resizeCanvas(canvasW,canvasH); bgLayer.noStroke(); state.needsBgRedraw=true;} ensureP5Globals(p);};
+      p.draw=()=>{try{ensureP5Globals(p); if(state.running){for(let i=0;i<parseInt(document.getElementById('speedSelect').value);i++) stepSimulation();} render(p);}catch(err){state.lastError=err; document.getElementById('renderAlert').style.display='block'; console.error(err);} };
       p.mouseMoved=()=>{handleHover(p);};
       p.mousePressed=()=>{handleSelect(p);};
     },'canvasHost');
@@ -610,6 +663,7 @@
     if(bgLayer) p.image(bgLayer,0,0);
     if(dimTerrain && activeOverlay.startsWith('vegetation')){ p.fill(5,9,16,130); p.noStroke(); p.rect(0,0,canvasW,canvasH); }
     drawOverlay(p, state.overlay, parseFloat(document.getElementById('overlayAlpha').value||'0.6'));
+    drawPlants();
     // animals
     for(const a of state.animals){ if(!a.alive) continue; drawAnimal(p,a); }
     // trails
@@ -739,8 +793,8 @@
   }
   function bindUI(){
     document.querySelectorAll('button[data-action]').forEach(btn=>btn.addEventListener('click',()=>{
-      const act=btn.dataset.action; if(act==='start') state.running=true; else if(act==='stop') state.running=false; else if(act==='reset'){ state=createState(document.getElementById('seedInput').value); generateTerrain(document.getElementById('patternSelect').value); spawnAnimals(); selected=null; }
-      else if(act==='regen'){ state.seed=document.getElementById('seedInput').value; state.rng=createRng(state.seed); generateTerrain(document.getElementById('patternSelect').value); }
+      const act=btn.dataset.action; if(act==='start') state.running=true; else if(act==='stop') state.running=false; else if(act==='reset'){ state=createState(document.getElementById('seedInput').value); generateTerrain(document.getElementById('patternSelect').value); spawnAnimals(); selected=null; seedPlants(); }
+      else if(act==='regen'){ state.seed=document.getElementById('seedInput').value; state.rng=createRng(state.seed); generateTerrain(document.getElementById('patternSelect').value); seedPlants(); }
       else if(act==='download-csv') downloadCsv(); else if(act==='run-test') runTest(); else if(act==='self-test') runSelfTest(); else if(act==='headless-3000') runHeadless3000();
       else if(act==='add-species') addCustomSpeciesFromForm(); else if(act==='export-species') exportSpeciesJSON(); else if(act==='import-species') importSpeciesJSON(); else if(act==='save-species') saveSpeciesLocal(); else if(act==='load-species') loadSpeciesLocal();
     }));
