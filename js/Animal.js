@@ -10,7 +10,11 @@ export default class Animal {
         this.size = this.dna.genes.size * 10;
         this.maxSpeed = this.dna.genes.speed * 2;
         this.sensorRange = this.dna.genes.sense;
-        
+        this.coldTolerance = this.dna.genes.cold_tolerance;
+        this.heatTolerance = this.dna.genes.heat_tolerance;
+        this.waterDependency = this.dna.genes.water_dependency;
+        this.optimalTemp = 22 + (this.heatTolerance - this.coldTolerance) * 8; // 快適温度
+
         // 肉食/草食の決定（閾値0.5）
         this.isCarnivore = this.dna.genes.aggression > 0.5;
 
@@ -18,21 +22,23 @@ export default class Animal {
         this.acc = createVector(0, 0);
         this.energy = 100;
         this.maxEnergy = 200 * this.dna.genes.size; // 体が大きいほどエネルギー容量大
+        this.thirst = 0; // 渇き 0-200
         this.age = 0;
         this.dead = false;
-        
+        this.lastEnergy = this.energy;
+
         // エモート管理
         this.emote = "";
         this.emoteTimer = 0;
     }
 
     // エモート表示メソッド
-    showEmote(icon) {
+    showEmote(icon, duration = 60) {
         this.emote = icon;
-        this.emoteTimer = 60; // 1秒間表示
+        this.emoteTimer = duration; // 1秒間表示が基準
     }
 
-    update() {
+    update(env = { temperature: 22, humidity: 0.6, weather: 'clear', isNight: false }) {
         // ... (移動ロジックは既存と同じ) ...
         this.vel.add(this.acc);
         this.vel.limit(this.maxSpeed);
@@ -42,17 +48,52 @@ export default class Animal {
         // 寿命とエネルギー消費
         this.age++;
         // 代謝コスト：体が大きく、速いほど燃費が悪い（リアルな制約）
-        let cost = (this.size * this.size * this.maxSpeed) * 0.001; 
+        let cost = (this.size * this.size * this.maxSpeed) * 0.001;
         this.energy -= cost;
+
+        // --- 環境適応ロジック ---
+        const tempDiff = env.temperature - this.optimalTemp;
+        const tolerance = tempDiff > 0 ? this.heatTolerance : this.coldTolerance;
+        const adjusted = Math.max(0, Math.abs(tempDiff) - tolerance * 5);
+        const envDamage = 0.01 * adjusted * adjusted;
+        if (envDamage > 0.05 && this.emoteTimer === 0) {
+            this.energy -= envDamage;
+            const icon = tempDiff > 0 ? "🥵" : tempDiff < 0 ? "🥶" : "💢";
+            this.showEmote(icon, 45);
+        } else if (envDamage > 0) {
+            this.energy -= envDamage;
+        }
+
+        // 水分消費：乾燥や晴天で渇き上昇
+        const dryness = 1 - constrain(env.humidity, 0, 1);
+        const weatherBoost = env.weather === 'sunny' ? 1.4 : 1.0;
+        this.thirst += dryness * this.waterDependency * 2 * weatherBoost;
+        // 湿潤環境では少しずつ回復
+        if (dryness < 0.2) {
+            this.thirst -= (0.2 - dryness) * 2;
+        }
+        if (env.isNight && this.thirst > 20 && this.energy > 20 && this.emoteTimer === 0) {
+            this.showEmote("💤", 90);
+        }
+        if (this.thirst > 100) {
+            this.energy -= (this.thirst - 100) * 0.02;
+        }
+        this.thirst = constrain(this.thirst, 0, 200);
 
         if (this.energy <= 0) {
             this.dead = true;
-            this.showEmote("💀"); // 餓死
+            this.showEmote("💀", 120); // 餓死
         }
-        
+
         // エモートタイマー
         if (this.emoteTimer > 0) this.emoteTimer--;
-        
+
+        // 食事などでエネルギーが増えた時のエモート
+        if (this.energy > this.lastEnergy + 1 && this.emoteTimer === 0) {
+            this.showEmote("🍖", 45);
+        }
+        this.lastEnergy = this.energy;
+
         this.edges();
     }
 
