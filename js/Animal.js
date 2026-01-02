@@ -44,6 +44,10 @@ export default class Animal {
     }
 
     update(env = { temperature: 22, humidity: 0.6, weather: 'clear', isNight: false }) {
+        if (!Number.isFinite(this.pos.x) || !Number.isFinite(this.pos.y)) {
+            this.dead = true;
+            return;
+        }
         // --- 環境による移動と感覚の調整 ---
         const weather = env.weather || 'clear';
         const isNight = !!env.isNight;
@@ -127,6 +131,14 @@ export default class Animal {
         this.lastEnergy = this.energy;
 
         this.edges();
+
+        if (!Number.isFinite(this.vel.x) || !Number.isFinite(this.vel.y)) {
+            this.dead = true;
+            return;
+        }
+        if (this.pos.x < 0 || this.pos.x > WORLD_WIDTH || this.pos.y < 0 || this.pos.y > WORLD_HEIGHT) {
+            this.dead = true;
+        }
     }
 
     interact(other) {
@@ -134,16 +146,17 @@ export default class Animal {
         if (this.isCarnivore && !other.isCarnivore) {
             // 捕食
             if (p5.Vector.dist(this.pos, other.pos) < this.size) {
+                this.showEmote("⚔️", 45);
                 this.energy += other.energy * 0.8; // 食べる
                 other.dead = true;
                 other.showEmote("💀");
-                this.showEmote("🍖"); // ごちそう
+                this.showEmote("🍖", 75); // ごちそう
             }
         } else if (this.isCarnivore && other.isCarnivore) {
             // 縄張り争い（喧嘩）
             if (p5.Vector.dist(this.pos, other.pos) < this.size) {
-                this.showEmote("⚔️"); 
-                other.showEmote("⚔️");
+                this.showEmote("⚔️", 45);
+                other.showEmote("⚔️", 45);
                 // 弱い方が弾き飛ばされる簡易処理
                 let force = p5.Vector.sub(this.pos, other.pos).setMag(5);
                 this.applyForce(force);
@@ -181,17 +194,25 @@ export default class Animal {
             ellipse(0, 0, this.size, this.size);
         }
 
-        // エモート描画
-        const mouseAvailable = typeof mouseX !== 'undefined' && typeof mouseY !== 'undefined';
-        const mouseDist = mouseAvailable ? dist(mouseX, mouseY, this.pos.x, this.pos.y) : Infinity;
-        const showEmote = this.emoteTimer > 0 && (mouseDist <= 100 || zoomLevel > 1.1);
-        if (showEmote) {
-            textSize(20);
-            textAlign(CENTER, BOTTOM);
-            stroke(0);
-            strokeWeight(2);
-            fill(255);
-            text(this.emote, 0, -this.size);
+        // エモート描画 (低ズーム時はスキップ)
+        if (zoomLevel > 0.85) {
+            const mouseAvailable = typeof mouseX !== 'undefined' && typeof mouseY !== 'undefined';
+            const mouseDist = mouseAvailable ? dist(mouseX, mouseY, this.pos.x, this.pos.y) : Infinity;
+            const showEmote = this.emoteTimer > 0 && (mouseDist <= 80 || zoomLevel > 1.2);
+            if (showEmote) {
+                const bubbleSize = Math.max(10, this.size * 0.9);
+                push();
+                noStroke();
+                fill(255, 240);
+                ellipse(0, -this.size * 0.9, bubbleSize);
+                if (zoomLevel > 1.25) {
+                    textSize(18);
+                    textAlign(CENTER, CENTER);
+                    fill(30);
+                    text(this.emote, 0, -this.size * 0.9);
+                }
+                pop();
+            }
         }
 
         pop();
@@ -200,21 +221,23 @@ export default class Animal {
     
     applyForce(force) { this.acc.add(force); }
     edges() {
-        // 画面端処理: ワールド境界内に閉じ込める
+        // 画面端処理: 反射 + 反発で壁張り付き防止
+        const restitution = 0.9;
+        const push = 0.2;
         if (this.pos.x < 0) {
-            this.pos.x = 0;
-            this.vel.x *= -1;
+            this.pos.x = push;
+            this.vel.x *= -restitution;
         } else if (this.pos.x > WORLD_WIDTH) {
-            this.pos.x = WORLD_WIDTH;
-            this.vel.x *= -1;
+            this.pos.x = WORLD_WIDTH - push;
+            this.vel.x *= -restitution;
         }
 
         if (this.pos.y < 0) {
-            this.pos.y = 0;
-            this.vel.y *= -1;
+            this.pos.y = push;
+            this.vel.y *= -restitution;
         } else if (this.pos.y > WORLD_HEIGHT) {
-            this.pos.y = WORLD_HEIGHT;
-            this.vel.y *= -1;
+            this.pos.y = WORLD_HEIGHT - push;
+            this.vel.y *= -restitution;
         }
     }
 }
