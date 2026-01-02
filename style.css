@@ -46,6 +46,15 @@
     .draggable-panel{position:absolute; cursor:move; top:76px; left:0; user-select:none; touch-action:none;}
     .draggable-panel h3{cursor:move;}
 
+    .mutation-map{display:grid; gap:8px; background:#0f1622; border:1px solid #1b283a; border-radius:12px; padding:10px;}
+    .mutation-row{display:grid; gap:6px; grid-template-columns:1fr; background:#0b111d; border:1px solid #1b283a; border-radius:10px; padding:8px 10px;}
+    .mutation-head{display:flex; justify-content:space-between; align-items:center; font-weight:700; color:#dce8ff;}
+    .gene-bars{display:grid; gap:6px; grid-template-columns:repeat(auto-fit,minmax(150px,1fr));}
+    .gene-bar{position:relative; padding:6px 8px; border-radius:8px; background:linear-gradient(90deg, rgba(70,130,200,0.14), rgba(120,210,140,0.18)); border:1px solid #1c2a3f; color:#cde2ff; font-size:12px;}
+    .gene-bar::after{content:''; position:absolute; left:8px; right:8px; bottom:6px; height:4px; border-radius:999px; background:var(--bar-color, #5ad17f); opacity:0.75;}
+    .gene-bar strong{display:block; font-size:13px; color:#e8f3ff; margin-bottom:2px;}
+    .mut-hint{margin-top:6px; font-size:12px; color:#8fa6c8;}
+
     #inspector.inspector-panel{margin-top:8px; border:1px solid #1f2c44; background:#0c111d; border-radius:6px; padding:10px; color:#dfe9ff; font-size:13px; display:grid; gap:6px;}
     .inspector-heading{font-weight:700; color:#ffffff; letter-spacing:0.02em;}
     .inspector-heading small{color:#8ba0c5; font-weight:400;}
