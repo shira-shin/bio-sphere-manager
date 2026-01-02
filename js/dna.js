@@ -21,8 +21,8 @@ export default class DNA {
     // 交叉と突然変異（親の遺伝子をベースに少しずらす）
     copy() {
         let newGenes = { ...this.genes };
-        const mutationRate = 0.05; // 5%の確率で大きく変化
-        const drift = 0.1;         // 通常の微細な変化量
+        const mutationRate = 0.2; // 20%の確率で大きく変化
+        const drift = 0.18;       // 通常の微細な変化量を強める
 
         for (let key in newGenes) {
             // 微細な変化（ドリフト）
@@ -30,7 +30,7 @@ export default class DNA {
 
             // 突然変異（大幅な変化）
             if (random() < mutationRate) {
-                newGenes[key] += random(-drift * 5, drift * 5);
+                newGenes[key] += random(-drift * 6, drift * 6);
             }
         }
 

@@ -217,7 +217,10 @@
   function spawnAnimals(){
     state.animals=[]; const counts={}; document.querySelectorAll('#speciesEditor input[data-kind="count"]').forEach(inp=>counts[inp.dataset.id]=parseInt(inp.value||'0'));
     const rng=state.rng; state.species.forEach(sp=>{
-      const n=counts[sp.id]??20; for(let i=0;i<n;i++){state.animals.push(createAnimal(sp, rng));}
+      const n=counts[sp.id]??20; for(let i=0;i<n;i++){
+        const seedGenes=createSeedGenes(rng);
+        state.animals.push(createAnimal(sp, rng, undefined, undefined, seedGenes));
+      }
     });
     state.idCounter=state.animals.length;
     state.animalGrid=createAnimalGrid();
@@ -465,8 +468,17 @@
     }
   }
 
-  function createAnimal(sp, rng, x, y){
-    return new Animal(sp, rng, state.idCounter++, x, y);
+  function createSeedGenes(rng){
+    const base=defaultGenes();
+    const jitter=()=>clampRange(1 + (rng()-0.5)*0.8,0.35,1.65);
+    Object.keys(base).forEach(k=>{ base[k]=jitter(); });
+    return base;
+  }
+
+  function createAnimal(sp, rng, x, y, genes){
+    const animal=new Animal(sp, rng, state.idCounter++, x, y);
+    if(genes){ animal.genes={...genes}; }
+    return animal;
   }
 
   // --- VEGETATION ENTITIES ---
@@ -572,7 +584,23 @@
   }
   function speciesCounts(){ const counts={}; state.species.forEach(sp=>counts[sp.id]=0); state.animals.forEach(a=>{if(a.alive) counts[a.speciesId]++;}); return counts; }
   function computeShannon(counts){ const total=Object.values(counts).reduce((s,v)=>s+v,0); if(total===0) return 0; let h=0; Object.values(counts).forEach(v=>{ if(v>0){ const p=v/total; h-=p*Math.log(p); } }); return h/Math.log(state.species.length||1); }
-  function computeGeneticDiversity(){ const keys=['g_speed','g_vision','g_metabolism','g_fertility','g_thirstTol','g_starveTol']; let totalVar=0, speciesUsed=0; state.species.forEach(sp=>{ const list=state.animals.filter(a=>a.alive && a.speciesId===sp.id); if(list.length<2) return; const means={}; keys.forEach(k=>means[k]=0); list.forEach(a=>keys.forEach(k=>means[k]+=a.genes[k]||1)); keys.forEach(k=>means[k]/=list.length); let varSum=0; list.forEach(a=>keys.forEach(k=>{ const d=(a.genes[k]||1)-means[k]; varSum+=d*d; })); totalVar+=varSum/(list.length*keys.length); speciesUsed++; }); return speciesUsed?totalVar/speciesUsed:0; }
+  function computeGeneticDiversity(){
+    const keys=['g_speed','g_vision','g_metabolism','g_fertility','g_thirstTol','g_starveTol'];
+    let totalStd=0, speciesUsed=0;
+    const calcStd=vals=>{ if(vals.length<2) return 0; const mean=vals.reduce((s,v)=>s+v,0)/vals.length; const variance=vals.reduce((s,v)=>s+(v-mean)*(v-mean),0)/(vals.length-1); return Math.sqrt(variance); };
+    state.species.forEach(sp=>{
+      const list=state.animals.filter(a=>a.alive && a.speciesId===sp.id);
+      if(list.length<2) return;
+      let speciesStd=0;
+      keys.forEach(k=>{
+        const vals=list.map(a=>clampRange(a.genes[k]||1,0,2));
+        speciesStd+=calcStd(vals);
+      });
+      totalStd+=speciesStd/keys.length;
+      speciesUsed++;
+    });
+    return speciesUsed?totalStd/speciesUsed:0;
+  }
   function computeTraitSpread(){
     const living=state.animals.filter(a=>a.alive);
     if(living.length===0) return {speed:0, vision:0, metabolism:0};

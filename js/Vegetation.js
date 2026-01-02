@@ -20,6 +20,10 @@ export default class Vegetation {
     }
 
     update(env = { moisture: 0.5, temperature: 22 }) {
+        if (!Number.isFinite(this.pos.x) || !Number.isFinite(this.pos.y) || this.pos.x < 0 || this.pos.x > WORLD_WIDTH || this.pos.y < 0 || this.pos.y > WORLD_HEIGHT) {
+            this.energy = 0;
+            return;
+        }
         this.age++;
         const moisture = constrain(env.moisture, 0, 1);
         const tempFactor = this.tempFactor(env.temperature ?? 22);
@@ -67,6 +71,7 @@ export default class Vegetation {
     }
 
     draw() {
+        if (this.pos.x < 0 || this.pos.x > WORLD_WIDTH || this.pos.y < 0 || this.pos.y > WORLD_HEIGHT) return;
         noStroke();
         // 成長度合いに応じてサイズと色が変わる
         let size = map(this.energy, 0, this.maxEnergy, 2, 12);
