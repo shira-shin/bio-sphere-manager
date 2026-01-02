@@ -9,7 +9,9 @@ export default class Animal {
         // --- 遺伝子からの能力値反映 ---
         this.size = this.dna.genes.size * 10;
         this.maxSpeed = this.dna.genes.speed * 2;
-        this.sensorRange = this.dna.genes.sense;
+        this.baseSensorRange = this.dna.genes.sense;
+        this.sensorRange = this.baseSensorRange;
+        this.nocturnal = !!this.dna.genes.nocturnal;
         this.coldTolerance = this.dna.genes.cold_tolerance;
         this.heatTolerance = this.dna.genes.heat_tolerance;
         this.waterDependency = this.dna.genes.water_dependency;
@@ -27,6 +29,9 @@ export default class Animal {
         this.dead = false;
         this.lastEnergy = this.energy;
 
+        // 状態管理
+        this.isSleeping = false;
+
         // エモート管理
         this.emote = "";
         this.emoteTimer = 0;
@@ -39,9 +44,35 @@ export default class Animal {
     }
 
     update(env = { temperature: 22, humidity: 0.6, weather: 'clear', isNight: false }) {
+        // --- 環境による移動と感覚の調整 ---
+        const weather = env.weather || 'clear';
+        const isNight = !!env.isNight;
+        const nightVisionFactor = isNight && !this.nocturnal ? 0.5 : 1;
+        const weatherVisionFactor = weather === 'storm' ? 0.25 : 1;
+        this.sensorRange = this.baseSensorRange * nightVisionFactor * weatherVisionFactor;
+
+        // 夜間の睡眠（昼行性のみ）
+        if (isNight && !this.nocturnal) {
+            if (!this.isSleeping && random() < 0.01) {
+                this.isSleeping = true;
+                this.showEmote("💤", 90);
+            }
+        } else if (this.isSleeping) {
+            this.isSleeping = false;
+        }
+
+        // 天候による速度低下
+        let speedFactor = 1;
+        if (weather === 'rain') speedFactor *= 0.7;
+        if (weather === 'storm') speedFactor *= 0.5;
+        if (this.isSleeping) speedFactor *= 0.2;
+
         // ... (移動ロジックは既存と同じ) ...
         this.vel.add(this.acc);
-        this.vel.limit(this.maxSpeed);
+        this.vel.limit(this.maxSpeed * speedFactor);
+        if (this.isSleeping) {
+            this.vel.mult(0);
+        }
         this.pos.add(this.vel);
         this.acc.mult(0);
 
@@ -49,6 +80,7 @@ export default class Animal {
         this.age++;
         // 代謝コスト：体が大きく、速いほど燃費が悪い（リアルな制約）
         let cost = (this.size * this.size * this.maxSpeed) * 0.001;
+        if (this.isSleeping) cost *= 0.2;
         this.energy -= cost;
 
         // --- 環境適応ロジック ---
@@ -129,7 +161,7 @@ export default class Animal {
         return null;
     }
 
-    draw() {
+    draw(zoomLevel = 1) {
         if (this.pos.x < 0 || this.pos.x > WORLD_WIDTH || this.pos.y < 0 || this.pos.y > WORLD_HEIGHT) return;
         push();
         translate(this.pos.x, this.pos.y);
@@ -150,7 +182,10 @@ export default class Animal {
         }
 
         // エモート描画
-        if (this.emoteTimer > 0) {
+        const mouseAvailable = typeof mouseX !== 'undefined' && typeof mouseY !== 'undefined';
+        const mouseDist = mouseAvailable ? dist(mouseX, mouseY, this.pos.x, this.pos.y) : Infinity;
+        const showEmote = this.emoteTimer > 0 && (mouseDist <= 100 || zoomLevel > 1.1);
+        if (showEmote) {
             textSize(20);
             textAlign(CENTER, BOTTOM);
             stroke(0);
