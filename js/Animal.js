@@ -1,5 +1,5 @@
 import DNA from './dna.js';
-import { STATES } from './constants.js';
+import { STATES, WORLD_WIDTH, WORLD_HEIGHT } from './constants.js';
 
 export default class Animal {
     constructor(x, y, dna = null) {
@@ -160,5 +160,22 @@ export default class Animal {
     }
     
     applyForce(force) { this.acc.add(force); }
-    edges() { /* 画面端処理 */ }
+    edges() {
+        // 画面端処理: ワールド境界内に閉じ込める
+        if (this.pos.x < 0) {
+            this.pos.x = 0;
+            this.vel.x *= -1;
+        } else if (this.pos.x > WORLD_WIDTH) {
+            this.pos.x = WORLD_WIDTH;
+            this.vel.x *= -1;
+        }
+
+        if (this.pos.y < 0) {
+            this.pos.y = 0;
+            this.vel.y *= -1;
+        } else if (this.pos.y > WORLD_HEIGHT) {
+            this.pos.y = WORLD_HEIGHT;
+            this.vel.y *= -1;
+        }
+    }
 }
