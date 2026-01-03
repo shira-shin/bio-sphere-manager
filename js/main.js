@@ -17,7 +17,7 @@
     return {noise};
   }
   const clamp01=v=>Math.max(0,Math.min(1,v));
-  const MOVEMENT_SCALE=0.82; // 全体の移動速度を抑えてマップの広さを感じやすくする
+  const MOVEMENT_SCALE=0.72; // 全体の移動速度を抑えてマップの広さを感じやすくする
   const clampRange=(v,min,max)=>{ if(!Number.isFinite(v)) return (min+max)/2; return Math.max(min, Math.min(max, v)); };
   const lerp=(a,b,t)=>a+(b-a)*t;
   const wrap=(v,max)=>{ if(!Number.isFinite(v)) return 0; return ((v%max)+max)%max; };
@@ -120,8 +120,8 @@
         p.noFill(); p.stroke(p.red(col), p.green(col), p.blue(col), alpha*180); p.strokeWeight(1.2);
         p.circle(this.x*cellSize, this.y*cellSize, this.size*cellSize*0.6);
       } else if(this.type==='trail'){
-        p.noStroke(); p.fill(p.red(col), p.green(col), p.blue(col), alpha*140);
-        p.ellipse(this.x*cellSize, this.y*cellSize, this.size, this.size*0.6);
+        p.noStroke(); p.fill(p.red(col), p.green(col), p.blue(col), alpha*90);
+        p.ellipse(this.x*cellSize, this.y*cellSize, this.size*0.8, this.size*0.48);
       } else if(this.type==='dust'){
         p.noStroke(); p.fill(p.red(col), p.green(col), p.blue(col), alpha*120);
         p.circle(this.x*cellSize, this.y*cellSize, this.size*0.9);
@@ -146,10 +146,10 @@
     ripple({x,y,color='#7ecbff',life=28}){
       this.particles.push(new Particle({x,y,vx:0,vy:0,size:1.4,life,color,type:'ring'}));
     }
-    trail({x,y,color='#fff',count=6,spread=0.8,type='trail'}){
+    trail({x,y,color='#fff',count=6,spread=0.8,type='trail',life=36}){
       for(let i=0;i<count;i++){
         const ang=Math.random()*Math.PI*2; const mag=(0.15+Math.random()*0.4)*spread;
-        this.particles.push(new Particle({x,y,vx:Math.cos(ang)*mag, vy:Math.sin(ang)*mag, size:5+Math.random()*6, life:25+Math.random()*25, color, type}));
+        this.particles.push(new Particle({x,y,vx:Math.cos(ang)*mag, vy:Math.sin(ang)*mag, size:5+Math.random()*5, life:life*(0.7+Math.random()*0.6), color, type}));
       }
     }
   }
@@ -163,17 +163,17 @@
   let plants=[];
   const baseSpecies=[
     {id:'hare', name:'ウサギ', trophic:'herb', color:'#a7f18c', shape:'ellipse', baseSpeed:1.25, vision:5, metabolism:0.75, waterNeed:0.6, fertility:0.7, reproThreshold:0.68, reproCost:0.28, socialMode:'herd', preyList:[],
-      poisonTolerance:0.4, thornHandling:0.4, dietPreference:{grass:0.72,poison:0.1,shrub:0.13,tree:0.05}},
+      poisonTolerance:0.4, thornHandling:0.4, climbSkill:0.55, dietPreference:{grass:0.72,poison:0.1,shrub:0.13,tree:0.05}},
     {id:'deer', name:'シカ', trophic:'herb', color:'#c5d16f', shape:'antler', baseSpeed:1.0, vision:6.5, metabolism:0.82, waterNeed:0.8, fertility:0.48, reproThreshold:0.7, reproCost:0.3, socialMode:'herd', preyList:[],
-      poisonTolerance:0.5, thornHandling:0.55, dietPreference:{grass:0.55,poison:0.1,shrub:0.3,tree:0.15}},
+      poisonTolerance:0.5, thornHandling:0.55, climbSkill:0.65, dietPreference:{grass:0.55,poison:0.1,shrub:0.3,tree:0.15}},
     {id:'boar', name:'イノシシ', trophic:'omn', color:'#d3aa7c', shape:'tusk', baseSpeed:1.05, vision:5.5, metabolism:0.95, waterNeed:0.75, fertility:0.5, reproThreshold:0.74, reproCost:0.34, socialMode:'pair', preyList:['hare'],
-      poisonTolerance:0.7, thornHandling:0.7, dietPreference:{grass:0.4,poison:0.12,shrub:0.35,tree:0.13}},
+      poisonTolerance:0.7, thornHandling:0.7, climbSkill:0.78, dietPreference:{grass:0.4,poison:0.12,shrub:0.35,tree:0.13}},
     {id:'wolf', name:'オオカミ', trophic:'carn', color:'#ffad7d', shape:'arrow', baseSpeed:1.3, vision:7.2, metabolism:0.95, waterNeed:0.7, fertility:0.32, reproThreshold:0.9, reproCost:0.55, socialMode:'pack', preyList:['hare','deer','boar','zebra'],
-      poisonTolerance:0.3, thornHandling:0.4, dietPreference:{}},
+      poisonTolerance:0.3, thornHandling:0.4, climbSkill:0.72, dietPreference:{}},
     {id:'bear', name:'クマ', trophic:'carn', color:'#f7c173', shape:'round', baseSpeed:0.95, vision:6, metabolism:1.05, waterNeed:0.85, fertility:0.25, reproThreshold:0.88, reproCost:0.6, socialMode:'solo', preyList:['hare','deer','boar'],
-      poisonTolerance:0.65, thornHandling:0.75, dietPreference:{grass:0.2,poison:0.05,shrub:0.2,tree:0.55}},
+      poisonTolerance:0.65, thornHandling:0.75, climbSkill:0.9, dietPreference:{grass:0.2,poison:0.05,shrub:0.2,tree:0.55}},
     {id:'zebra', name:'シマウマ', trophic:'herb', color:'#b5c7ff', shape:'stripe', baseSpeed:1.15, vision:6.2, metabolism:0.9, waterNeed:0.7, fertility:0.52, reproThreshold:0.7, reproCost:0.3, socialMode:'herd', preyList:[],
-      poisonTolerance:0.45, thornHandling:0.6, dietPreference:{grass:0.68,poison:0.08,shrub:0.18,tree:0.06}},
+      poisonTolerance:0.45, thornHandling:0.6, climbSkill:0.6, dietPreference:{grass:0.68,poison:0.08,shrub:0.18,tree:0.06}},
   ];
   const defaultGenes=()=>({g_speed:1,g_vision:1,g_metabolism:1,g_fertility:1,g_thirstTol:1,g_starveTol:1});
   const initialUiParams={rainyLen:600,dryLen:400,shareRate:0.6,leaderBonus:1.2};
@@ -224,7 +224,7 @@
     const waterSlider=document.getElementById('waterLevel'); if(waterSlider){ state.waterLevel=parseFloat(waterSlider.value)||0; }
     const rng=state.rng; const perlin=createPerlin(rng); state.perlin=perlin; const w=params.gridW, h=params.gridH; const arr=new Array(w*h);
     for(let y=0;y<h;y++) for(let x=0;x<w;x++){const idx=y*w+x; arr[idx]={elev:0, wet:0, moist:0.5, river:false, riverWidth:0,
-      veg:{grass:0, poison:0, shrub:0, shrubThorn:0, tree:0}, terrain:'平地', biome:'prairie'};}
+      veg:{grass:0, poison:0, shrub:0, shrubThorn:0, tree:0}, terrain:'平地', biome:'prairie', rugged:0};}
     const elevScale=pattern==='mountain_valley'?0.045:0.07; const wetScale=pattern==='delta_wetland'?0.06:0.08;
     for(let y=0;y<h;y++){
       for(let x=0;x<w;x++){
@@ -271,8 +271,28 @@
         c.biome=biomeKey; c.terrain=BIOMES[biomeKey]?.label||c.terrain; c.veg=initVegByBiome(biomeKey,state.rng);
       }
     }
+    computeRuggedness();
     if(pattern==='delta_wetland' && riverCount===0){ document.getElementById('riverThresh').value=Math.max(0.6, riverFactor-0.2).toFixed(2); updateRivers(pattern); return; }
     state.needsBgRedraw=true;
+  }
+
+  function computeRuggedness(){
+    const w=params.gridW, h=params.gridH;
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const idx=y*w+x; const c=state.cells[idx];
+        let maxDiff=0; let sum=0; let count=0;
+        for(let dy=-1; dy<=1; dy++){
+          for(let dx=-1; dx<=1; dx++){
+            if(dx===0 && dy===0) continue;
+            const nx=clampRange(x+dx,0,w-1), ny=clampRange(y+dy,0,h-1); const n=state.cells[ny*w+nx];
+            if(!n) continue; const diff=Math.abs(n.elev-c.elev); maxDiff=Math.max(maxDiff,diff); sum+=diff; count++;
+          }
+        }
+        const avgDiff=count?sum/count:0;
+        c.rugged=clamp01(Math.max(maxDiff*1.8, avgDiff*2.4));
+      }
+    }
   }
 
   // --- SPECIES & ANIMALS ---
@@ -330,7 +350,7 @@
     const preyList=document.getElementById('newSpPrey').value.split(',').map(s=>s.trim()).filter(Boolean);
     const diet=parseDiet(document.getElementById('newSpDiet').value||'0.5,0,0.3,0.2');
     const reproDefaults=trophic==='carn'?{threshold:0.88,cost:0.55}:trophic==='omn'?{threshold:0.74,cost:0.34}:{threshold:0.68,cost:0.28};
-    const newSp={id,name,trophic,color,shape,baseSpeed,vision,metabolism,fertility,waterNeed,socialMode,preyList,poisonTolerance,thornHandling,reproThreshold:reproDefaults.threshold,reproCost:reproDefaults.cost,dietPreference:diet};
+    const newSp={id,name,trophic,color,shape,baseSpeed,vision,metabolism,fertility,waterNeed,socialMode,preyList,poisonTolerance,thornHandling,climbSkill:0.6,reproThreshold:reproDefaults.threshold,reproCost:reproDefaults.cost,dietPreference:diet};
     state.species.push(newSp);
     resetSpeciesEditor(); spawnAnimals(); logMsg(`種を追加: ${name}`);
   }
@@ -455,7 +475,11 @@
       const cx=Math.floor(wrap(this.x,w)), cy=Math.floor(wrap(this.y,h));
       const cellNow=state.cells[cy*w+cx];
       const terrainCost=BIOMES[cellNow?.biome]?.moveCost||1;
-      speed*=clampRange(1/terrainCost,0.6,1.25);
+      const rugged=cellNow?.rugged||0;
+      const climbSkill=clampRange(sp.climbSkill||0.6,0.2,1.2);
+      const ruggedPenalty=clampRange(rugged*1.1 - climbSkill*0.35,0,0.9);
+      speed*=clampRange(1/terrainCost,0.55,1.2);
+      speed*=clampRange(1 - ruggedPenalty*0.5,0.45,1);
 
       if(this.state===AnimalStates.DRINK){
         let best={score:-Infinity,x:cx,y:cy};
@@ -539,10 +563,14 @@
       const movedDist=Math.hypot(this.x-prevX,this.y-prevY);
       const cell=state.cells[Math.floor(this.y)*w+Math.floor(this.x)];
       if(movedDist>0.05 && (cell?.river||cell?.shore)){ particles.ripple({x:this.x,y:this.y}); }
+      if(cell?.rugged>clampRange((this.getSpecies()?.climbSkill||0.6)+0.25,0,1.4)){
+        this.x=prevX; this.y=prevY; this.vx*=-0.25; this.vy*=-0.25; this.lastEvent='急斜面回避'; return;
+      }
       if(movedDist>0.08){
         const biomeKey=cell?.biome; const particleColor=BIOMES[biomeKey]?.particles||'#cfe4ff';
         const type=(biomeKey==='desert'||biomeKey==='highland')?'dust':'trail';
-        particles.trail({x:this.x,y:this.y,color:particleColor,count:2+Math.floor(movedDist*4),spread:0.45+Math.random()*0.4,type});
+        const particleLife=24+Math.random()*18;
+        particles.trail({x:this.x,y:this.y,color:particleColor,count:1+Math.floor(movedDist*3),spread:0.4+Math.random()*0.35,type,life:particleLife});
       }
       moveAnimalInGrid(this,state);
       if(Math.hypot(this.x-prevX,this.y-prevY)>0.001) state.movedAgents++;
@@ -864,7 +892,8 @@
         const biomeColor=BIOMES[c.biome]?.color||'#2e3d3a';
         const baseCol=bgLayer.color(biomeColor);
         const elevShade=bgLayer.lerpColor(baseCol, bgLayer.color('#ffffff'), c.elev*0.08);
-        bgLayer.noStroke(); bgLayer.fill(elevShade); bgLayer.rect(x*cellSize,y*cellSize,cellSize,cellSize);
+        const ruggedShade=bgLayer.lerpColor(elevShade, bgLayer.color('#0f0f14'), c.rugged*0.35);
+        bgLayer.noStroke(); bgLayer.fill(ruggedShade); bgLayer.rect(x*cellSize,y*cellSize,cellSize,cellSize);
         const vegLevel=c.veg.grass+c.veg.shrub+c.veg.tree;
         if(vegLevel>0.18){
           const grassAlpha=clamp01(c.veg.grass*0.9);
@@ -882,7 +911,7 @@
   function handleHover(p){
     const cellTooltip=document.getElementById('cellTooltip'); const x=Math.floor(p.mouseX/params.cellSize), y=Math.floor(p.mouseY/params.cellSize);
     if(x<0||y<0||x>=params.gridW||y>=params.gridH){cellTooltip.classList.add('hidden'); return;}
-    const c=state.cells[y*params.gridW+x]; cellTooltip.textContent=`(${x},${y}) elev:${c.elev.toFixed(2)}\n地形:${c.terrain} (${c.biome}) river:${c.river?'yes':'no'}\nmoist:${c.moist.toFixed(2)}\n草:${c.veg.grass.toFixed(2)} 毒:${c.veg.poison.toFixed(2)}\n低木:${c.veg.shrub.toFixed(2)} トゲ:${c.veg.shrubThorn.toFixed(2)} 樹木:${c.veg.tree.toFixed(2)}`;
+    const c=state.cells[y*params.gridW+x]; cellTooltip.textContent=`(${x},${y}) elev:${c.elev.toFixed(2)} rugged:${(c.rugged||0).toFixed(2)}\n地形:${c.terrain} (${c.biome}) river:${c.river?'yes':'no'}\nmoist:${c.moist.toFixed(2)}\n草:${c.veg.grass.toFixed(2)} 毒:${c.veg.poison.toFixed(2)}\n低木:${c.veg.shrub.toFixed(2)} トゲ:${c.veg.shrubThorn.toFixed(2)} 樹木:${c.veg.tree.toFixed(2)}`;
     cellTooltip.style.left=(p.mouseX+16)+'px'; cellTooltip.style.top=(p.mouseY+16)+'px'; cellTooltip.classList.remove('hidden');
   }
   function handleSelect(p){
@@ -903,6 +932,7 @@
         }
       }
     }
+    computeRuggedness();
     state.needsBgRedraw=true;
   }
 
@@ -1060,9 +1090,9 @@
     drawOverlay(p, state.overlay, parseFloat(document.getElementById('overlayAlpha').value||'0.6'));
     if(vegetationVisible){ drawPlants(); }
     particles.update();
+    particles.draw(p, cellSize);
     // animals
     if(layerSettings.animals){ for(const a of state.animals){ if(!a.alive) continue; drawAnimal(p,a); } }
-    particles.draw(p, cellSize);
     // trails
     if(document.getElementById('trailToggle').checked && selectedAnimal){ p.stroke(255,255,255,120); p.noFill(); p.beginShape(); selectedAnimal.trail.forEach(pt=>p.vertex(pt.x*cellSize+cellSize/2, pt.y*cellSize+cellSize/2)); p.endShape(); }
     if(selectedAnimal){ p.noFill(); p.stroke('#ffea8a'); p.rect(Math.floor(selectedAnimal.x)*cellSize, Math.floor(selectedAnimal.y)*cellSize, cellSize, cellSize); }
