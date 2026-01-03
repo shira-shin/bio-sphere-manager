@@ -13,6 +13,8 @@ export default class Vegetation {
         this.optimalTemp = 24; // 快適温度の中心
         this.tempSigma = 5.5;  // 温度許容幅
         this.colorSeed = random(0.4, 0.9);
+        this.lastType = 'grass';
+        this.lastDensity = 0;
     }
 
     randomGenes() {
@@ -131,13 +133,23 @@ export default class Vegetation {
         const bodySize = map(this.energy, 0, this.maxEnergy, 4, 14) * sizeBoost;
         const accent = map(this.genes.defense, 0, 1, 90, 160);
         const drynessTint = this.lastMoisture < 0.3 ? map(this.lastMoisture, 0, 0.3, 120, 30) : 0;
-        const hue = lerp(80, 150, this.colorSeed);
+        const baseHue = {
+            grass: 110,
+            poison: 320,
+            shrub: 95,
+            thorn: 55,
+            tree: 125,
+        }[this.lastType] ?? lerp(80, 150, this.colorSeed);
+        const densityAlpha = map(constrain(this.lastDensity, 0, 1), 0, 1, 0.8, 1.4);
+        push();
+        colorMode(HSB, 360, 255, 255, 255);
         noStroke();
-        fill(hue, 160 - drynessTint, 90 + drynessTint, 110 * boostAlpha);
+        fill(baseHue, 160 - drynessTint, 90 + drynessTint, 110 * boostAlpha * densityAlpha);
         ellipse(this.pos.x, this.pos.y + 2, bodySize * 0.9, bodySize * 0.6);
-        fill(hue + accent, 180 - drynessTint, 120, 150 * boostAlpha);
+        fill(baseHue + accent, 180 - drynessTint, 120, 150 * boostAlpha * densityAlpha);
         ellipse(this.pos.x, this.pos.y, bodySize * 0.55, bodySize);
-        fill(240, 255 - accent, 180, 140 * boostAlpha);
+        fill(240, 255 - accent, 180, 140 * boostAlpha * densityAlpha);
         triangle(this.pos.x, this.pos.y - bodySize * 0.4, this.pos.x - bodySize * 0.25, this.pos.y + bodySize * 0.15, this.pos.x + bodySize * 0.25, this.pos.y + bodySize * 0.15);
+        pop();
     }
 }

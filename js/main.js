@@ -17,6 +17,7 @@
     return {noise};
   }
   const clamp01=v=>Math.max(0,Math.min(1,v));
+  const MOVEMENT_SCALE=0.82; // 全体の移動速度を抑えてマップの広さを感じやすくする
   const clampRange=(v,min,max)=>{ if(!Number.isFinite(v)) return (min+max)/2; return Math.max(min, Math.min(max, v)); };
   const lerp=(a,b,t)=>a+(b-a)*t;
   const wrap=(v,max)=>{ if(!Number.isFinite(v)) return 0; return ((v%max)+max)%max; };
@@ -347,7 +348,8 @@
 
     decideState(state){
       const sp=this.getSpecies(); const genes=this.genes; const rng=state.rng;
-      const speed=clampRange(sp.baseSpeed*lerp(0.7,1.3,genes.g_speed),0.2,2.5); const vision=clampRange(sp.vision*lerp(0.7,1.3,genes.g_vision),2,12);
+      const speed=clampRange(sp.baseSpeed*lerp(0.7,1.3,genes.g_speed)*MOVEMENT_SCALE,0.2,2.2);
+      const vision=clampRange(sp.vision*lerp(0.7,1.3,genes.g_vision),2,12);
       this.cached={speed,vision};
 
       const thirstPct=(1-this.hydration)*100; const hungerPct=(1-this.energy)*100;
@@ -440,14 +442,14 @@
       const steerN=safeNorm(steerX,steerY); if(steerN){ steerX/=steerN; steerY/=steerN; this.headingX=steerX; this.headingY=steerY; }
       else { steerX=rng()-0.5; steerY=rng()-0.5; }
 
-      this.moveMul=this.state===AnimalStates.WANDER?0.65:(this.state===AnimalStates.DRINK?0.5:(this.state===AnimalStates.MATE?0.7:0.6));
+      this.moveMul=this.state===AnimalStates.WANDER?0.6:(this.state===AnimalStates.DRINK?0.48:(this.state===AnimalStates.MATE?0.65:0.55));
       const targetVx=steerX*speed*this.moveMul; const targetVy=steerY*speed*this.moveMul;
       const inertia=0.82; const accel=0.18;
       const prevVx=this.vx, prevVy=this.vy;
       this.vx=this.vx*inertia + targetVx*accel;
       this.vy=this.vy*inertia + targetVy*accel;
 
-      const maxSpeed=Math.max(0.4, speed*1.6);
+      const maxSpeed=Math.max(0.35, speed*1.45);
       const maxForce=Math.max(0.05, speed*0.6);
       const ax=this.vx-prevVx, ay=this.vy-prevVy; const aMag=safeNorm(ax,ay);
       if(aMag && aMag>maxForce){
@@ -591,7 +593,57 @@
 
   function drawPlants(){
     const boost=state.layerSettings?.vegetationBoost||1;
-    plants.forEach(p=>p.draw(boost));
+    const cs=params.cellSize;
+    const typeInfo=cell=>{
+      const entries=[
+        ['grass',cell.veg.grass],
+        ['poison',cell.veg.poison],
+        ['shrub',cell.veg.shrub],
+        ['thorn',cell.veg.shrubThorn],
+        ['tree',cell.veg.tree],
+      ];
+      return entries.reduce((best,[k,v])=> v>best.value?{type:k,value:v}:best,{type:'grass',value:0});
+    };
+    const palette={
+      grass:{col:[96,200,130]},
+      poison:{col:[214,98,158]},
+      shrub:{col:[160,210,120]},
+      thorn:{col:[198,164,90]},
+      tree:{col:[70,150,98]},
+    };
+    // セルごとの植生アイコンを描画し、存在位置を把握しやすくする
+    for(let y=0;y<params.gridH;y++){
+      for(let x=0;x<params.gridW;x++){
+        const cell=state.cells[y*params.gridW+x];
+        const total=cell.veg.grass+cell.veg.poison+cell.veg.shrub+cell.veg.shrubThorn+cell.veg.tree;
+        if(total<0.05) continue;
+        const {type,value}=typeInfo(cell);
+        const density=clamp01(Math.pow(total,0.8));
+        const size=clampRange(cs*0.25 + density*cs*0.35, cs*0.2, cs*0.7) * clampRange(boost,0.75,1.6);
+        const alpha=clampRange((70+value*280)*boost,50,240);
+        const [r,g,b]=palette[type]?.col||palette.grass.col;
+        noStroke();
+        fill(r,g,b,alpha);
+        const cx=x*cs+cs*0.5, cy=y*cs+cs*0.5;
+        if(type==='poison'){
+          push(); translate(cx,cy); rotate(Math.PI/4); rectMode(CENTER); rect(0,0,size*0.9,size*0.9); pop();
+        } else if(type==='thorn'){
+          push(); translate(cx,cy); stroke(r,g,b,alpha+10); strokeWeight(1.4); line(-size*0.5,0,size*0.5,0); line(0,-size*0.5,0,size*0.5); pop();
+        } else if(type==='tree'){
+          rect(cx-size*0.2, cy-size*0.45, size*0.4, size*0.9, 2);
+          ellipse(cx, cy-size*0.1, size*0.85, size*0.7);
+        } else {
+          ellipse(cx, cy, size, size*0.7);
+        }
+      }
+    }
+    // 実体の植生はセル情報に応じた色で上書き
+    plants.forEach(p=>{
+      const cx=Math.floor(p.pos.x/params.cellSize); const cy=Math.floor(p.pos.y/params.cellSize);
+      const idx=cy*params.gridW+cx; const cell=state.cells[idx];
+      if(cell){ const info=typeInfo(cell); p.lastType=info.type; p.lastDensity=info.value; }
+      p.draw(boost);
+    });
   }
 
   // --- ENGINE ---
@@ -903,7 +955,9 @@
     if(selectedAnimal){
       const neighborCount=getNeighbors(selectedAnimal,state,3).length;
       const crowd=clampRange(neighborCount/10,0,1);
-      targetZoom=lerp(1.2,0.85,crowd);
+      targetZoom=lerp(1.05,0.8,crowd);
+    } else {
+      targetZoom=0.9;
     }
     camera.zoom=lerp(camera.zoom||1, targetZoom, 0.05);
   }
