@@ -20,6 +20,12 @@
     .legend-list.legend-animals{grid-template-columns:1fr; gap:8px;}
     .legend-list li{display:flex; align-items:center; gap:8px; font-size:12px; color:#9fb0c3;}
     .legend-icon{width:22px; display:inline-flex; justify-content:center; align-items:center; font-size:16px;}
+    .legend-species{margin-top:8px; padding-top:8px; border-top:1px dashed #1f2c44;}
+    .legend-species-title{font-size:11px; color:#8fa6c8; margin-bottom:6px; letter-spacing:0.04em; text-transform:uppercase;}
+    .legend-species-list{list-style:none; padding:0; margin:0; display:grid; gap:6px; grid-template-columns:repeat(auto-fill,minmax(140px,1fr));}
+    .legend-species-item{display:flex; align-items:center; gap:8px; font-size:12px; color:#c9d8ec; background:rgba(12,18,30,0.6); border:1px solid #1f2c44; border-radius:10px; padding:6px 8px;}
+    .legend-swatch{width:16px; height:16px; border-radius:4px; border:1px solid rgba(0,0,0,0.25); box-shadow:0 0 0 1px rgba(255,255,255,0.08); flex-shrink:0;}
+    .legend-shape{width:28px; height:16px; display:grid; place-items:center; color:#dce8ff; font-size:12px; letter-spacing:0.04em; background:rgba(255,255,255,0.05); border:1px solid #203049; border-radius:6px;}
     .swatch{width:16px; height:16px; border-radius:4px; border:1px solid #2e3f57; display:inline-block;}
     .swatch.base{background:linear-gradient(135deg,#2c6a2c,#2b3d2b);} .swatch.river{background:#4da7ff;} .swatch.moist{background:linear-gradient(90deg,#2f3a70,#6fa4ff);} .swatch.plant{background:linear-gradient(135deg,#2d5f39,#5ad17f);} .swatch.herb{background:#a7f18c; border:1px solid #f5ffe7; box-shadow:0 0 0 1px #0b0f18;} .swatch.carn{background:#ffad7d; border:1px solid #fff2e7; box-shadow:0 0 0 1px #0b0f18;}
     #mapStage canvas{display:block; width:100%; height:100%;}
