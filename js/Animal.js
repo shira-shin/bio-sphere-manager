@@ -1,5 +1,5 @@
 import DNA from './dna.js';
-import { STATES, WORLD_WIDTH, WORLD_HEIGHT } from './constants.js';
+import { STATES, WORLD_WIDTH, WORLD_HEIGHT, TERRAIN } from './constants.js';
 
 export default class Animal {
     constructor(x, y, dna = null) {
@@ -43,7 +43,7 @@ export default class Animal {
         this.emoteTimer = duration; // 1秒間表示が基準
     }
 
-    update(env = { temperature: 22, humidity: 0.6, weather: 'clear', isNight: false }) {
+    update(env = { temperature: 22, humidity: 0.6, weather: 'clear', isNight: false, tile: null }) {
         if (!Number.isFinite(this.pos.x) || !Number.isFinite(this.pos.y)) {
             this.dead = true;
             return;
@@ -65,15 +65,20 @@ export default class Animal {
             this.isSleeping = false;
         }
 
-        // 天候による速度低下
+        // 天候 + 地形による速度低下
         let speedFactor = 1;
+        const currentTile = env.tile || TERRAIN.GRASS;
         if (weather === 'rain') speedFactor *= 0.7;
         if (weather === 'storm') speedFactor *= 0.5;
         if (this.isSleeping) speedFactor *= 0.2;
 
         // ... (移動ロジックは既存と同じ) ...
         this.vel.add(this.acc);
-        this.vel.limit(this.maxSpeed * speedFactor);
+        // 地形摩擦を考慮した速度制限
+        this.vel.limit(this.maxSpeed * speedFactor * currentTile.friction);
+        // 氷は減速しづらい（慣性が残る）
+        const inertia = currentTile.slippery ? 0.995 : 0.92;
+        this.vel.mult(inertia);
         if (this.isSleeping) {
             this.vel.mult(0);
         }
@@ -84,6 +89,8 @@ export default class Animal {
         this.age++;
         // 代謝コスト：体が大きく、速いほど燃費が悪い（リアルな制約）
         let cost = (this.size * this.size * this.maxSpeed) * 0.001;
+        // 砂地などでは余分にエネルギーを消費
+        cost *= currentTile.energyCost || 1;
         if (this.isSleeping) cost *= 0.2;
         this.energy -= cost;
 
@@ -129,6 +136,12 @@ export default class Animal {
             this.showEmote("🍖", 45);
         }
         this.lastEnergy = this.energy;
+
+        // 岩場は通行不可: 位置を元に戻し、速度を反転させる
+        if (!currentTile.passable && !this.isSleeping) {
+            this.pos.sub(this.vel);
+            this.vel.mult(-0.3);
+        }
 
         this.edges();
 
