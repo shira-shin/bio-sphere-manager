@@ -116,7 +116,7 @@ export default class Vegetation {
         return amount; // 実際に得られた栄養
     }
 
-    draw() {
+    draw(boost = 1) {
         if (this.pos.x < 0 || this.pos.x > WORLD_WIDTH || this.pos.y < 0 || this.pos.y > WORLD_HEIGHT) return;
         noStroke();
         // 地表の覗き見え表現
@@ -126,16 +126,18 @@ export default class Vegetation {
         }
 
         // 成長度合いに応じてサイズと色が変わる（複層レイヤー）
-        const bodySize = map(this.energy, 0, this.maxEnergy, 4, 14);
+        const boostAlpha = constrain(boost, 0.4, 2);
+        const sizeBoost = constrain(boost, 0.6, 1.8);
+        const bodySize = map(this.energy, 0, this.maxEnergy, 4, 14) * sizeBoost;
         const accent = map(this.genes.defense, 0, 1, 90, 160);
         const drynessTint = this.lastMoisture < 0.3 ? map(this.lastMoisture, 0, 0.3, 120, 30) : 0;
         const hue = lerp(80, 150, this.colorSeed);
         noStroke();
-        fill(hue, 160 - drynessTint, 90 + drynessTint, 110);
+        fill(hue, 160 - drynessTint, 90 + drynessTint, 110 * boostAlpha);
         ellipse(this.pos.x, this.pos.y + 2, bodySize * 0.9, bodySize * 0.6);
-        fill(hue + accent, 180 - drynessTint, 120, 150);
+        fill(hue + accent, 180 - drynessTint, 120, 150 * boostAlpha);
         ellipse(this.pos.x, this.pos.y, bodySize * 0.55, bodySize);
-        fill(240, 255 - accent, 180, 140);
+        fill(240, 255 - accent, 180, 140 * boostAlpha);
         triangle(this.pos.x, this.pos.y - bodySize * 0.4, this.pos.x - bodySize * 0.25, this.pos.y + bodySize * 0.15, this.pos.x + bodySize * 0.25, this.pos.y + bodySize * 0.15);
     }
 }

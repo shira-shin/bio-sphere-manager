@@ -44,6 +44,10 @@
               <ul class="legend-species-list" id="speciesLegend" aria-label="種別凡例"></ul>
             </div>
           </div>
+          <div class="legend-section legend-filters">
+            <h4>表示フィルター</h4>
+            <ul class="legend-filter" id="legendFilters" aria-live="polite"></ul>
+          </div>
         </div>
       </div>
       <div id="terrainToolbar">
@@ -109,6 +113,19 @@
         <div class="row" style="margin-top:8px;">
           <label><input type="checkbox" id="showVegetation" checked>🌿 植生を表示 (Show Vegetation)</label>
         </div>
+      </div>
+      <div class="panel">
+        <h2>レイヤーフィルター / 設定</h2>
+        <div class="row pill-row" style="flex-wrap:wrap; gap:10px;">
+          <label class="pill"><input type="checkbox" id="toggleTerrain" checked>地形・背景</label>
+          <label class="pill"><input type="checkbox" id="toggleVegetationLayer" checked>植生レイヤー</label>
+          <label class="pill"><input type="checkbox" id="toggleAnimals" checked>動物レイヤー</label>
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <label>植生彩度<input id="vegBoost" type="range" min="0.5" max="1.8" step="0.05" value="1"></label>
+          <label>動物サイズ<input id="animalScale" type="range" min="0.7" max="1.5" step="0.05" value="1"></label>
+        </div>
+        <div class="legend-hint">レイヤーごとのON/OFFと強調度を切り替えると、凡例と表示が連動して「いま見ているもの」がわかりやすくなります。</div>
       </div>
       <div class="panel">
         <h2>状態</h2>

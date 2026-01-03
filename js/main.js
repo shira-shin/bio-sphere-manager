@@ -161,7 +161,8 @@
       running:false, step:0, season:'雨季', seasonCounter:0, events:[], idCounter:0, lastError:null, renderSimple:false, logs:[], chartData:[], averages:[], births:0, deaths:0, kills:0, spawnBuffer:[], density:new Float32Array(params.gridW*params.gridH),
       movedAgents:0, nanAgents:0, zeroMoveStreak:0, vegMin:0, vegMax:0, vegMean:0, vegGrowth:0, vegConsumed:0,
       shannon:0, genetic:0, stability:0, extinction:0, stabilityWindow:[], prevCounts:{},
-      animalGrid:[], needsBgRedraw:true, lastRiverCount:0, lastMoistAvg:0, lastVegAvg:0, aliveCount:0, waterLevel:0, showVegetation:true, lastDensity:null};
+      animalGrid:[], needsBgRedraw:true, lastRiverCount:0, lastMoistAvg:0, lastVegAvg:0, aliveCount:0, waterLevel:0, showVegetation:true, lastDensity:null,
+      layerSettings:{terrain:true, vegetation:true, animals:true, vegetationBoost:1, animalScale:1}};
   }
   let state=createState('bs-demo');
   let uiParams={...initialUiParams};
@@ -295,7 +296,7 @@
     const preset=presets[key]; if(!preset) return;
     state.seed=preset.seed; state.rng=createRng(state.seed); state.species=JSON.parse(JSON.stringify(preset.species));
     resetSpeciesEditor(); Object.entries(preset.counts).forEach(([id,val])=>{const input=document.querySelector(`#speciesEditor input[data-kind="count"][data-id="${id}"]`); if(input) input.value=val;});
-    document.getElementById('seedInput').value=preset.seed; generateTerrain(document.getElementById('patternSelect').value); spawnAnimals();
+    document.getElementById('seedInput').value=preset.seed; generateTerrain(document.getElementById('patternSelect').value); spawnAnimals(); applyLayerSettingsFromUI();
   }
   // FSM states for animal behavior
   const AnimalStates={WANDER:'WANDER', DRINK:'DRINK', EAT:'EAT', MATE:'MATE'};
@@ -589,7 +590,8 @@
   }
 
   function drawPlants(){
-    plants.forEach(p=>p.draw());
+    const boost=state.layerSettings?.vegetationBoost||1;
+    plants.forEach(p=>p.draw(boost));
   }
 
   // --- ENGINE ---
@@ -817,6 +819,43 @@
     p.image(overlayLayer,0,0);
   }
 
+  function updateLegendFilterPanel(){
+    const list=document.getElementById('legendFilters');
+    if(!list) return;
+    const overlay=overlayLabelText(state.overlay);
+    const overlaySuffix=state.overlay==='animals_filter' && state.overlaySpecies?` (${state.overlaySpecies})`:'';
+    const ls=state.layerSettings||{};
+    const filters=[
+      {label:'オーバーレイ', value:`${overlay}${overlaySuffix}`, active:true},
+      {label:'地形/背景', value:ls.terrain?'表示中':'非表示', active:!!ls.terrain},
+      {label:'植生', value: ls.vegetation && state.showVegetation?`彩度 x${(ls.vegetationBoost||1).toFixed(2)}`:'非表示', active:!!ls.vegetation && state.showVegetation},
+      {label:'動物', value: ls.animals?`サイズ x${(ls.animalScale||1).toFixed(2)}`:'非表示', active:!!ls.animals},
+    ];
+    list.innerHTML='';
+    filters.forEach(f=>{
+      const li=document.createElement('li');
+      li.className='filter-pill'+(f.active?' active':'');
+      li.innerHTML=`<span>${f.label}</span><strong>${f.value}</strong>`;
+      list.appendChild(li);
+    });
+  }
+
+  function applyLayerSettingsFromUI(){
+    if(!state.layerSettings){ state.layerSettings={terrain:true, vegetation:true, animals:true, vegetationBoost:1, animalScale:1}; }
+    const terrain=document.getElementById('toggleTerrain');
+    const vegetation=document.getElementById('toggleVegetationLayer');
+    const animals=document.getElementById('toggleAnimals');
+    const vegBoost=document.getElementById('vegBoost');
+    const animalScale=document.getElementById('animalScale');
+    if(terrain) state.layerSettings.terrain=terrain.checked;
+    if(vegetation) state.layerSettings.vegetation=vegetation.checked;
+    if(animals) state.layerSettings.animals=animals.checked;
+    if(vegBoost) state.layerSettings.vegetationBoost=parseFloat(vegBoost.value)||1;
+    if(animalScale) state.layerSettings.animalScale=parseFloat(animalScale.value)||1;
+    state.needsBgRedraw=true;
+    updateLegendFilterPanel();
+  }
+
   function getWeatherSnapshot(){
     const weather=state.season==='雨季'?'RAINY':'DRY';
     const tempBase=weather==='RAINY'?23:31;
@@ -872,19 +911,20 @@
     const cellSize=params.cellSize; p.background('#050910');
     const dimTerrain=document.getElementById('dimTerrain').checked;
     const activeOverlay=state.overlay;
-    const vegetationVisible=state.showVegetation && (document.getElementById('showVegetation')?.checked ?? true);
+    const layerSettings=state.layerSettings||{};
+    const vegetationVisible=state.showVegetation && layerSettings.vegetation && (document.getElementById('showVegetation')?.checked ?? true);
     state.showVegetation=vegetationVisible;
     updateCamera(p);
     if(state.needsBgRedraw) redrawBackground();
     p.push();
     p.translate(canvasW/2, canvasH/2); p.scale(camera.zoom); p.translate(-camera.x, -camera.y);
-    if(bgLayer) p.image(bgLayer,0,0);
+    if(bgLayer && layerSettings.terrain) p.image(bgLayer,0,0);
     if(dimTerrain && activeOverlay.startsWith('vegetation')){ p.fill(5,9,16,130); p.noStroke(); p.rect(0,0,canvasW,canvasH); }
     drawOverlay(p, state.overlay, parseFloat(document.getElementById('overlayAlpha').value||'0.6'));
     if(vegetationVisible){ drawPlants(); }
     particles.update();
     // animals
-    for(const a of state.animals){ if(!a.alive) continue; drawAnimal(p,a); }
+    if(layerSettings.animals){ for(const a of state.animals){ if(!a.alive) continue; drawAnimal(p,a); } }
     particles.draw(p, cellSize);
     // trails
     if(document.getElementById('trailToggle').checked && selectedAnimal){ p.stroke(255,255,255,120); p.noFill(); p.beginShape(); selectedAnimal.trail.forEach(pt=>p.vertex(pt.x*cellSize+cellSize/2, pt.y*cellSize+cellSize/2)); p.endShape(); }
@@ -897,6 +937,7 @@
     const overlay=state.overlay;
     const label=document.getElementById('layerLabel'); label.textContent=`レイヤー: ${overlayLabelText(overlay)}`; label.innerHTML=`レイヤー: ${overlayLabelText(overlay)}<small>表示中: ${overlayLabelText(overlay)}</small>`;
     drawColorbar(p, overlay);
+    updateLegendFilterPanel();
     updateHud(); updateInspector(currentWeather); updateChart();
     if(lastMutationMapStep!==state.step){ renderMutationMap(); lastMutationMapStep=state.step; }
   }
@@ -966,7 +1007,7 @@
   }
   function drawAnimal(p,a){
     const sp=state.species.find(s=>s.id===a.speciesId); const baseSize=sp.trophic==='carn'?9:8; const pulse=map(Math.sin(p.frameCount*0.1 + (parseInt(a.id?.slice(1))||0)*0.2),-1,1,0.9,1.1);
-    const size=baseSize*pulse; const screenX=a.x*params.cellSize+params.cellSize/2; const screenY=a.y*params.cellSize+params.cellSize/2;
+    const size=baseSize*pulse*(state.layerSettings?.animalScale||1); const screenX=a.x*params.cellSize+params.cellSize/2; const screenY=a.y*params.cellSize+params.cellSize/2;
     if(a.x<0||a.x>params.gridW||a.y<0||a.y>params.gridH) return;
     if(screenX<-16||screenX>canvasW+16||screenY<-16||screenY>canvasH+16) return;
     const baseColor=p.color(sp.color);
@@ -1170,15 +1211,26 @@
   }
   function bindUI(){
     document.querySelectorAll('button[data-action]').forEach(btn=>btn.addEventListener('click',()=>{
-      const act=btn.dataset.action; if(act==='start') state.running=true; else if(act==='stop') state.running=false; else if(act==='reset'){ state=createState(document.getElementById('seedInput').value); generateTerrain(document.getElementById('patternSelect').value); spawnAnimals(); selectedAnimal=null; seedPlants(); }
-      else if(act==='regen'){ state.seed=document.getElementById('seedInput').value; state.rng=createRng(state.seed); generateTerrain(document.getElementById('patternSelect').value); seedPlants(); }
+      const act=btn.dataset.action; if(act==='start') state.running=true; else if(act==='stop') state.running=false; else if(act==='reset'){ state=createState(document.getElementById('seedInput').value); generateTerrain(document.getElementById('patternSelect').value); spawnAnimals(); selectedAnimal=null; seedPlants(); applyLayerSettingsFromUI(); }
+      else if(act==='regen'){ state.seed=document.getElementById('seedInput').value; state.rng=createRng(state.seed); generateTerrain(document.getElementById('patternSelect').value); seedPlants(); applyLayerSettingsFromUI(); }
       else if(act==='download-csv') downloadCsv(); else if(act==='run-test') runTest(); else if(act==='self-test') runSelfTest(); else if(act==='headless-3000') runHeadless3000();
       else if(act==='add-species') addCustomSpeciesFromForm(); else if(act==='export-species') exportSpeciesJSON(); else if(act==='import-species') importSpeciesJSON(); else if(act==='save-species') saveSpeciesLocal(); else if(act==='load-species') loadSpeciesLocal();
     }));
     document.querySelectorAll('button[data-preset]').forEach(btn=>btn.addEventListener('click',()=>applyPreset(btn.dataset.preset)));
-    document.querySelectorAll('input[name="overlay"]').forEach(r=>r.addEventListener('change',e=>{state.overlay=e.target.value;}));
-    document.getElementById('overlaySpecies').addEventListener('change',e=>{state.overlaySpecies=e.target.value;});
+    document.querySelectorAll('input[name="overlay"]').forEach(r=>r.addEventListener('change',e=>{state.overlay=e.target.value; updateLegendFilterPanel();}));
+    document.getElementById('overlaySpecies').addEventListener('change',e=>{state.overlaySpecies=e.target.value; updateLegendFilterPanel();});
     document.getElementById('boundaryMode').addEventListener('change',e=>{state.boundaryMode=e.target.value;});
+    const terrainToggle=document.getElementById('toggleTerrain');
+    if(terrainToggle){ terrainToggle.addEventListener('change',e=>{ state.layerSettings.terrain=e.target.checked; state.needsBgRedraw=true; updateLegendFilterPanel(); }); }
+    const vegetationLayerToggle=document.getElementById('toggleVegetationLayer');
+    if(vegetationLayerToggle){ vegetationLayerToggle.addEventListener('change',e=>{ state.layerSettings.vegetation=e.target.checked; updateLegendFilterPanel(); }); }
+    const animalToggle=document.getElementById('toggleAnimals');
+    if(animalToggle){ animalToggle.addEventListener('change',e=>{ state.layerSettings.animals=e.target.checked; updateLegendFilterPanel(); }); }
+    const vegBoost=document.getElementById('vegBoost');
+    if(vegBoost){ const sync=()=>{ state.layerSettings.vegetationBoost=parseFloat(vegBoost.value)||1; updateLegendFilterPanel(); }; vegBoost.addEventListener('input',sync); sync(); }
+    const animalScale=document.getElementById('animalScale');
+    if(animalScale){ const sync=()=>{ state.layerSettings.animalScale=parseFloat(animalScale.value)||1; updateLegendFilterPanel(); }; animalScale.addEventListener('input',sync); sync(); }
+    applyLayerSettingsFromUI();
     document.getElementById('riverThresh').addEventListener('change',()=>updateRivers(document.getElementById('patternSelect').value));
     document.getElementById('riverWidthCtrl').addEventListener('input',()=>updateRivers(document.getElementById('patternSelect').value));
     const waterSlider=document.getElementById('waterLevel');
