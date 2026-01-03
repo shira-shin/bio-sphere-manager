@@ -228,6 +228,28 @@
       const opt=document.createElement('option'); opt.value=sp.id; opt.textContent=sp.name; select.appendChild(opt);
     });
     state.overlaySpecies=select.value;
+    renderSpeciesLegend();
+  }
+
+  function shapeSymbol(shape){
+    switch(shape){
+      case 'antler': return '🦌';
+      case 'tusk': return '🐗';
+      case 'arrow': return '➤';
+      case 'round': return '●';
+      case 'stripe': return '〰';
+      default: return '⬭';
+    }
+  }
+
+  function renderSpeciesLegend(){
+    const list=document.getElementById('speciesLegend'); if(!list) return; list.innerHTML='';
+    state.species.forEach(sp=>{
+      const li=document.createElement('li'); li.className='legend-species-item';
+      const shape=shapeSymbol(sp.shape);
+      li.innerHTML=`<span class="legend-swatch" style="background:${sp.color}"></span><span class="legend-shape">${shape}</span><div><div style="font-weight:700; color:#fff;">${sp.name}</div><div style="font-size:11px; color:#9fb0c3;">${sp.id} / ${sp.trophic}</div></div>`;
+      list.appendChild(li);
+    });
   }
 
   function addCustomSpeciesFromForm(){
@@ -627,10 +649,17 @@
     const kills=state.kills;
     const counts=speciesCounts();
     const totalPop=Object.values(counts).reduce((s,v)=>s+v,0);
+    if(births>0 || deaths>0 || kills>0){
+      logMsg(`出生:${births} 死亡:${deaths} 捕食:${kills} 生存総数:${totalPop}`);
+    }
     const shannon=computeShannon(counts);
     const genetic=computeGeneticDiversity();
     updateStabilityMetric(totalPop);
-    Object.entries(counts).forEach(([id,v])=>{ if((state.prevCounts[id]||0)>0 && v===0) state.extinction++; });
+    Object.entries(counts).forEach(([id,v])=>{
+      const prev=state.prevCounts[id]||0; const spName=state.species.find(s=>s.id===id)?.name||id;
+      if(prev>0 && v===0){ state.extinction++; logMsg(`${spName} が絶滅しました`); }
+      else if(prev===0 && v>0){ logMsg(`${spName} が復活 (${v}体)`); }
+    });
     state.prevCounts=counts;
     state.shannon=shannon; state.genetic=genetic;
     state.lastDensity=Float32Array.from(state.density);
@@ -877,9 +906,63 @@
     p.push(); p.translate(x,y);
     p.noStroke(); p.fill(0,160); p.rect(0,0,mapW,mapH,10);
     const scaleX=mapW/params.gridW, scaleY=mapH/params.gridH;
-    for(const a of state.animals){ if(!a.alive) continue; const sp=state.species.find(s=>s.id===a.speciesId); const px=clampRange(a.x,0,params.gridW); const py=clampRange(a.y,0,params.gridH); const dotX=px*scaleX; const dotY=py*scaleY; p.noStroke(); p.fill(sp.trophic==='carn'?'#ff6b6b':'#6be38f'); p.circle(dotX,dotY,3); }
+    for(const a of state.animals){ if(!a.alive) continue; const sp=state.species.find(s=>s.id===a.speciesId); const px=clampRange(a.x,0,params.gridW); const py=clampRange(a.y,0,params.gridH); const dotX=px*scaleX; const dotY=py*scaleY; const col=p.color(sp.color||'#8ec7ff'); p.noStroke(); p.fill(p.red(col),p.green(col),p.blue(col),220); p.circle(dotX,dotY,3); }
     p.noFill(); p.stroke(255); const viewW=Math.min(mapW, canvasW/params.cellSize*scaleX); const viewH=Math.min(mapH, canvasH/params.cellSize*scaleY); p.rect(0,0,viewW,viewH);
     p.pop();
+  }
+  function drawAnimalShape(p, shape, size, strokeColor, trophic){
+    p.stroke(strokeColor);
+    switch(shape){
+      case 'antler':{
+        const bodyL=size*1.25, bodyH=size*0.55;
+        p.beginShape();
+        p.vertex(-bodyL*0.6, bodyH*0.6); p.vertex(bodyL*0.35, bodyH*0.55); p.vertex(bodyL*0.55,0); p.vertex(bodyL*0.3,-bodyH*0.65); p.vertex(-bodyL*0.55,-bodyH*0.5);
+        p.endShape(p.CLOSE);
+        p.line(bodyL*0.15,-bodyH*0.55, bodyL*0.35,-bodyH*0.85); p.line(bodyL*0.2,-bodyH*0.3, bodyL*0.5,-bodyH*0.55);
+        break;
+      }
+      case 'tusk':{
+        const bodyL=size*1.1, bodyH=size*0.65;
+        p.beginShape();
+        p.vertex(-bodyL*0.55, bodyH*0.65); p.vertex(bodyL*0.45, bodyH*0.4); p.vertex(bodyL*0.55,0); p.vertex(bodyL*0.35,-bodyH*0.55); p.vertex(-bodyL*0.5,-bodyH*0.45);
+        p.endShape(p.CLOSE);
+        p.fill(255,255,255,200); p.triangle(bodyL*0.35,-bodyH*0.2, bodyL*0.6,0, bodyL*0.35,bodyH*0.2);
+        p.fill(255,255,255,140); p.triangle(-bodyL*0.1,-bodyH*0.45, -bodyL*0.25,-bodyH*0.75, -bodyL*0.15,-bodyH*0.55);
+        break;
+      }
+      case 'arrow':{
+        const bodyL=size*1.2, bodyH=size*0.55;
+        p.beginShape();
+        p.vertex(-bodyL*0.6, bodyH*0.7); p.vertex(bodyL*0.05, bodyH*0.45); p.vertex(bodyL*0.6,0); p.vertex(bodyL*0.05,-bodyH*0.7); p.vertex(-bodyL*0.6,-bodyH*0.5);
+        p.endShape(p.CLOSE);
+        p.fill(255,255,255,160); p.triangle(bodyL*0.2,-bodyH*0.15, bodyL*0.62,0, bodyL*0.2,bodyH*0.15);
+        break;
+      }
+      case 'round':{
+        p.ellipse(0,0,size*1.15,size*0.9); p.fill(255,255,255,130); p.circle(size*0.12,-size*0.12,size*0.45);
+        break;
+      }
+      case 'stripe':{
+        const bodyL=size*1.3, bodyH=size*0.7;
+        p.beginShape();
+        p.vertex(-bodyL*0.6, bodyH*0.6); p.vertex(bodyL*0.35, bodyH*0.55); p.vertex(bodyL*0.55,0); p.vertex(bodyL*0.3,-bodyH*0.65); p.vertex(-bodyL*0.55,-bodyH*0.5);
+        p.endShape(p.CLOSE);
+        p.strokeWeight(1.5); p.stroke(255,255,255,180);
+        for(let i=-2;i<=2;i++){
+          p.line(-bodyL*0.4+i*bodyL*0.2,-bodyH*0.5, -bodyL*0.2+i*bodyL*0.2, bodyH*0.55);
+        }
+        break;
+      }
+      default:{
+        const bodyL=size*1.15, bodyH=size*0.65;
+        p.beginShape();
+        p.vertex(-bodyL*0.55, bodyH*0.6); p.vertex(bodyL*0.3, bodyH*0.55); p.vertex(bodyL*0.55,0); p.vertex(bodyL*0.28,-bodyH*0.65); p.vertex(-bodyL*0.5,-bodyH*0.5);
+        p.endShape(p.CLOSE);
+      }
+    }
+    if(trophic==='carn'){
+      p.strokeWeight(1.2); p.noFill(); p.arc(size*0.25,0,size*0.9,size*0.9,-0.7,0.7);
+    }
   }
   function drawAnimal(p,a){
     const sp=state.species.find(s=>s.id===a.speciesId); const baseSize=sp.trophic==='carn'?9:8; const pulse=map(Math.sin(p.frameCount*0.1 + (parseInt(a.id?.slice(1))||0)*0.2),-1,1,0.9,1.1);
@@ -904,28 +987,7 @@
     p.push(); p.translate(screenX,screenY); p.rotate(angle); const stroke=p.brightness(color)>50?'#000':'#fff'; p.strokeWeight(a.state===AnimalStates.DRINK?2:1.1); p.stroke(a.state===AnimalStates.DRINK?'#6fa4ff':stroke); p.fill(color);
     const ctx=p.drawingContext; const glowCol=`rgba(${p.red(color)},${p.green(color)},${p.blue(color)},0.6)`; ctx.shadowBlur=24; ctx.shadowColor=glowCol;
     if(state.overlay==='animals_filter' && document.getElementById('speciesDim').checked && state.overlaySpecies && state.overlaySpecies!==a.speciesId){ p.tint(255,60); p.stroke(255,80);}
-    if(sp.trophic==='carn'){
-      const bodyL=size*1.2, bodyH=size*0.55;
-      p.beginShape();
-      p.vertex(-bodyL*0.6, bodyH*0.7); p.vertex(bodyL*0.1, bodyH*0.6); p.vertex(bodyL*0.55,0); p.vertex(bodyL*0.1,-bodyH*0.7); p.vertex(-bodyL*0.5,-bodyH*0.5);
-      p.endShape(p.CLOSE);
-      p.rect(-bodyL*0.55,bodyH*0.1,bodyL*0.35,bodyH*0.5,2);
-      p.fill(255,255,255,180); p.triangle(bodyL*0.25,-bodyH*0.2, bodyL*0.6,0, bodyL*0.2,bodyH*0.2);
-      p.fill(color);
-      p.rect(-bodyL*0.25,-bodyH*0.65,bodyL*0.25,bodyH*0.35,3);
-    } else {
-      const bodyL=size*1.3, bodyH=size*0.7;
-      p.beginShape();
-      p.vertex(-bodyL*0.6, bodyH*0.6); p.vertex(bodyL*0.35, bodyH*0.55); p.vertex(bodyL*0.55,0); p.vertex(bodyL*0.3,-bodyH*0.65); p.vertex(-bodyL*0.55,-bodyH*0.5);
-      p.endShape(p.CLOSE);
-      p.fill(255,255,255,140); p.circle(bodyL*0.2,-bodyH*0.05,bodyH*0.8);
-      p.fill(color); p.ellipse(bodyL*0.05,-bodyH*0.45,bodyL*0.3,bodyH*0.55);
-      p.stroke(a.state===AnimalStates.DRINK?'#6fa4ff':stroke);
-      p.line(-bodyL*0.1, bodyH*0.55, -bodyL*0.18, bodyH*0.95);
-      p.line(bodyL*0.05, bodyH*0.6, bodyL*0.02, bodyH*1.0);
-      p.line(bodyL*0.3, bodyH*0.45, bodyL*0.35, bodyH*0.95);
-      p.line(bodyL*0.45, bodyH*0.2, bodyL*0.55, bodyH*0.9);
-    }
+    drawAnimalShape(p, sp.shape, size, a.state===AnimalStates.DRINK?'#6fa4ff':stroke, sp.trophic);
     ctx.shadowBlur=0; ctx.shadowColor='transparent';
     if(document.getElementById('haloToggle').checked){ if(a.behavior==='graze') {p.noFill(); p.stroke(50,200,120,160); p.circle(0,0,size+6);} else if(a.behavior==='chase'){p.noFill(); p.stroke(255,80,80,180); p.circle(0,0,size+6);} else if(a.behavior==='water'){p.noFill(); p.stroke(80,160,255,200); p.circle(0,0,size+7);} else if(a.behavior==='seek-mate'){p.noStroke(); p.fill(255,180,200,200); p.text('♡',-4,4);} }
     if(a.emoteTimer>0 && a.emote){ p.textAlign(p.CENTER,p.BOTTOM); p.textSize(18); p.stroke(0); p.strokeWeight(2); p.fill(255); p.text(a.emote,0,-size-4); }
