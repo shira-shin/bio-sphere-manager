@@ -87,6 +87,48 @@
   }
   const STORAGE_KEY='biosphere_custom_species';
 
+  // --- PARTICLE SYSTEM ---
+  class Particle{
+    constructor({x,y,vx,vy,size=6,life=45,color='#fff',type='spark'}){
+      this.x=x; this.y=y; this.vx=vx; this.vy=vy; this.size=size; this.life=life; this.age=0; this.color=color; this.type=type;
+    }
+    update(){
+      this.age++; this.x+=this.vx; this.y+=this.vy; if(this.type==='spark'){ this.vx*=0.96; this.vy*=0.96; this.vy+=0.01; }
+      if(this.type==='ring'){ this.size+=0.4; this.vx*=0.9; this.vy*=0.9; }
+      return this.age<this.life;
+    }
+    draw(p, cellSize){
+      const alpha=Math.max(0,1-this.age/this.life);
+      p.push();
+      const col=p.color(this.color);
+      if(this.type==='ring'){
+        p.noFill(); p.stroke(p.red(col), p.green(col), p.blue(col), alpha*180); p.strokeWeight(1.2);
+        p.circle(this.x*cellSize, this.y*cellSize, this.size*cellSize*0.6);
+      } else {
+        p.noStroke(); p.fill(p.red(col), p.green(col), p.blue(col), alpha*200);
+        p.circle(this.x*cellSize, this.y*cellSize, this.size);
+      }
+      p.pop();
+    }
+  }
+
+  class ParticleSystem{
+    constructor(){ this.particles=[]; }
+    update(){ this.particles=this.particles.filter(pt=>pt.update()); }
+    draw(p, cellSize){ this.particles.forEach(pt=>pt.draw(p, cellSize)); }
+    burst({x,y,count=10,color='#ff5252',speed=0.8,life=45}){
+      for(let i=0;i<count;i++){
+        const angle=Math.random()*Math.PI*2; const mag=speed*(0.5+Math.random());
+        this.particles.push(new Particle({x,y,vx:Math.cos(angle)*mag, vy:Math.sin(angle)*mag, color, life:life*(0.6+Math.random()*0.6)}));
+      }
+    }
+    ripple({x,y,color='#7ecbff',life=36}){
+      this.particles.push(new Particle({x,y,vx:0,vy:0,size:2,life,color,type:'ring'}));
+    }
+  }
+
+  const particles=new ParticleSystem();
+
   // --- STATE ---
   const params={gridW:96, gridH:64, cellSize:8};
   const POPULATION_LIMIT=2000;
@@ -247,7 +289,7 @@
       this.x=wrap(validX,w); this.y=wrap(validY,h);
       this.energy=0.8+rng()*0.15; this.hydration=0.8+rng()*0.15; this.age=0; this.sex=rng()<0.5?'F':'M';
       this.behavior='wander'; this.state=AnimalStates.WANDER; this.stateTimer=0; this.lastEvent=spawnFallback?'spawn-relocate':'-';
-      this.genes=defaultGenes(); this.trail=[]; this.alive=true; this.vx=0; this.vy=0; this.waterCooldown=0; this.target=null;
+      this.genes=defaultGenes(); this.history=[]; this.trail=this.history; this.alive=true; this.vx=0; this.vy=0; this.waterCooldown=0; this.target=null;
       this.lastSafeX=this.x; this.lastSafeY=this.y; this.headingX=1; this.headingY=0; this.wanderAngle=rng()*Math.PI*2; this.mateCooldown=0;
       this.reproCooldown=0; this.emote=''; this.emoteTimer=0;
     }
@@ -262,7 +304,7 @@
       this.move(state);
       this.consumeAndMetabolize(state);
       this.handleReproduction(state);
-      this.trail.push({x:this.x,y:this.y}); if(this.trail.length>40) this.trail.shift();
+      this.history.push({x:this.x,y:this.y}); if(this.history.length>12) this.history.shift();
 
       const w=params.gridW, h=params.gridH;
       const needsTeleport=()=>{
@@ -408,6 +450,9 @@
         if(nx<=0||nx>=w) this.vx*=-0.4; if(ny<=0||ny>=h) this.vy*=-0.4;
       }
       if(Number.isNaN(this.x) || Number.isNaN(this.y)){ corrupted(); return; }
+      const movedDist=Math.hypot(this.x-prevX,this.y-prevY);
+      const cell=state.cells[Math.floor(this.y)*w+Math.floor(this.x)];
+      if(movedDist>0.05 && (cell?.river||cell?.shore)){ particles.ripple({x:this.x,y:this.y}); }
       moveAnimalInGrid(this,state);
       if(Math.hypot(this.x-prevX,this.y-prevY)>0.001) state.movedAgents++;
     }
@@ -436,6 +481,7 @@
           pack.forEach(o=>{o.energy=Math.min(1,o.energy+shareBase); o.hydration=Math.min(1,o.hydration+0.12);});
           this.energy=Math.min(1,this.energy+0.1); this.hydration=Math.min(1,this.hydration+0.05);
           this.behavior='hunt'; state.events.push({type:'hunt', predator:sp.id, prey:victim.speciesId});
+          particles.burst({x:this.x,y:this.y,color:'#ff5c5c',count:14,speed:1.1,life:50});
         }
       }
 
@@ -615,7 +661,7 @@
 
   // --- RENDER ---
   let p5inst=null; let canvasW=0, canvasH=0; let selectedAnimal=null; let overlayLayer=null; let bgLayer=null; let currentWeather=null; let lastMutationMapStep=-1;
-  let terrainEditMode=false;
+  let terrainEditMode=false; let camera={x:0,y:0,zoom:1};
   function startP5(){
     p5inst=new p5(p=>{
       p.setup=()=>{const host=document.getElementById('canvasHost'); const w=host.clientWidth, h=host.clientHeight; canvasW=w; canvasH=h; p.createCanvas(w,h); overlayLayer=p.createGraphics(w,h); bgLayer=p.createGraphics(w,h); overlayLayer.noStroke(); bgLayer.noStroke(); state.needsBgRedraw=true; ensureP5Globals(p); if(plants.length===0) seedPlants();};
@@ -759,22 +805,42 @@
     p.text(`${icon} ${weather.temperature.toFixed(1)}°C`, w-12, 12);
     p.pop();
   }
+  function updateCamera(p){
+    const cellSize=params.cellSize;
+    const targetX=selectedAnimal? selectedAnimal.x*cellSize+cellSize/2 : canvasW/2;
+    const targetY=selectedAnimal? selectedAnimal.y*cellSize+cellSize/2 : canvasH/2;
+    camera.x=lerp(camera.x||targetX, targetX, 0.08);
+    camera.y=lerp(camera.y||targetY, targetY, 0.08);
+    let targetZoom=1;
+    if(selectedAnimal){
+      const neighborCount=getNeighbors(selectedAnimal,state,3).length;
+      const crowd=clampRange(neighborCount/10,0,1);
+      targetZoom=lerp(1.2,0.85,crowd);
+    }
+    camera.zoom=lerp(camera.zoom||1, targetZoom, 0.05);
+  }
   function render(p){
     const cellSize=params.cellSize; p.background('#050910');
     const dimTerrain=document.getElementById('dimTerrain').checked;
     const activeOverlay=state.overlay;
     const vegetationVisible=state.showVegetation && (document.getElementById('showVegetation')?.checked ?? true);
     state.showVegetation=vegetationVisible;
+    updateCamera(p);
     if(state.needsBgRedraw) redrawBackground();
+    p.push();
+    p.translate(canvasW/2, canvasH/2); p.scale(camera.zoom); p.translate(-camera.x, -camera.y);
     if(bgLayer) p.image(bgLayer,0,0);
     if(dimTerrain && activeOverlay.startsWith('vegetation')){ p.fill(5,9,16,130); p.noStroke(); p.rect(0,0,canvasW,canvasH); }
     drawOverlay(p, state.overlay, parseFloat(document.getElementById('overlayAlpha').value||'0.6'));
     if(vegetationVisible){ drawPlants(); }
+    particles.update();
     // animals
     for(const a of state.animals){ if(!a.alive) continue; drawAnimal(p,a); }
+    particles.draw(p, cellSize);
     // trails
     if(document.getElementById('trailToggle').checked && selectedAnimal){ p.stroke(255,255,255,120); p.noFill(); p.beginShape(); selectedAnimal.trail.forEach(pt=>p.vertex(pt.x*cellSize+cellSize/2, pt.y*cellSize+cellSize/2)); p.endShape(); }
     if(selectedAnimal){ p.noFill(); p.stroke('#ffea8a'); p.rect(Math.floor(selectedAnimal.x)*cellSize, Math.floor(selectedAnimal.y)*cellSize, cellSize, cellSize); }
+    p.pop();
     currentWeather=getWeatherSnapshot();
     drawWeatherOverlay(p,currentWeather);
     drawMiniMap(p);
@@ -796,7 +862,8 @@
     p.pop();
   }
   function drawAnimal(p,a){
-    const sp=state.species.find(s=>s.id===a.speciesId); const size=sp.trophic==='carn'?9:8; const screenX=a.x*params.cellSize+params.cellSize/2; const screenY=a.y*params.cellSize+params.cellSize/2;
+    const sp=state.species.find(s=>s.id===a.speciesId); const baseSize=sp.trophic==='carn'?9:8; const pulse=map(Math.sin(p.frameCount*0.1 + (parseInt(a.id?.slice(1))||0)*0.2),-1,1,0.9,1.1);
+    const size=baseSize*pulse; const screenX=a.x*params.cellSize+params.cellSize/2; const screenY=a.y*params.cellSize+params.cellSize/2;
     if(a.x<0||a.x>params.gridW||a.y<0||a.y>params.gridH) return;
     if(screenX<-16||screenX>canvasW+16||screenY<-16||screenY>canvasH+16) return;
     const baseColor=p.color(sp.color);
@@ -805,7 +872,17 @@
     else if(a.state===AnimalStates.EAT){ color=p.lerpColor(baseColor,p.color('#68e38f'),0.3); }
     else if(a.state===AnimalStates.MATE){ color=p.lerpColor(baseColor,p.color('#ffc1e3'),0.35); }
     const angle=Math.atan2(a.headingY||0,a.headingX||1);
+    // trail
+    if(a.history && a.history.length>1){
+      for(let i=a.history.length-1;i>0;i--){
+        const curr=a.history[i]; const prev=a.history[i-1]; const t=i/(a.history.length-1); const alpha=80*t;
+        p.stroke(p.red(color), p.green(color), p.blue(color), alpha);
+        p.strokeWeight(3*t);
+        p.line(curr.x*params.cellSize+params.cellSize/2, curr.y*params.cellSize+params.cellSize/2, prev.x*params.cellSize+params.cellSize/2, prev.y*params.cellSize+params.cellSize/2);
+      }
+    }
     p.push(); p.translate(screenX,screenY); p.rotate(angle); const stroke=p.brightness(color)>50?'#000':'#fff'; p.strokeWeight(a.state===AnimalStates.DRINK?2:1.1); p.stroke(a.state===AnimalStates.DRINK?'#6fa4ff':stroke); p.fill(color);
+    const ctx=p.drawingContext; const glowCol=`rgba(${p.red(color)},${p.green(color)},${p.blue(color)},0.6)`; ctx.shadowBlur=24; ctx.shadowColor=glowCol;
     if(state.overlay==='animals_filter' && document.getElementById('speciesDim').checked && state.overlaySpecies && state.overlaySpecies!==a.speciesId){ p.tint(255,60); p.stroke(255,80);}
     if(sp.trophic==='carn'){
       p.triangle(-size/2,size/2, size/2,size/2, 0,-size/2);
@@ -815,6 +892,7 @@
       p.noStroke(); p.fill(255,255,255,130); p.circle(size*0.25,0,2.5);
       p.stroke(a.state===AnimalStates.DRINK?'#6fa4ff':stroke); p.fill(color);
     }
+    ctx.shadowBlur=0; ctx.shadowColor='transparent';
     if(document.getElementById('haloToggle').checked){ if(a.behavior==='graze') {p.noFill(); p.stroke(50,200,120,160); p.circle(0,0,size+6);} else if(a.behavior==='chase'){p.noFill(); p.stroke(255,80,80,180); p.circle(0,0,size+6);} else if(a.behavior==='water'){p.noFill(); p.stroke(80,160,255,200); p.circle(0,0,size+7);} else if(a.behavior==='seek-mate'){p.noStroke(); p.fill(255,180,200,200); p.text('♡',-4,4);} }
     if(a.emoteTimer>0 && a.emote){ p.textAlign(p.CENTER,p.BOTTOM); p.textSize(18); p.stroke(0); p.strokeWeight(2); p.fill(255); p.text(a.emote,0,-size-4); }
     if(selectedAnimal && selectedAnimal.id===a.id){ p.noFill(); p.stroke(255); p.strokeWeight(2); p.circle(0,0,size+8); }
