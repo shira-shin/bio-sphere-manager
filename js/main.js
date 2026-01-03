@@ -94,7 +94,7 @@
     }
     update(){
       this.age++; this.x+=this.vx; this.y+=this.vy; if(this.type==='spark'){ this.vx*=0.96; this.vy*=0.96; this.vy+=0.01; }
-      if(this.type==='ring'){ this.size+=0.4; this.vx*=0.9; this.vy*=0.9; }
+      if(this.type==='ring'){ this.size+=0.25; this.vx*=0.9; this.vy*=0.9; }
       return this.age<this.life;
     }
     draw(p, cellSize){
@@ -122,8 +122,8 @@
         this.particles.push(new Particle({x,y,vx:Math.cos(angle)*mag, vy:Math.sin(angle)*mag, color, life:life*(0.6+Math.random()*0.6)}));
       }
     }
-    ripple({x,y,color='#7ecbff',life=36}){
-      this.particles.push(new Particle({x,y,vx:0,vy:0,size:2,life,color,type:'ring'}));
+    ripple({x,y,color='#7ecbff',life=28}){
+      this.particles.push(new Particle({x,y,vx:0,vy:0,size:1.4,life,color,type:'ring'}));
     }
   }
 
@@ -161,7 +161,7 @@
       running:false, step:0, season:'雨季', seasonCounter:0, events:[], idCounter:0, lastError:null, renderSimple:false, logs:[], chartData:[], averages:[], births:0, deaths:0, kills:0, spawnBuffer:[], density:new Float32Array(params.gridW*params.gridH),
       movedAgents:0, nanAgents:0, zeroMoveStreak:0, vegMin:0, vegMax:0, vegMean:0, vegGrowth:0, vegConsumed:0,
       shannon:0, genetic:0, stability:0, extinction:0, stabilityWindow:[], prevCounts:{},
-      animalGrid:[], needsBgRedraw:true, lastRiverCount:0, lastMoistAvg:0, lastVegAvg:0, aliveCount:0, waterLevel:0, showVegetation:true};
+      animalGrid:[], needsBgRedraw:true, lastRiverCount:0, lastMoistAvg:0, lastVegAvg:0, aliveCount:0, waterLevel:0, showVegetation:true, lastDensity:null};
   }
   let state=createState('bs-demo');
   let uiParams={...initialUiParams};
@@ -532,16 +532,35 @@
     plants=[];
     const w=width||params.gridW*params.cellSize; const h=height||params.gridH*params.cellSize;
     for(let i=0;i<count;i++){
-      plants.push(new Vegetation(random(w), random(h)));
+      const x=random(w), y=random(h);
+      const cx=Math.floor(x/params.cellSize), cy=Math.floor(y/params.cellSize);
+      const cell=state.cells[cy*params.gridW+cx];
+      if(cell?.river && cell.riverWidth>0.05) continue;
+      plants.push(new Vegetation(x, y));
     }
   }
 
   function updatePlants(){
     const newborns=[];
+    const weather=getWeatherSnapshot();
+    const heat=state.lastDensity || state.density;
     plants.forEach(plant=>{
-      plant.update();
-      const child=plant.reproduce();
-      if(child) newborns.push(child);
+      const cx=Math.floor(plant.pos.x/params.cellSize);
+      const cy=Math.floor(plant.pos.y/params.cellSize);
+      const valid=cx>=0 && cy>=0 && cx<params.gridW && cy<params.gridH;
+      const cell=valid? state.cells[cy*params.gridW+cx]:null;
+      const flooded=cell? (cell.river && (cell.riverWidth>0.05 || state.waterLevel>0.05)):false;
+      const moisture=cell? clamp01(cell.moist - (flooded?0.18:0) + (weather?.humidity??0.5)*0.08):0.35;
+      const soil=cell? clamp01(0.45 + cell.wet*0.4 - cell.elev*0.2 + (cell.terrain==='丘陵'?0.05:0)) : 0.5;
+      const herbPressure=valid && heat? clamp01((heat[cy*params.gridW+cx]||0)/6):0;
+      plant.update({moisture, temperature:weather?.temperature??24, humidity:weather?.humidity??0.5, soil, herbivorePressure:herbPressure, flooded});
+      const child=plant.reproduce({moisture, soil, herbivorePressure:herbPressure, flooded, bounds:{w:params.gridW*params.cellSize,h:params.gridH*params.cellSize}});
+      if(child){
+        const ccx=Math.floor(child.pos.x/params.cellSize), ccy=Math.floor(child.pos.y/params.cellSize);
+        const cCell=ccx>=0&&ccy>=0&&ccx<params.gridW&&ccy<params.gridH? state.cells[ccy*params.gridW+ccx]:null;
+        if(!cCell || (cCell.river && cCell.riverWidth>0.05)) { child.energy=0; }
+        else newborns.push(child);
+      }
     });
     plants=plants.filter(p=>p.energy>0);
     plants.push(...newborns);
@@ -614,6 +633,7 @@
     Object.entries(counts).forEach(([id,v])=>{ if((state.prevCounts[id]||0)>0 && v===0) state.extinction++; });
     state.prevCounts=counts;
     state.shannon=shannon; state.genetic=genetic;
+    state.lastDensity=Float32Array.from(state.density);
     state.logs.push({step:state.step, season:state.season, river:riverCount, moist:moistSum/state.cells.length, veg:vegSum/state.cells.length, births,deaths,kills, counts, genesAvg:averageGenes(), vegMin:state.vegMin, vegMax:state.vegMax, vegGrowth:state.vegGrowth, vegConsumed:state.vegConsumed, moved:state.movedAgents, nan:state.nanAgents, shannon, genetic, stability:state.stability, extinction:state.extinction});
     if(state.logs.length>600) state.logs.shift();
   }
@@ -885,12 +905,26 @@
     const ctx=p.drawingContext; const glowCol=`rgba(${p.red(color)},${p.green(color)},${p.blue(color)},0.6)`; ctx.shadowBlur=24; ctx.shadowColor=glowCol;
     if(state.overlay==='animals_filter' && document.getElementById('speciesDim').checked && state.overlaySpecies && state.overlaySpecies!==a.speciesId){ p.tint(255,60); p.stroke(255,80);}
     if(sp.trophic==='carn'){
-      p.triangle(-size/2,size/2, size/2,size/2, 0,-size/2);
-      p.rect(-size*0.45,-size*0.15,size*0.9,size*0.3,2);
+      const bodyL=size*1.2, bodyH=size*0.55;
+      p.beginShape();
+      p.vertex(-bodyL*0.6, bodyH*0.7); p.vertex(bodyL*0.1, bodyH*0.6); p.vertex(bodyL*0.55,0); p.vertex(bodyL*0.1,-bodyH*0.7); p.vertex(-bodyL*0.5,-bodyH*0.5);
+      p.endShape(p.CLOSE);
+      p.rect(-bodyL*0.55,bodyH*0.1,bodyL*0.35,bodyH*0.5,2);
+      p.fill(255,255,255,180); p.triangle(bodyL*0.25,-bodyH*0.2, bodyL*0.6,0, bodyL*0.2,bodyH*0.2);
+      p.fill(color);
+      p.rect(-bodyL*0.25,-bodyH*0.65,bodyL*0.25,bodyH*0.35,3);
     } else {
-      p.circle(0,0,size+ (a.state===AnimalStates.DRINK?1.5:0));
-      p.noStroke(); p.fill(255,255,255,130); p.circle(size*0.25,0,2.5);
-      p.stroke(a.state===AnimalStates.DRINK?'#6fa4ff':stroke); p.fill(color);
+      const bodyL=size*1.3, bodyH=size*0.7;
+      p.beginShape();
+      p.vertex(-bodyL*0.6, bodyH*0.6); p.vertex(bodyL*0.35, bodyH*0.55); p.vertex(bodyL*0.55,0); p.vertex(bodyL*0.3,-bodyH*0.65); p.vertex(-bodyL*0.55,-bodyH*0.5);
+      p.endShape(p.CLOSE);
+      p.fill(255,255,255,140); p.circle(bodyL*0.2,-bodyH*0.05,bodyH*0.8);
+      p.fill(color); p.ellipse(bodyL*0.05,-bodyH*0.45,bodyL*0.3,bodyH*0.55);
+      p.stroke(a.state===AnimalStates.DRINK?'#6fa4ff':stroke);
+      p.line(-bodyL*0.1, bodyH*0.55, -bodyL*0.18, bodyH*0.95);
+      p.line(bodyL*0.05, bodyH*0.6, bodyL*0.02, bodyH*1.0);
+      p.line(bodyL*0.3, bodyH*0.45, bodyL*0.35, bodyH*0.95);
+      p.line(bodyL*0.45, bodyH*0.2, bodyL*0.55, bodyH*0.9);
     }
     ctx.shadowBlur=0; ctx.shadowColor='transparent';
     if(document.getElementById('haloToggle').checked){ if(a.behavior==='graze') {p.noFill(); p.stroke(50,200,120,160); p.circle(0,0,size+6);} else if(a.behavior==='chase'){p.noFill(); p.stroke(255,80,80,180); p.circle(0,0,size+6);} else if(a.behavior==='water'){p.noFill(); p.stroke(80,160,255,200); p.circle(0,0,size+7);} else if(a.behavior==='seek-mate'){p.noStroke(); p.fill(255,180,200,200); p.text('♡',-4,4);} }
