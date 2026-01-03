@@ -25,6 +25,18 @@
   const safeNorm=(x,y)=>{const d=Math.hypot(x,y); if(!Number.isFinite(d) || d<1e-9) return null; return d;};
   const toId=str=>str.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')||`sp_${Date.now()}`;
   const parseDiet=str=>{ const [g,p,s,t]=str.split(',').map(v=>parseFloat(v)||0); return {grass:clamp01(g||0), poison:clamp01(p||0), shrub:clamp01(s||0), tree:clamp01(t||0)}; };
+  const BIOMES={
+    wetland:{label:'湿原', color:'#2f5b4f', moveCost:1.05, vegBias:{grass:0.2, poison:0.1, shrub:0.18, thorn:0.08, tree:0.12}, growth:{grass:1.1, shrub:1.05, tree:0.95}, particles:'#5ec4b1'},
+    marsh:{label:'沼地', color:'#31526c', moveCost:1.2, vegBias:{grass:0.16, poison:0.14, shrub:0.12, thorn:0.05, tree:0.16}, growth:{grass:1.15, shrub:0.9, tree:0.85}, particles:'#6eb7ff'},
+    prairie:{label:'草原', color:'#436d3b', moveCost:0.95, vegBias:{grass:0.28, poison:0.04, shrub:0.14, thorn:0.06, tree:0.08}, growth:{grass:1.05, shrub:0.95, tree:0.85}, particles:'#aee084'},
+    shrubland:{label:'低木地', color:'#4b5f3c', moveCost:1.0, vegBias:{grass:0.16, poison:0.08, shrub:0.22, thorn:0.16, tree:0.14}, growth:{grass:0.9, shrub:1.15, tree:1.05}, particles:'#87c46c'},
+    forest:{label:'落葉林', color:'#35523f', moveCost:1.05, vegBias:{grass:0.12, poison:0.05, shrub:0.18, thorn:0.1, tree:0.24}, growth:{grass:0.85, shrub:1.05, tree:1.2}, particles:'#74ad78'},
+    taiga:{label:'針葉林', color:'#2e4744', moveCost:1.1, vegBias:{grass:0.1, poison:0.06, shrub:0.16, thorn:0.12, tree:0.26}, growth:{grass:0.8, shrub:1.0, tree:1.25}, particles:'#8bd1c8'},
+    highland:{label:'高原岩場', color:'#4b4f60', moveCost:1.25, vegBias:{grass:0.12, poison:0.05, shrub:0.18, thorn:0.18, tree:0.1}, growth:{grass:0.75, shrub:0.9, tree:0.55}, particles:'#bcc3d9'},
+    snow:{label:'雪原', color:'#6e7c91', moveCost:1.35, vegBias:{grass:0.08, poison:0.04, shrub:0.12, thorn:0.08, tree:0.05}, growth:{grass:0.55, shrub:0.5, tree:0.35}, particles:'#dfe8f5'},
+    desert:{label:'砂漠', color:'#8f7b3d', moveCost:1.3, vegBias:{grass:0.06, poison:0.02, shrub:0.08, thorn:0.2, tree:0.02}, growth:{grass:0.45, shrub:0.6, tree:0.2}, particles:'#e7d39c'},
+    oasis:{label:'オアシス', color:'#2f6f58', moveCost:1.05, vegBias:{grass:0.18, poison:0.08, shrub:0.14, thorn:0.1, tree:0.2}, growth:{grass:1.1, shrub:1.0, tree:1.05}, particles:'#7fe0c5'},
+  };
   function ensureP5Globals(p){
     if(!p) return;
     window.width=p.width; window.height=p.height;
@@ -96,6 +108,8 @@
     update(){
       this.age++; this.x+=this.vx; this.y+=this.vy; if(this.type==='spark'){ this.vx*=0.96; this.vy*=0.96; this.vy+=0.01; }
       if(this.type==='ring'){ this.size+=0.25; this.vx*=0.9; this.vy*=0.9; }
+      if(this.type==='trail'){ this.vx*=0.85; this.vy*=0.85; this.size*=0.98; }
+      if(this.type==='dust'){ this.vx*=0.9; this.vy*=0.92; this.vy-=0.003; }
       return this.age<this.life;
     }
     draw(p, cellSize){
@@ -105,6 +119,12 @@
       if(this.type==='ring'){
         p.noFill(); p.stroke(p.red(col), p.green(col), p.blue(col), alpha*180); p.strokeWeight(1.2);
         p.circle(this.x*cellSize, this.y*cellSize, this.size*cellSize*0.6);
+      } else if(this.type==='trail'){
+        p.noStroke(); p.fill(p.red(col), p.green(col), p.blue(col), alpha*140);
+        p.ellipse(this.x*cellSize, this.y*cellSize, this.size, this.size*0.6);
+      } else if(this.type==='dust'){
+        p.noStroke(); p.fill(p.red(col), p.green(col), p.blue(col), alpha*120);
+        p.circle(this.x*cellSize, this.y*cellSize, this.size*0.9);
       } else {
         p.noStroke(); p.fill(p.red(col), p.green(col), p.blue(col), alpha*200);
         p.circle(this.x*cellSize, this.y*cellSize, this.size);
@@ -125,6 +145,12 @@
     }
     ripple({x,y,color='#7ecbff',life=28}){
       this.particles.push(new Particle({x,y,vx:0,vy:0,size:1.4,life,color,type:'ring'}));
+    }
+    trail({x,y,color='#fff',count=6,spread=0.8,type='trail'}){
+      for(let i=0;i<count;i++){
+        const ang=Math.random()*Math.PI*2; const mag=(0.15+Math.random()*0.4)*spread;
+        this.particles.push(new Particle({x,y,vx:Math.cos(ang)*mag, vy:Math.sin(ang)*mag, size:5+Math.random()*6, life:25+Math.random()*25, color, type}));
+      }
     }
   }
 
@@ -169,11 +195,36 @@
   let uiParams={...initialUiParams};
 
   // --- TERRAIN ---
+  function biomeFromCell(c,x,y,perlin){
+    const heat=clamp01(0.45 + perlin.noise((x-80)*0.03,(y+60)*0.03)*0.35 + (y/params.gridH-0.5)*0.25);
+    const dryness=clamp01(0.6 - c.moist*0.4 + perlin.noise((x+140)*0.05,(y-120)*0.05)*0.2 + Math.max(0,c.elev-0.55)*0.25);
+    if(c.river && c.moist>0.6) return 'wetland';
+    if(c.moist>0.78) return 'marsh';
+    if(c.elev>0.85 && heat<0.45) return 'snow';
+    if(c.elev>0.78) return 'highland';
+    if(dryness>0.65 && c.moist<0.35) return 'desert';
+    if(c.moist>0.65 && heat>0.55 && !c.river) return 'forest';
+    if(c.moist>0.58 && heat<0.55) return 'taiga';
+    if(c.moist>0.42 && c.moist<0.65) return 'shrubland';
+    if(c.moist>0.3) return 'prairie';
+    if(c.moist>0.2 && c.river) return 'oasis';
+    return 'desert';
+  }
+  function initVegByBiome(biome,rng){
+    const bias=BIOMES[biome]?.vegBias||{};
+    return {
+      grass:clamp01(0.16+(bias.grass||0)+rng()*0.12),
+      poison:clamp01(0.04+(bias.poison||0)+rng()*0.08),
+      shrub:clamp01(0.1+(bias.shrub||0)+rng()*0.1),
+      shrubThorn:clamp01(0.06+(bias.thorn||0)+rng()*0.08),
+      tree:clamp01(0.08+(bias.tree||0)+rng()*0.08),
+    };
+  }
   function generateTerrain(pattern){
     const waterSlider=document.getElementById('waterLevel'); if(waterSlider){ state.waterLevel=parseFloat(waterSlider.value)||0; }
     const rng=state.rng; const perlin=createPerlin(rng); state.perlin=perlin; const w=params.gridW, h=params.gridH; const arr=new Array(w*h);
     for(let y=0;y<h;y++) for(let x=0;x<w;x++){const idx=y*w+x; arr[idx]={elev:0, wet:0, moist:0.5, river:false, riverWidth:0,
-      veg:{grass:0.28+rng()*0.18, poison:0.05+rng()*0.08, shrub:0.15+rng()*0.1, shrubThorn:0.08+rng()*0.08, tree:0.1+rng()*0.05}, terrain:'平地'};}
+      veg:{grass:0, poison:0, shrub:0, shrubThorn:0, tree:0}, terrain:'平地', biome:'prairie'};}
     const elevScale=pattern==='mountain_valley'?0.045:0.07; const wetScale=pattern==='delta_wetland'?0.06:0.08;
     for(let y=0;y<h;y++){
       for(let x=0;x<w;x++){
@@ -197,7 +248,7 @@
         const riverScore=(1-c.elev)*0.9 + c.wet*0.4 + noise*0.4 + riverNoise*0.3 + meander;
         const active=riverScore>riverFactor-waterLevel;
         c.river=active; c.riverWidth=active?clamp01((riverScore-riverFactor)*widthCtrl):0;
-        const moistBase=0.35 + c.wet*0.4 + (c.river?0.25:0);
+        const moistBase=0.32 + c.wet*0.45 + (c.river?0.3:0);
         c.moist=clamp01(moistBase);
         c.terrain=c.elev>0.78?'丘陵':(c.elev<0.25?'低地':'平地');
         c.shore=false;
@@ -210,6 +261,14 @@
         const idx=y*w+x; const c=state.cells[idx]; if(c.river) continue;
         const nearRiver=[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy])=>{const nx=(x+dx+w)%w, ny=(y+dy+h)%h; return state.cells[ny*w+nx].river;});
         if(nearRiver) c.shore=true;
+      }
+    }
+    // バイオーム付与と植生初期化
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const idx=y*w+x; const c=state.cells[idx];
+        const biomeKey=biomeFromCell(c,x,y,state.perlin);
+        c.biome=biomeKey; c.terrain=BIOMES[biomeKey]?.label||c.terrain; c.veg=initVegByBiome(biomeKey,state.rng);
       }
     }
     if(pattern==='delta_wetland' && riverCount===0){ document.getElementById('riverThresh').value=Math.max(0.6, riverFactor-0.2).toFixed(2); updateRivers(pattern); return; }
@@ -389,12 +448,14 @@
     }
 
     applyForces(state){
-      const sp=this.getSpecies(); const {speed,vision}=this.cached; const w=params.gridW, h=params.gridH; const rng=state.rng;
+      const sp=this.getSpecies(); let {speed,vision}=this.cached; const w=params.gridW, h=params.gridH; const rng=state.rng;
       let steerX=0, steerY=0;
       this.wanderAngle+= (rng()-0.5)*0.35; steerX+=Math.cos(this.wanderAngle)*0.35; steerY+=Math.sin(this.wanderAngle)*0.35;
 
       const cx=Math.floor(wrap(this.x,w)), cy=Math.floor(wrap(this.y,h));
       const cellNow=state.cells[cy*w+cx];
+      const terrainCost=BIOMES[cellNow?.biome]?.moveCost||1;
+      speed*=clampRange(1/terrainCost,0.6,1.25);
 
       if(this.state===AnimalStates.DRINK){
         let best={score:-Infinity,x:cx,y:cy};
@@ -478,6 +539,11 @@
       const movedDist=Math.hypot(this.x-prevX,this.y-prevY);
       const cell=state.cells[Math.floor(this.y)*w+Math.floor(this.x)];
       if(movedDist>0.05 && (cell?.river||cell?.shore)){ particles.ripple({x:this.x,y:this.y}); }
+      if(movedDist>0.08){
+        const biomeKey=cell?.biome; const particleColor=BIOMES[biomeKey]?.particles||'#cfe4ff';
+        const type=(biomeKey==='desert'||biomeKey==='highland')?'dust':'trail';
+        particles.trail({x:this.x,y:this.y,color:particleColor,count:2+Math.floor(movedDist*4),spread:0.45+Math.random()*0.4,type});
+      }
       moveAnimalInGrid(this,state);
       if(Math.hypot(this.x-prevX,this.y-prevY)>0.001) state.movedAgents++;
     }
@@ -622,18 +688,28 @@
         const size=clampRange(cs*0.25 + density*cs*0.35, cs*0.2, cs*0.7) * clampRange(boost,0.75,1.6);
         const alpha=clampRange((70+value*280)*boost,50,240);
         const [r,g,b]=palette[type]?.col||palette.grass.col;
+        const biomeTint=BIOMES[cell.biome]?.color ?? null;
+        const tintColor=biomeTint? bgLayer.color(biomeTint):null;
+        const tintMix=tintColor? [r*0.6+tintColor.levels[0]*0.4, g*0.6+tintColor.levels[1]*0.4, b*0.6+tintColor.levels[2]*0.4] : [r,g,b];
         noStroke();
-        fill(r,g,b,alpha);
+        fill(tintMix[0], tintMix[1], tintMix[2], alpha);
         const cx=x*cs+cs*0.5, cy=y*cs+cs*0.5;
         if(type==='poison'){
           push(); translate(cx,cy); rotate(Math.PI/4); rectMode(CENTER); rect(0,0,size*0.9,size*0.9); pop();
+          fill(tintMix[0], tintMix[1], tintMix[2], alpha*0.6); ellipse(cx+2, cy+2, size*0.4, size*0.35);
         } else if(type==='thorn'){
           push(); translate(cx,cy); stroke(r,g,b,alpha+10); strokeWeight(1.4); line(-size*0.5,0,size*0.5,0); line(0,-size*0.5,0,size*0.5); pop();
+          fill(tintMix[0], tintMix[1], tintMix[2], alpha*0.45); circle(cx, cy, size*0.45);
         } else if(type==='tree'){
           rect(cx-size*0.2, cy-size*0.45, size*0.4, size*0.9, 2);
           ellipse(cx, cy-size*0.1, size*0.85, size*0.7);
+          fill(50,30,10,alpha*0.8); rect(cx-size*0.12, cy, size*0.24, size*0.35, 1);
         } else {
           ellipse(cx, cy, size, size*0.7);
+          if(density>0.42){
+            ellipse(cx+cs*0.15, cy-cs*0.15, size*0.6, size*0.4);
+            ellipse(cx-cs*0.12, cy+cs*0.1, size*0.4, size*0.3);
+          }
         }
       }
     }
@@ -671,12 +747,15 @@
           const crowdPenalty=neighborPlants>5? (neighborPlants-5)*0.04:0;
           const facilitation=neighborPlants>=1 && neighborPlants<=4? neighborPlants*0.012:0;
           const densityFactor=clampRange(1 - crowdPenalty + facilitation,0.65,1.25);
-          const growBase=0.06*seasonFactor*tempFactor*densityFactor;
+          const biome=BIOMES[c.biome]||{};
+          const growBase=0.06*seasonFactor*tempFactor*densityFactor*(biome.growth?.grass??1);
+          const shrubBase=(biome.growth?.shrub??1);
+          const treeBase=(biome.growth?.tree??1);
           c.veg.grass=clamp01(c.veg.grass + growBase*c.moist*(1-c.veg.grass) - 0.015*(1-c.moist));
-          c.veg.poison=clamp01(c.veg.poison + 0.04*c.moist*(1-c.veg.poison) - 0.01*(0.5-c.moist));
-          c.veg.shrub=clamp01(c.veg.shrub + 0.04*c.moist*(1-c.veg.shrub) - 0.01*(0.4-c.moist));
-          c.veg.shrubThorn=clamp01(c.veg.shrubThorn + 0.035*c.moist*(1-c.veg.shrubThorn) - 0.012*(0.45-c.moist));
-          c.veg.tree=clamp01(c.veg.tree + 0.02*c.moist*(1-c.veg.tree) - 0.008*(0.35-c.moist));
+          c.veg.poison=clamp01(c.veg.poison + 0.04*c.moist*(1-c.veg.poison) - 0.01*(0.5-c.moist) + (biome.vegBias?.poison||0)*0.01);
+          c.veg.shrub=clamp01(c.veg.shrub + 0.04*c.moist*(1-c.veg.shrub)*shrubBase - 0.01*(0.4-c.moist));
+          c.veg.shrubThorn=clamp01(c.veg.shrubThorn + 0.035*c.moist*(1-c.veg.shrubThorn)*(1+ (biome.vegBias?.thorn||0)) - 0.012*(0.45-c.moist));
+          c.veg.tree=clamp01(c.veg.tree + 0.02*c.moist*(1-c.veg.tree)*treeBase - 0.008*(0.35-c.moist));
           if(neighborPlants>6){
             const choke=0.01*(neighborPlants-6);
             ['grass','poison','shrub','shrubThorn','tree'].forEach(k=>{ c.veg[k]=clamp01(c.veg[k]-choke*Math.max(0.35,c.veg[k]*0.5)); });
@@ -781,8 +860,11 @@
     if(!bgLayer) return; const cellSize=params.cellSize; bgLayer.clear();
     for(let y=0;y<params.gridH;y++){
       for(let x=0;x<params.gridW;x++){
-        const c=state.cells[y*params.gridW+x]; const elevColor=bgLayer.lerpColor(bgLayer.color('#1b2b1e'), bgLayer.color('#5fa470'), c.elev); const treeShade=bgLayer.lerpColor(elevColor, bgLayer.color('#28442f'), c.veg.tree*0.6);
-        bgLayer.noStroke(); bgLayer.fill(treeShade); bgLayer.rect(x*cellSize,y*cellSize,cellSize,cellSize);
+        const c=state.cells[y*params.gridW+x];
+        const biomeColor=BIOMES[c.biome]?.color||'#2e3d3a';
+        const baseCol=bgLayer.color(biomeColor);
+        const elevShade=bgLayer.lerpColor(baseCol, bgLayer.color('#ffffff'), c.elev*0.08);
+        bgLayer.noStroke(); bgLayer.fill(elevShade); bgLayer.rect(x*cellSize,y*cellSize,cellSize,cellSize);
         const vegLevel=c.veg.grass+c.veg.shrub+c.veg.tree;
         if(vegLevel>0.18){
           const grassAlpha=clamp01(c.veg.grass*0.9);
@@ -791,15 +873,16 @@
           bgLayer.circle(x*cellSize+cellSize*0.3,y*cellSize+cellSize*0.25,1.5);
           if(dense){ bgLayer.circle(x*cellSize+cellSize*0.65,y*cellSize+cellSize*0.65,1.8); bgLayer.circle(x*cellSize+cellSize*0.4,y*cellSize+cellSize*0.7,1.2); }
         }
-        if(c.river){bgLayer.fill(70,160,255,180); bgLayer.rect(x*cellSize,y*cellSize,cellSize,cellSize);} else if(c.shore){bgLayer.fill(90,140,200,60); bgLayer.rect(x*cellSize,y*cellSize,cellSize,cellSize);}
+        if(c.river){bgLayer.fill(70,160,255,200); bgLayer.rect(x*cellSize,y*cellSize,cellSize,cellSize);} else if(c.shore){bgLayer.fill(90,140,200,60); bgLayer.rect(x*cellSize,y*cellSize,cellSize,cellSize);}
       }
     }
+    bgLayer.stroke(255,30); bgLayer.strokeWeight(1); const spacing=8*cellSize; for(let gx=0; gx<=params.gridW*cellSize; gx+=spacing){ bgLayer.line(gx,0,gx,params.gridH*cellSize);} for(let gy=0; gy<=params.gridH*cellSize; gy+=spacing){ bgLayer.line(0,gy,params.gridW*cellSize,gy);} bgLayer.noStroke();
     state.needsBgRedraw=false;
   }
   function handleHover(p){
     const cellTooltip=document.getElementById('cellTooltip'); const x=Math.floor(p.mouseX/params.cellSize), y=Math.floor(p.mouseY/params.cellSize);
     if(x<0||y<0||x>=params.gridW||y>=params.gridH){cellTooltip.classList.add('hidden'); return;}
-    const c=state.cells[y*params.gridW+x]; cellTooltip.textContent=`(${x},${y}) elev:${c.elev.toFixed(2)}\n地形:${c.terrain} river:${c.river?'yes':'no'}\nmoist:${c.moist.toFixed(2)}\n草:${c.veg.grass.toFixed(2)} 毒:${c.veg.poison.toFixed(2)}\n低木:${c.veg.shrub.toFixed(2)} トゲ:${c.veg.shrubThorn.toFixed(2)} 樹木:${c.veg.tree.toFixed(2)}`;
+    const c=state.cells[y*params.gridW+x]; cellTooltip.textContent=`(${x},${y}) elev:${c.elev.toFixed(2)}\n地形:${c.terrain} (${c.biome}) river:${c.river?'yes':'no'}\nmoist:${c.moist.toFixed(2)}\n草:${c.veg.grass.toFixed(2)} 毒:${c.veg.poison.toFixed(2)}\n低木:${c.veg.shrub.toFixed(2)} トゲ:${c.veg.shrubThorn.toFixed(2)} 樹木:${c.veg.tree.toFixed(2)}`;
     cellTooltip.style.left=(p.mouseX+16)+'px'; cellTooltip.style.top=(p.mouseY+16)+'px'; cellTooltip.classList.remove('hidden');
   }
   function handleSelect(p){
@@ -813,10 +896,10 @@
       for(let dx=-half; dx<=half; dx++){
         const nx=cx+dx, ny=cy+dy; if(nx<0||ny<0||nx>=params.gridW||ny>=params.gridH) continue; const idx=ny*params.gridW+nx; const c=state.cells[idx]; if(!c) continue;
         if(isWater){
-          c.river=true; c.shore=false; c.moist=1; c.wet=1; c.terrain='水域'; c.veg={grass:0,poison:0,shrub:0,shrubThorn:0,tree:0};
+          c.river=true; c.shore=false; c.moist=1; c.wet=1; c.terrain='水域'; c.biome='wetland'; c.veg={grass:0,poison:0,shrub:0,shrubThorn:0,tree:0};
         } else {
           c.river=false; c.shore=false; c.moist=Math.max(0.2,c.moist*0.6); c.wet=Math.max(0.15,c.wet*0.5); c.terrain='陸地';
-          c.veg.grass=Math.max(c.veg.grass,0.05); c.veg.tree=Math.max(c.veg.tree,0.02);
+          c.biome='prairie'; c.veg=initVegByBiome('prairie', state.rng);
         }
       }
     }
@@ -989,7 +1072,7 @@
     drawMiniMap(p);
     // overlay label
     const overlay=state.overlay;
-    const label=document.getElementById('layerLabel'); label.textContent=`レイヤー: ${overlayLabelText(overlay)}`; label.innerHTML=`レイヤー: ${overlayLabelText(overlay)}<small>表示中: ${overlayLabelText(overlay)}</small>`;
+    const label=document.getElementById('layerLabel'); label.textContent=`レイヤー: ${overlayLabelText(overlay)}`; label.innerHTML=`レイヤー: ${overlayLabelText(overlay)}<small>表示中: ${overlayLabelText(overlay)} / マップ ${params.gridW}x${params.gridH} (バイオーム・粒子演出強化版)</small>`;
     drawColorbar(p, overlay);
     updateLegendFilterPanel();
     updateHud(); updateInspector(currentWeather); updateChart();
