@@ -1,5 +1,5 @@
 import Animal from './Animal.js';
-import { WORLD_WIDTH, WORLD_HEIGHT } from './constants.js';
+import { WORLD_WIDTH, WORLD_HEIGHT, COLS, ROWS, TERRAIN } from './constants.js';
 
 /**
  * ワールド全体の時間・天候・統計を管理する軽量クラス。
@@ -14,6 +14,12 @@ export default class World {
         this.weather = 'clear';
         this.weatherTimer = 0;
         this.zoomLevel = zoomLevel;
+        this.temperature = 24;
+        this.moisture = 0.5;
+
+        this.tiles = Array.from({ length: ROWS }, () =>
+            Array.from({ length: COLS }, () => ({ type: TERRAIN.GRASS }))
+        );
 
         this.statsHistory = { speed: [], size: [], vision: [] };
         this.historyMax = 400;
@@ -24,6 +30,28 @@ export default class World {
         const animal = new Animal(x, y, dna);
         this.animals.push(animal);
         return animal;
+    }
+
+    getTileAt(x, y) {
+        const col = constrain(Math.floor(x / (WORLD_WIDTH / COLS)), 0, COLS - 1);
+        const row = constrain(Math.floor(y / (WORLD_HEIGHT / ROWS)), 0, ROWS - 1);
+        return this.tiles[row][col];
+    }
+
+    paintTerrain(centerX, centerY, radius, terrainType) {
+        const colCenter = constrain(Math.floor(centerX / (WORLD_WIDTH / COLS)), 0, COLS - 1);
+        const rowCenter = constrain(Math.floor(centerY / (WORLD_HEIGHT / ROWS)), 0, ROWS - 1);
+        const radCells = Math.max(1, Math.round(radius / (WORLD_WIDTH / COLS)));
+        for (let dy = -radCells; dy <= radCells; dy++) {
+            for (let dx = -radCells; dx <= radCells; dx++) {
+                const cx = colCenter + dx;
+                const cy = rowCenter + dy;
+                if (cx < 0 || cy < 0 || cx >= COLS || cy >= ROWS) continue;
+                const dist = Math.hypot(dx, dy);
+                if (dist > radCells) continue;
+                this.tiles[cy][cx] = { type: terrainType };
+            }
+        }
     }
 
     toggleZoom(level) { this.zoomLevel = level; }
@@ -49,9 +77,16 @@ export default class World {
         }
         this.weatherTimer--;
 
+        const targetTemp = this.weather === 'storm' ? 18 : this.weather === 'rain' ? 20 : 28;
+        const targetMoisture = this.weather === 'storm' ? 0.9 : this.weather === 'rain' ? 0.7 : 0.35;
+        this.temperature = lerp(this.temperature, targetTemp, 0.02);
+        this.moisture = lerp(this.moisture, targetMoisture, 0.015);
+
+        this.applyDynamicTerrain();
+
         const env = {
-            temperature: this.weather === 'rain' ? 20 : 28,
-            humidity: this.weather === 'storm' ? 0.8 : 0.5,
+            temperature: this.temperature,
+            humidity: this.moisture,
             weather: this.weather,
             isNight: this.isNight,
         };
@@ -60,7 +95,8 @@ export default class World {
         const newborns = [];
         for (const a of this.animals) {
             if (a.dead) continue;
-            a.update(env);
+            const tile = this.getTileAt(a.pos.x, a.pos.y).type;
+            a.update({ ...env, tile });
             const child = a.reproduce();
             if (child) {
                 this.checkMutation(a, child);
@@ -115,6 +151,19 @@ export default class World {
         pop();
     }
 
+    drawTerrain() {
+        const cellW = WORLD_WIDTH / COLS;
+        const cellH = WORLD_HEIGHT / ROWS;
+        noStroke();
+        for (let y = 0; y < ROWS; y++) {
+            for (let x = 0; x < COLS; x++) {
+                const t = this.tiles[y][x].type;
+                fill(t.color);
+                rect(x * cellW, y * cellH, cellW, cellH);
+            }
+        }
+    }
+
     drawAnimals() {
         for (const a of this.animals) {
             a.draw(this.zoomLevel);
@@ -162,6 +211,24 @@ export default class World {
         }
 
         p.pop();
+    }
+
+    applyDynamicTerrain() {
+        const freeze = this.temperature <= -5;
+        const thaw = this.temperature > 1;
+        const dryOut = this.temperature > 30 && this.moisture < 0.25;
+        const becomeMud = this.moisture > 0.75;
+
+        for (let y = 0; y < ROWS; y++) {
+            for (let x = 0; x < COLS; x++) {
+                const tile = this.tiles[y][x];
+                const t = tile.type;
+                if (freeze && t === TERRAIN.WATER && random() < 0.02) tile.type = TERRAIN.ICE;
+                if (thaw && t === TERRAIN.ICE && random() < 0.02) tile.type = TERRAIN.WATER;
+                if (dryOut && t === TERRAIN.GRASS && random() < 0.01) tile.type = TERRAIN.SAND;
+                if (becomeMud && (t === TERRAIN.SAND || t === TERRAIN.GRASS) && random() < 0.02) tile.type = TERRAIN.MUD;
+            }
+        }
     }
 }
 
