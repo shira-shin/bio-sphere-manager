@@ -17,20 +17,29 @@
     <section id="mapStage" aria-label="シミュレーションマップ">
       <div id="canvasHost"></div>
       <div id="mapOverlay" aria-label="表示ガイド">
-        <div class="layer-label" id="layerLabel">レイヤー: 動物(全)<small>地形 + 植生 + 河川 + 動物</small></div>
         <div class="legend draggable-panel" id="legendPanel" aria-label="凡例">
-          <h3 id="legendPanel-header">凡例</h3>
-          <ul style="grid-template-columns:1fr; gap:4px;">
-            <li style="font-weight:700; color:#c7d8f0;">地形</li>
-            <li><span class="swatch base"></span>ベース地形</li>
-            <li><span class="swatch river"></span>河川セル</li>
-            <li><span class="swatch moist"></span>水分</li>
-            <li style="font-weight:700; color:#c7d8f0;">植生</li>
-            <li><span class="swatch plant"></span>草/毒草/トゲ低木(点で表示)</li>
-            <li style="font-weight:700; color:#c7d8f0;">動物</li>
-            <li><span class="swatch herb"></span>草食・雑食(円)</li>
-            <li><span class="swatch carn"></span>肉食(三角)</li>
-          </ul>
+          <div class="legend-header" id="legendPanel-header">
+            <div class="legend-title">フローティング凡例</div>
+            <div class="legend-sub">ドラッグで移動できます</div>
+          </div>
+          <div class="layer-label" id="layerLabel">レイヤー: 動物(全)<small>地形 + 植生 + 河川 + 動物</small></div>
+          <div class="legend-section">
+            <h4>地形・植生レイヤー</h4>
+            <ul class="legend-list">
+              <li><span class="swatch base"></span>ベース地形</li>
+              <li><span class="swatch river"></span>河川セル</li>
+              <li><span class="swatch moist"></span>水分</li>
+              <li><span class="swatch plant"></span>植生ポイント</li>
+            </ul>
+          </div>
+          <div class="legend-section">
+            <h4>動物の凡例</h4>
+            <ul class="legend-list legend-animals">
+              <li><span class="legend-icon" aria-hidden="true">🟢</span><span>緑の円: 草食動物 (Herbivore)</span></li>
+              <li><span class="legend-icon" aria-hidden="true">🔺</span><span>赤の三角: 肉食動物 (Carnivore)</span></li>
+              <li><span class="legend-icon" aria-hidden="true">💀</span><span>ドクロ: 死亡した個体</span></li>
+            </ul>
+          </div>
         </div>
       </div>
       <div id="terrainToolbar">
@@ -92,6 +101,9 @@
           <label>表示種<select id="overlaySpecies"></select></label>
           <label><input type="checkbox" id="speciesDim" checked>他種を薄く</label>
           <label><input type="checkbox" id="dimTerrain" checked>植生表示で地形を減光</label>
+        </div>
+        <div class="row" style="margin-top:8px;">
+          <label><input type="checkbox" id="showVegetation" checked>🌿 植生を表示 (Show Vegetation)</label>
         </div>
       </div>
       <div class="panel">

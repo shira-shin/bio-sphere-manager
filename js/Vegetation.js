@@ -78,7 +78,7 @@ export default class Vegetation {
         let green = map(this.energy, 0, this.maxEnergy, 100, 255);
         // 水分不足時は茶色寄りに変化
         const drynessTint = this.lastMoisture < 0.25 ? map(this.lastMoisture, 0, 0.25, 100, 20) : 0;
-        fill(50 + drynessTint, green - drynessTint, 50);
+        fill(50 + drynessTint, green - drynessTint, 50, 100);
         ellipse(this.pos.x, this.pos.y, size);
     }
 }
