@@ -119,7 +119,7 @@
       running:false, step:0, season:'雨季', seasonCounter:0, events:[], idCounter:0, lastError:null, renderSimple:false, logs:[], chartData:[], averages:[], births:0, deaths:0, kills:0, spawnBuffer:[], density:new Float32Array(params.gridW*params.gridH),
       movedAgents:0, nanAgents:0, zeroMoveStreak:0, vegMin:0, vegMax:0, vegMean:0, vegGrowth:0, vegConsumed:0,
       shannon:0, genetic:0, stability:0, extinction:0, stabilityWindow:[], prevCounts:{},
-      animalGrid:[], needsBgRedraw:true, lastRiverCount:0, lastMoistAvg:0, lastVegAvg:0, aliveCount:0, waterLevel:0};
+      animalGrid:[], needsBgRedraw:true, lastRiverCount:0, lastMoistAvg:0, lastVegAvg:0, aliveCount:0, waterLevel:0, showVegetation:true};
   }
   let state=createState('bs-demo');
   let uiParams={...initialUiParams};
@@ -763,11 +763,13 @@
     const cellSize=params.cellSize; p.background('#050910');
     const dimTerrain=document.getElementById('dimTerrain').checked;
     const activeOverlay=state.overlay;
+    const vegetationVisible=state.showVegetation && (document.getElementById('showVegetation')?.checked ?? true);
+    state.showVegetation=vegetationVisible;
     if(state.needsBgRedraw) redrawBackground();
     if(bgLayer) p.image(bgLayer,0,0);
     if(dimTerrain && activeOverlay.startsWith('vegetation')){ p.fill(5,9,16,130); p.noStroke(); p.rect(0,0,canvasW,canvasH); }
     drawOverlay(p, state.overlay, parseFloat(document.getElementById('overlayAlpha').value||'0.6'));
-    drawPlants();
+    if(vegetationVisible){ drawPlants(); }
     // animals
     for(const a of state.animals){ if(!a.alive) continue; drawAnimal(p,a); }
     // trails
@@ -1010,6 +1012,8 @@
     const brushSlider=document.getElementById('brushSize'); const brushLabel=document.getElementById('brushSizeValue');
     if(brushSlider && brushLabel){ const sync=()=>brushLabel.textContent=brushSlider.value; brushSlider.addEventListener('input',sync); sync(); }
     const terrainBtn=document.getElementById('terrainModeToggle'); if(terrainBtn){ terrainBtn.addEventListener('click',()=>{ terrainEditMode=!terrainEditMode; updateTerrainEditButton(); }); updateTerrainEditButton(); }
+    const vegetationToggle=document.getElementById('showVegetation');
+    if(vegetationToggle){ const syncVeg=()=>{ state.showVegetation=vegetationToggle.checked; }; vegetationToggle.addEventListener('change',syncVeg); syncVeg(); }
     document.getElementById('speciesEditor').addEventListener('input',e=>{
       const kind=e.target.dataset.kind; const id=e.target.dataset.id; if(kind==='param'){ const sp=state.species.find(s=>s.id===id); sp[e.target.dataset.field]=parseFloat(e.target.value); }
     });
