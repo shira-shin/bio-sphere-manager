@@ -26,8 +26,8 @@ export default class World {
         this.mutationLog = [];
     }
 
-    spawn(x, y, dna = null) {
-        const animal = new Animal(x, y, dna);
+    spawn(x, y, dna = null, generation = 1) {
+        const animal = new Animal(x, y, dna, generation);
         this.animals.push(animal);
         return animal;
     }
