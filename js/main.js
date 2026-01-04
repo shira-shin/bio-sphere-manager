@@ -411,6 +411,7 @@
       this.genes=defaultGenes(); this.history=[]; this.trail=this.history; this.alive=true; this.vx=0; this.vy=0; this.waterCooldown=0; this.target=null;
       this.lastSafeX=this.x; this.lastSafeY=this.y; this.headingX=1; this.headingY=0; this.wanderAngle=rng()*Math.PI*2; this.mateCooldown=0;
       this.reproCooldown=0; this.emote=''; this.emoteTimer=0;
+      this.timeline=[]; this.recordEvent('誕生', '初期配置');
     }
 
     getSpecies(){ return state.species.find(s=>s.id===this.speciesId); }
@@ -439,6 +440,12 @@
       if(this.emoteTimer>0) this.emoteTimer--;
     }
 
+    recordEvent(label, detail=''){
+      this.timeline=this.timeline||[];
+      this.timeline.push({step:state?.step??0, label, detail});
+      if(this.timeline.length>12) this.timeline.shift();
+    }
+
     showEmote(icon, duration=60){ this.emote=icon; this.emoteTimer=duration; }
 
     decideState(state){
@@ -460,12 +467,17 @@
       const drinkNeed=thirstPct>60 && this.waterCooldown<=0;
       const foodNearby=this.hasFoodNearby(state,vision);
 
+      const prevState=this.state;
       let next=AnimalStates.WANDER;
       if(drinkNeed) next=AnimalStates.DRINK;
       else if(hungerPct>40 && foodNearby) next=AnimalStates.EAT;
       else if(mateReady) next=AnimalStates.MATE;
 
-      if(next!==this.state){ this.state=next; this.stateTimer=30+Math.floor(rng()*20); this.target=null; }
+      if(next!==prevState){ this.state=next; this.stateTimer=30+Math.floor(rng()*20); this.target=null;
+        if(next===AnimalStates.DRINK) this.recordEvent('水場を探す','渇き');
+        else if(next===AnimalStates.EAT) this.recordEvent('採食モード','空腹');
+        else if(next===AnimalStates.MATE) this.recordEvent('求愛','繁殖行動');
+      }
     }
 
     hasFoodNearby(state, vision){
@@ -603,6 +615,7 @@
       const thirstTol=clampRange(lerp(0.7,1.3,genes.g_thirstTol),0.2,2.0); const waterNeed=clampRange(sp.waterNeed,0.2,2.0);
       this.age+=1; this.energy-=0.002*metabolism; this.hydration-=0.002*waterNeed*thirstTol; if(this.waterCooldown>0) this.waterCooldown-=1; if(this.mateCooldown>0) this.mateCooldown-=1;
       const cell=state.cells[Math.floor(this.y)*w+Math.floor(this.x)];
+      const prevHydration=this.hydration;
 
       if(sp.trophic==='herb' || sp.trophic==='omn'){
         const intake=Math.min(cell.veg.grass,0.1*(sp.dietPreference.grass||0)); cell.veg.grass-=intake; this.energy=Math.min(1,this.energy+intake*1.2); state.vegConsumed+=intake;
@@ -610,16 +623,18 @@
         const shrub=Math.min(cell.veg.shrub,0.05*(sp.dietPreference.shrub||0)); cell.veg.shrub-=shrub; this.energy=Math.min(1,this.energy+shrub*1.05); state.vegConsumed+=shrub;
         const thornEat=Math.min(cell.veg.shrubThorn,0.045*(sp.dietPreference.shrub||0.6)); cell.veg.shrubThorn-=thornEat; const thornEff=(sp.thornHandling||0.5); this.energy=clamp01(this.energy+thornEat*(0.3+thornEff)); this.energy-=Math.max(0,0.1-thornEff)*thornEat*0.5; state.vegConsumed+=thornEat;
         const treeEat=Math.min(cell.veg.tree,0.03*(sp.dietPreference.tree||0)); cell.veg.tree-=treeEat; this.energy=Math.min(1,this.energy+treeEat); state.vegConsumed+=treeEat;
+        const totalIntake=intake+poisonEat+shrub+thornEat+treeEat;
+        if(totalIntake>0.05) this.recordEvent('採食', `植物を${totalIntake.toFixed(2)}摂取`);
       }
 
-      if(this.state===AnimalStates.DRINK && (cell.shore||cell.river||cell.moist>0.45)) {this.hydration=Math.min(1,this.hydration+0.08*cell.moist+0.05); this.waterCooldown=40+Math.floor(rng()*80);}
+      if(this.state===AnimalStates.DRINK && (cell.shore||cell.river||cell.moist>0.45)) {this.hydration=Math.min(1,this.hydration+0.08*cell.moist+0.05); this.waterCooldown=40+Math.floor(rng()*80); if(this.hydration>prevHydration+0.03) this.recordEvent('水分補給', '水場で回復');}
 
       if(sp.trophic==='carn'){
         const victim=getNeighbors(this,state,0.8).find(o=>sp.preyList.includes(o.speciesId) && Math.hypot(torusDelta(o.x,this.x,params.gridW), torusDelta(o.y,this.y,params.gridH))<0.6);
         if(victim){victim.alive=false; removeAnimalFromGrid(victim,state); state.kills++; const pack=getNeighbors(this,state,3).filter(o=>o.speciesId===this.speciesId); const shareBase=0.35/Math.max(1,pack.length);
           pack.forEach(o=>{o.energy=Math.min(1,o.energy+shareBase); o.hydration=Math.min(1,o.hydration+0.12);});
           this.energy=Math.min(1,this.energy+0.1); this.hydration=Math.min(1,this.hydration+0.05);
-          this.behavior='hunt'; state.events.push({type:'hunt', predator:sp.id, prey:victim.speciesId});
+          this.behavior='hunt'; state.events.push({type:'hunt', predator:sp.id, prey:victim.speciesId}); this.recordEvent('捕食', `${victim.speciesId}を捕食`); if(victim.recordEvent) victim.recordEvent('捕食された', `捕食者:${this.id}`);
           if(state.renderEffects) particles.burst({x:this.x,y:this.y,color:'#ff5c5c',count:14,speed:1.1,life:50});
         }
       }
@@ -640,7 +655,7 @@
         this.x=this.lastSafeX; this.y=this.lastSafeY; this.vx=0; this.vy=0; state.nanAgents++; this.lastEvent='NaN rollback'; state.events.push({type:'nan', id:this.id, x:this.x,y:this.y});
       }
 
-      if(this.energy<=0||this.hydration<=0){this.alive=false; state.deaths++; state.aliveCount=Math.max(0,state.aliveCount-1); removeAnimalFromGrid(this,state); state.events.push({type:'death', id:this.id}); this.lastEvent='死亡'; return;}
+      if(this.energy<=0||this.hydration<=0){this.alive=false; state.deaths++; state.aliveCount=Math.max(0,state.aliveCount-1); removeAnimalFromGrid(this,state); state.events.push({type:'death', id:this.id}); this.lastEvent='死亡'; this.recordEvent('死亡', this.energy<=0?'餓死':'渇死'); return;}
     }
 
     handleReproduction(state){
@@ -661,6 +676,7 @@
         child.genes=combineGenes(this.genes,partner.genes);
         state.spawnBuffer.push(child); state.births++; state.events.push({type:'birth', species:sp.id});
         this.lastEvent='繁殖'; partner.lastEvent='繁殖'; child.lastEvent='誕生'; this.behavior='seek-mate'; partner.behavior='seek-mate';
+        this.recordEvent('繁殖', `相手:${partner.id}`); partner.recordEvent('繁殖', `相手:${this.id}`); child.recordEvent('誕生', `親:${this.id}+${partner.id}`);
       }
     }
   }
@@ -1290,10 +1306,12 @@
     if(a.x<0||a.x>params.gridW||a.y<0||a.y>params.gridH) return;
     if(screenX<-16||screenX>canvasW+16||screenY<-16||screenY>canvasH+16) return;
     const baseColor=p.color(sp.color);
-    let color=baseColor;
-    if(a.state===AnimalStates.DRINK){ color=p.lerpColor(baseColor,p.color('#6fa4ff'),0.45); }
-    else if(a.state===AnimalStates.EAT){ color=p.lerpColor(baseColor,p.color('#68e38f'),0.3); }
-    else if(a.state===AnimalStates.MATE){ color=p.lerpColor(baseColor,p.color('#ffc1e3'),0.35); }
+    const speedTrait=clamp01(((a.genes?.g_speed??1)-0.8)/0.7);
+    const speedHue=p.lerpColor(p.color('#4fa3ff'), p.color('#ff6b6b'), speedTrait);
+    let color=p.lerpColor(baseColor, speedHue, 0.55);
+    if(a.state===AnimalStates.DRINK){ color=p.lerpColor(color,p.color('#6fa4ff'),0.45); }
+    else if(a.state===AnimalStates.EAT){ color=p.lerpColor(color,p.color('#68e38f'),0.3); }
+    else if(a.state===AnimalStates.MATE){ color=p.lerpColor(color,p.color('#ffc1e3'),0.35); }
     const angle=Math.atan2(a.headingY||0,a.headingX||1);
     // trail
     if(a.history && a.history.length>1){
@@ -1382,6 +1400,8 @@
     const statusIcon=selectedAnimal.state===AnimalStates.MATE?'❤️':(selectedAnimal.state===AnimalStates.DRINK?'💧':(selectedAnimal.state===AnimalStates.EAT?'🍃':'🚶'));
     const weatherIcon=weather?.weather==='RAINY'?'🌧️':'☀️';
     const temperature=weather?.temperature ?? 0;
+    const timeline=(selectedAnimal.timeline||[]).slice(-8);
+    const timelineHtml=timeline.length? timeline.map(ev=>`<div class="inspector-row timeline"><span>Step ${ev.step}</span><span>${ev.label}${ev.detail?` / ${ev.detail}`:''}</span></div>`).join('') : '<div class="inspector-empty">行動記録はまだありません</div>';
     inspector.innerHTML=`
       <div class="inspector-heading">${sp.name} <small>(${sp.id})</small></div>
       <div class="inspector-row"><span>状態</span><span>${selectedAnimal.state} ${statusIcon} / ${selectedAnimal.behavior}</span></div>
@@ -1390,6 +1410,8 @@
       <div class="inspector-row"><span>突然変異</span><span>${(1+mutationRate).toFixed(2)}x</span></div>
       <div class="inspector-row"><span>気候</span><span>${weatherIcon} ${temperature.toFixed(1)}°C</span></div>
       <div class="inspector-row genetics"><span>DNA</span><span>速度:${speed.toFixed(2)}  視野:${vision.toFixed(2)}  代謝:${metabolism.toFixed(2)}  渇き耐性:${selectedAnimal.genes.g_thirstTol.toFixed(2)}  空腹耐性:${selectedAnimal.genes.g_starveTol.toFixed(2)}</span></div>
+      <div class="inspector-subhead">ライフログ</div>
+      ${timelineHtml}
     `;
   }
   const mutationGeneList=[
