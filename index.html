@@ -166,10 +166,14 @@
           <div class="hud"><div class="label">移動 / NaN</div><div class="value" id="hudMoveNan">0/0</div></div>
         </div>
         <div class="badge hidden" id="movementWarning">更新停止の可能性: movedAgents=0 が連続</div>
+        <div class="hazard-panel">
+          <div class="hazard-title"><span>⚡</span><span>環境脅威</span><span class="badge hazard" id="hazardBadge">平穏</span></div>
+          <p class="hazard-desc" id="hazardDesc">天候以外の脅威は発生していません。</p>
+        </div>
       </div>
       <div class="panel hud-panel">
         <h2>インスペクタ</h2>
-        <div class="row"><label><input id="trailToggle" type="checkbox" checked>選択個体の軌跡を描画</label><label><input id="haloToggle" type="checkbox" checked>行動ハロー</label></div>
+        <div class="row"><label><input id="trailToggle" type="checkbox" checked>選択個体の軌跡を描画</label><label><input id="haloToggle" type="checkbox" checked>行動ハロー</label><label><input id="trailEffectMute" type="checkbox" checked>移動エフェクト控えめ</label></div>
         <div id="selectedInfo" style="font-size:12px; color:#cdd8ea; margin-top:8px; white-space:pre; min-height:120px;">クリックで個体情報を表示</div>
         <div id="inspector" class="inspector-panel"></div>
       </div>
@@ -224,7 +228,8 @@
       <div class="panel">
         <h2>変異マップ</h2>
         <div id="mutationMap" class="mutation-map">進化の推移を計算中…</div>
-        <div class="mut-hint">色は初期値(1.0)からの変化量を示します。青=低下、緑=維持、黄/赤=上昇。</div>
+        <div class="mut-hint">色は初期値からの変化量を示します。青=低下、緑=維持、黄/赤=上昇。バーは「初期 → 現在」の順で並び、種ごとの変異の道筋を俯瞰できます。</div>
+        <div class="mut-subtle">※個体クリックに頼らず、種単位の変異と分岐が追えるビューです。</div>
       </div>
       <div class="panel">
         <h2>スコア</h2>

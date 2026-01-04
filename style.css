@@ -4,13 +4,14 @@
     header{padding:14px 18px; border-bottom:1px solid #162030; background:linear-gradient(180deg,#0c1420,#0a1018); box-shadow:0 12px 32px rgba(0,0,0,0.35); position:sticky; top:0; z-index:30;}
     header h1{margin:0; font-size:22px; letter-spacing:0.05em;}
     header .lead{margin:4px 0 0; font-size:13px; color:#9fb0c3;}
-    :root{--map-col-width:minmax(720px,1fr);} 
-    main{display:grid; grid-template-columns: var(--map-col-width) 10px 380px; gap:0; min-height:calc(100vh - 76px);} 
-    main.map-expanded{grid-template-columns: 1fr 0 0;}
+    :root{--map-col-width:minmax(860px,1.05fr);}
+    main{display:grid; grid-template-columns: var(--map-col-width) 10px 380px; gap:0; min-height:calc(100vh - 76px);}
+    main.map-expanded{grid-template-columns: minmax(0,1.2fr) 0 0;}
     main.map-expanded aside{display:none;}
     main.map-expanded #layoutHandle{display:none;}
     #mapStage{position:relative; background:radial-gradient(circle at 20% 30%, rgba(80,140,220,0.06), transparent 40%), #060b12; overflow:hidden;}
     #canvasHost{position:absolute; inset:12px; border-radius:18px; box-shadow:0 16px 40px rgba(0,0,0,0.55); background:#050910; overflow:hidden;}
+    main.map-expanded #canvasHost{inset:6px; border-radius:16px;}
     #mapOverlay{position:absolute; left:20px; top:20px; z-index:10;}
     .floating-controls{display:flex; gap:8px; margin-bottom:8px;}
     .floating-controls button{background:#0f1b2c; border-color:#1f2c44; font-size:12px; padding:6px 10px;}
@@ -84,6 +85,7 @@
     .gene-bar::after{content:''; position:absolute; left:8px; right:8px; bottom:6px; height:4px; border-radius:999px; background:var(--bar-color, #5ad17f); opacity:0.75;}
     .gene-bar strong{display:block; font-size:13px; color:#e8f3ff; margin-bottom:2px;}
     .mut-hint{margin-top:6px; font-size:12px; color:#8fa6c8;}
+    .mut-subtle{margin-top:4px; font-size:11px; color:#6f88aa;}
     .legend-hint{margin-top:8px; font-size:12px; color:#94a8c4; background:linear-gradient(90deg, rgba(50,80,130,0.25), rgba(80,200,140,0.2)); border:1px solid #1f2c44; border-radius:10px; padding:8px 10px;}
     .legend-hint.subtle{background:linear-gradient(90deg, rgba(30,50,80,0.4), rgba(30,90,80,0.35)); color:#9fb0c3;}
 
@@ -126,3 +128,8 @@
     .species-editor-detail{margin-top:6px; border:1px solid #1b283a; border-radius:10px; background:#0f1622; padding:6px 8px;}
     .species-editor-detail summary{font-weight:700; color:#dfe9ff; cursor:pointer;}
     @media(max-width:1100px){ .gene-line{grid-template-columns:1fr; grid-template-rows:auto auto auto auto;} .gene-value{justify-self:flex-start;} }
+
+    .hazard-panel{margin-top:10px; border:1px solid #2a3a52; border-radius:12px; background:linear-gradient(180deg, rgba(30,45,70,0.8), rgba(20,28,42,0.9)); padding:10px;}
+    .hazard-title{font-weight:800; font-size:13px; letter-spacing:0.03em; color:#e8f3ff; display:flex; gap:8px; align-items:center; margin:0 0 6px;}
+    .hazard-desc{font-size:12px; color:#9fb0c3; margin:0;}
+    .badge.hazard{background:#2b1f30; border-color:#50344b; color:#ffb4c8;}

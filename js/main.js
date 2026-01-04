@@ -120,8 +120,8 @@
         p.noFill(); p.stroke(p.red(col), p.green(col), p.blue(col), alpha*180); p.strokeWeight(1.2);
         p.circle(this.x*cellSize, this.y*cellSize, this.size*cellSize*0.6);
       } else if(this.type==='trail'){
-        p.noStroke(); p.fill(p.red(col), p.green(col), p.blue(col), alpha*90);
-        p.ellipse(this.x*cellSize, this.y*cellSize, this.size*0.8, this.size*0.48);
+        p.noStroke(); p.fill(p.red(col), p.green(col), p.blue(col), alpha*65);
+        p.ellipse(this.x*cellSize, this.y*cellSize, this.size*0.7, this.size*0.42);
       } else if(this.type==='dust'){
         p.noStroke(); p.fill(p.red(col), p.green(col), p.blue(col), alpha*120);
         p.circle(this.x*cellSize, this.y*cellSize, this.size*0.9);
@@ -177,7 +177,8 @@
       poisonTolerance:0.45, thornHandling:0.6, climbSkill:0.6, dietPreference:{grass:0.68,poison:0.08,shrub:0.18,tree:0.06}},
   ];
   const defaultGenes=()=>({g_speed:1,g_vision:1,g_metabolism:1,g_fertility:1,g_thirstTol:1,g_starveTol:1});
-  const initialUiParams={rainyLen:600,dryLen:400,shareRate:0.6,leaderBonus:1.2, miniMapPos:null, mapColWidth:'minmax(720px,1fr)'};
+  const GENE_KEYS=['g_speed','g_vision','g_metabolism','g_fertility','g_thirstTol','g_starveTol'];
+  const initialUiParams={rainyLen:600,dryLen:400,shareRate:0.6,leaderBonus:1.2, miniMapPos:null, mapColWidth:'minmax(860px,1.05fr)'};
   const presets={
     temperate:{seed:'temperate', species:JSON.parse(JSON.stringify(baseSpecies)), counts:{hare:28,deer:18,boar:12,wolf:8,bear:4,zebra:16}},
     herdFocus:{seed:'herd', species:JSON.parse(JSON.stringify(baseSpecies)).map(sp=>({...sp, fertility:sp.id==='hare'?0.8:sp.id==='deer'?0.55:sp.fertility})), counts:{hare:36,deer:28,boar:10,wolf:8,bear:3,zebra:20}},
@@ -190,7 +191,8 @@
       movedAgents:0, nanAgents:0, zeroMoveStreak:0, vegMin:0, vegMax:0, vegMean:0, vegGrowth:0, vegConsumed:0,
       shannon:0, genetic:0, stability:0, extinction:0, stabilityWindow:[], prevCounts:{},
       animalGrid:[], needsBgRedraw:true, lastRiverCount:0, lastMoistAvg:0, lastVegAvg:0, aliveCount:0, waterLevel:0, showVegetation:true, lastDensity:null,
-      layerSettings:{terrain:true, vegetation:true, animals:true, vegetationBoost:1, animalScale:1}, renderEffects:true, hudVisible:true, mapExpanded:false};
+      layerSettings:{terrain:true, vegetation:true, animals:true, vegetationBoost:1, animalScale:1}, renderEffects:true, hudVisible:true, mapExpanded:false,
+      trailIntensity:0.35, currentHazard:null, geneOrigins:{} };
   }
   let state=createState('bs-demo');
   let uiParams={...initialUiParams};
@@ -367,11 +369,18 @@
   function exportSpeciesJSON(){ try{ const blob=new Blob([JSON.stringify(state.species,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='species.json'; a.click(); } catch(err){ logMsg('Export失敗:'+err.message);} }
   function importSpeciesJSON(){ const txt=prompt('JSONを貼り付け'); if(!txt) return; try{ const parsed=JSON.parse(txt); if(Array.isArray(parsed)){ state.species=parsed; resetSpeciesEditor(); spawnAnimals(); logMsg('JSONから読み込み'); } else { logMsg('配列形式ではありません'); } } catch(err){ logMsg('Import失敗:'+err.message);} }
   function spawnAnimals(){
-    state.animals=[]; const counts={}; document.querySelectorAll('#speciesEditor input[data-kind="count"]').forEach(inp=>counts[inp.dataset.id]=parseInt(inp.value||'0'));
+    state.animals=[]; state.geneOrigins={};
+    const counts={}; document.querySelectorAll('#speciesEditor input[data-kind="count"]').forEach(inp=>counts[inp.dataset.id]=parseInt(inp.value||'0'));
     const rng=state.rng; state.species.forEach(sp=>{
-      const n=counts[sp.id]??20; for(let i=0;i<n;i++){
+      const n=counts[sp.id]??20; const sums={};
+      for(let i=0;i<n;i++){
         const seedGenes=createSeedGenes(rng);
+        GENE_KEYS.forEach(k=>{sums[k]=(sums[k]||0)+seedGenes[k];});
         state.animals.push(createAnimal(sp, rng, undefined, undefined, seedGenes));
+      }
+      if(n>0){
+        const avg={}; GENE_KEYS.forEach(k=>avg[k]=(sums[k]||0)/n);
+        state.geneOrigins[sp.id]=avg;
       }
     });
     state.idCounter=state.animals.length;
@@ -475,7 +484,7 @@
     }
 
     applyForces(state){
-      const sp=this.getSpecies(); let {speed,vision}=this.cached; const w=params.gridW, h=params.gridH; const rng=state.rng;
+      const sp=this.getSpecies(); let {speed,vision}=this.cached; const w=params.gridW, h=params.gridH; const rng=state.rng; const hazard=state.currentHazard;
       let steerX=0, steerY=0;
       this.wanderAngle+= (rng()-0.5)*0.35; steerX+=Math.cos(this.wanderAngle)*0.35; steerY+=Math.sin(this.wanderAngle)*0.35;
 
@@ -534,7 +543,8 @@
       const steerN=safeNorm(steerX,steerY); if(steerN){ steerX/=steerN; steerY/=steerN; this.headingX=steerX; this.headingY=steerY; }
       else { steerX=rng()-0.5; steerY=rng()-0.5; }
 
-      this.moveMul=this.state===AnimalStates.WANDER?0.6:(this.state===AnimalStates.DRINK?0.48:(this.state===AnimalStates.MATE?0.65:0.55));
+      const hazardSlow=hazard?.type==='storm'?0.8:(hazard?.type==='disease'?0.9:1);
+      this.moveMul=(this.state===AnimalStates.WANDER?0.6:(this.state===AnimalStates.DRINK?0.48:(this.state===AnimalStates.MATE?0.65:0.55)))*hazardSlow;
       const targetVx=steerX*speed*this.moveMul; const targetVy=steerY*speed*this.moveMul;
       const inertia=0.82; const accel=0.18;
       const prevVx=this.vx, prevVy=this.vy;
@@ -573,11 +583,14 @@
       if(cell?.rugged>clampRange((this.getSpecies()?.climbSkill||0.6)+0.25,0,1.4)){
         this.x=prevX; this.y=prevY; this.vx*=-0.25; this.vy*=-0.25; this.lastEvent='急斜面回避'; return;
       }
-      if(state.renderEffects && movedDist>0.08){
+      const trailIntensity=state.trailIntensity ?? 1;
+      if(state.renderEffects && movedDist>0.08 && trailIntensity>0){
         const biomeKey=cell?.biome; const particleColor=BIOMES[biomeKey]?.particles||'#cfe4ff';
         const type=(biomeKey==='desert'||biomeKey==='highland')?'dust':'trail';
-        const particleLife=24+Math.random()*18;
-        particles.trail({x:this.x,y:this.y,color:particleColor,count:1+Math.floor(movedDist*3),spread:0.4+Math.random()*0.35,type,life:particleLife});
+        const particleLife=(18+Math.random()*16)*(0.6+trailIntensity);
+        const count=Math.max(0, Math.round((1+Math.floor(movedDist*3))*trailIntensity));
+        const spread=0.25+Math.random()*0.35*trailIntensity;
+        if(count>0) particles.trail({x:this.x,y:this.y,color:particleColor,count,spread,type,life:particleLife});
       }
       moveAnimalInGrid(this,state);
       if(Math.hypot(this.x-prevX,this.y-prevY)>0.001) state.movedAgents++;
@@ -608,6 +621,18 @@
           this.energy=Math.min(1,this.energy+0.1); this.hydration=Math.min(1,this.hydration+0.05);
           this.behavior='hunt'; state.events.push({type:'hunt', predator:sp.id, prey:victim.speciesId});
           if(state.renderEffects) particles.burst({x:this.x,y:this.y,color:'#ff5c5c',count:14,speed:1.1,life:50});
+        }
+      }
+
+      if(state.currentHazard){
+        if(state.currentHazard.type==='disease'){
+          this.energy-=0.0015*state.currentHazard.severity; this.hydration-=0.0008*state.currentHazard.severity; this.lastEvent='疫病の影響';
+        }
+        if(state.currentHazard.type==='toxin' && (sp.trophic==='herb' || sp.trophic==='omn')){
+          this.energy-=0.0012*state.currentHazard.severity; this.lastEvent='毒性の拡散';
+        }
+        if(state.currentHazard.type==='storm'){
+          this.hydration-=0.0009*state.currentHazard.severity; this.lastEvent='砂嵐で消耗';
         }
       }
 
@@ -763,6 +788,7 @@
     let births=0; let deaths=0;
     const rng=state.rng; const w=params.gridW, h=params.gridH; state.events=[]; state.step++; state.seasonCounter++;
     state.movedAgents=0; state.nanAgents=0; state.vegGrowth=0; state.vegConsumed=0;
+    maybeTriggerHazard();
     updatePlants();
     state.animalGrid=createAnimalGrid(); state.aliveCount=0; state.animals.forEach(a=>{ if(a.alive){ registerAnimalToGrid(a,state); state.aliveCount++; } });
     const seasonLen=state.season==='雨季'?uiParams.rainyLen:uiParams.dryLen; if(state.seasonCounter>seasonLen){state.season=state.season==='雨季'?'乾季':'雨季'; state.seasonCounter=0; logMsg(`季節が${state.season}に切替`);} 
@@ -791,6 +817,9 @@
           c.veg.shrub=clamp01(c.veg.shrub + 0.04*c.moist*(1-c.veg.shrub)*shrubBase - 0.01*(0.4-c.moist));
           c.veg.shrubThorn=clamp01(c.veg.shrubThorn + 0.035*c.moist*(1-c.veg.shrubThorn)*(1+ (biome.vegBias?.thorn||0)) - 0.012*(0.45-c.moist));
           c.veg.tree=clamp01(c.veg.tree + 0.02*c.moist*(1-c.veg.tree)*treeBase - 0.008*(0.35-c.moist));
+          if(state.currentHazard?.type==='toxin'){
+            c.veg.poison=clamp01(c.veg.poison + 0.008*state.currentHazard.severity);
+          }
           if(neighborPlants>6){
             const choke=0.01*(neighborPlants-6);
             ['grass','poison','shrub','shrubThorn','tree'].forEach(k=>{ c.veg[k]=clamp01(c.veg[k]-choke*Math.max(0.35,c.veg[k]*0.5)); });
@@ -1047,6 +1076,25 @@
     return {weather, temperature:temp, humidity};
   }
 
+  function maybeTriggerHazard(){
+    const rng=state.rng;
+    if(state.currentHazard && state.currentHazard.until<=state.step){
+      logMsg(`脅威収束: ${state.currentHazard.label}`);
+      state.currentHazard=null;
+    }
+    if(state.currentHazard || state.step<200) return;
+    if(rng()<0.0015){
+      const options=[
+        {type:'disease', label:'疫病', detail:'一部の個体が衰弱', severity:lerp(0.8,1.4,rng()), duration:320+Math.floor(rng()*240)},
+        {type:'toxin', label:'毒性繁茂', detail:'胞子で草食が消耗', severity:lerp(0.7,1.2,rng()), duration:260+Math.floor(rng()*200)},
+        {type:'storm', label:'砂嵐', detail:'視界と水分を奪う強風', severity:lerp(0.7,1.3,rng()), duration:220+Math.floor(rng()*200)},
+      ];
+      const pick=options[Math.floor(rng()*options.length)];
+      state.currentHazard={...pick, until:state.step+pick.duration};
+      logMsg(`環境脅威発生: ${pick.label} (${pick.detail})`);
+    }
+  }
+
   function drawWeatherOverlay(p, weather){
     if(!weather) return;
     const w=canvasW||p.width; const h=canvasH||p.height;
@@ -1073,6 +1121,11 @@
     p.noStroke();
     p.fill(255,255,255,230);
     p.text(`${icon} ${weather.temperature.toFixed(1)}°C`, w-12, 12);
+    if(state.currentHazard){
+      p.textSize(16);
+      p.fill(255,200,160,230);
+      p.text(`⚠️ ${state.currentHazard.label}`, w-12, 42);
+    }
     p.pop();
   }
   function updateCamera(p){
@@ -1246,6 +1299,24 @@
     document.getElementById('hudStability').textContent=(log.stability||0).toFixed(2);
     document.getElementById('hudExtinct').textContent=state.extinction;
     const warn=document.getElementById('movementWarning'); if(state.zeroMoveStreak>=2){warn.classList.remove('hidden');} else {warn.classList.add('hidden');}
+    updateHazardUi();
+  }
+
+  function updateHazardUi(){
+    const badge=document.getElementById('hazardBadge');
+    const desc=document.getElementById('hazardDesc');
+    if(!badge||!desc) return;
+    const hazard=state.currentHazard;
+    if(!hazard){
+      badge.textContent='平穏';
+      badge.classList.remove('active');
+      desc.textContent='天候以外の脅威は発生していません。';
+      return;
+    }
+    badge.textContent=hazard.label;
+    badge.classList.add('active');
+    const remain=Math.max(0,(hazard.until||state.step)-state.step);
+    desc.textContent=`残り${remain}ステップ / ${hazard.detail} (強度${hazard.severity?.toFixed(2)??'-'})`;
   }
   function updateTrophicPanel(){
     const log=state.logs[state.logs.length-1]; if(!log) return;
@@ -1304,10 +1375,11 @@
       mutationGeneList.forEach(g=>{ entry.sums[g.key]=(entry.sums[g.key]||0)+(a.genes[g.key]??baseline[g.key]??1); });
       map.set(a.speciesId, entry);
     });
+    const origins=state.geneOrigins||{};
     return state.species.map(sp=>{
       const entry=map.get(sp.id); if(!entry||entry.count===0) return {species:sp, count:0, averages:null};
       const averages={}; mutationGeneList.forEach(g=>{ averages[g.key]=(entry.sums[g.key]||0)/entry.count; });
-      return {species:sp, count:entry.count, averages};
+      return {species:sp, count:entry.count, averages, origin:origins[sp.id]||baseline};
     });
   }
   function mutationColor(delta){
@@ -1332,10 +1404,11 @@
       const bars=document.createElement('div'); bars.className='gene-bars';
       mutationGeneList.forEach(g=>{
         const val=item.averages[g.key]; if(!Number.isFinite(val)) return;
-        const delta=val-1; const pct=Math.round(delta*100);
+        const origin=item.origin?.[g.key] ?? 1;
+        const delta=val-origin; const pct=Math.round(delta/origin*100);
         const bar=document.createElement('div'); bar.className='gene-bar';
         bar.style.setProperty('--bar-color', mutationColor(delta));
-        bar.innerHTML=`<strong>${g.label}</strong><span>${val.toFixed(2)} (${pct>=0?'+':''}${pct}%)</span>`;
+        bar.innerHTML=`<strong>${g.label}</strong><span>${origin.toFixed(2)} → ${val.toFixed(2)} (${pct>=0?'+':''}${pct}%)</span>`;
         bars.appendChild(bar);
       });
       row.appendChild(head); row.appendChild(bars); host.appendChild(row);
@@ -1404,7 +1477,7 @@
     const legend=document.getElementById('legendPanel'); if(legend){ legend.style.left='20px'; legend.style.top='20px'; }
     const trophic=document.getElementById('trophicPanel'); if(trophic){ trophic.style.left='20px'; trophic.style.top='320px'; }
     uiParams.miniMapPos=null; resizeCanvasToHost();
-    uiParams.mapColWidth='minmax(720px,1fr)';
+    uiParams.mapColWidth='minmax(860px,1.05fr)';
     document.documentElement.style.setProperty('--map-col-width',uiParams.mapColWidth);
     const main=document.querySelector('main'); if(main){ main.classList.remove('map-expanded'); }
     state.mapExpanded=false; updateExpandButton();
@@ -1415,10 +1488,10 @@
     const expanded=main.classList.toggle('map-expanded');
     if(expanded){
       uiParams.mapColWidth=getComputedStyle(document.documentElement).getPropertyValue('--map-col-width')||uiParams.mapColWidth;
-      document.documentElement.style.setProperty('--map-col-width','minmax(1100px,1fr)');
+      document.documentElement.style.setProperty('--map-col-width','minmax(1280px,1.2fr)');
       state.mapExpanded=true;
     } else {
-      document.documentElement.style.setProperty('--map-col-width', uiParams.mapColWidth||'minmax(720px,1fr)');
+      document.documentElement.style.setProperty('--map-col-width', uiParams.mapColWidth||'minmax(860px,1.05fr)');
       state.mapExpanded=false;
     }
     resizeCanvasToHost(); updateExpandButton();
@@ -1431,11 +1504,11 @@
     handle.addEventListener('mousedown',e=>{
       e.preventDefault(); if(main.classList.contains('map-expanded')) return; main.classList.add('resizing');
       const startX=e.clientX; const startW=mapStage.getBoundingClientRect().width;
-      const onMove=ev=>{ const delta=ev.clientX-startX; const newW=Math.max(520, startW+delta); uiParams.mapColWidth=`${newW}px`; document.documentElement.style.setProperty('--map-col-width', uiParams.mapColWidth); resizeCanvasToHost(); };
+      const onMove=ev=>{ const delta=ev.clientX-startX; const newW=Math.max(640, startW+delta); uiParams.mapColWidth=`${newW}px`; document.documentElement.style.setProperty('--map-col-width', uiParams.mapColWidth); resizeCanvasToHost(); };
       const onUp=()=>{ main.classList.remove('resizing'); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
       document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
     });
-    handle.addEventListener('dblclick',()=>{ uiParams.mapColWidth='minmax(720px,1fr)'; document.documentElement.style.setProperty('--map-col-width',uiParams.mapColWidth); resizeCanvasToHost(); updateExpandButton(); });
+    handle.addEventListener('dblclick',()=>{ uiParams.mapColWidth='minmax(860px,1.05fr)'; document.documentElement.style.setProperty('--map-col-width',uiParams.mapColWidth); resizeCanvasToHost(); updateExpandButton(); });
   }
   function init(){
     resetSpeciesEditor();
@@ -1490,6 +1563,8 @@
     const terrainBtn=document.getElementById('terrainModeToggle'); if(terrainBtn){ terrainBtn.addEventListener('click',()=>{ terrainEditMode=!terrainEditMode; updateTerrainEditButton(); }); updateTerrainEditButton(); }
     const vegetationToggle=document.getElementById('showVegetation');
     if(vegetationToggle){ const syncVeg=()=>{ state.showVegetation=vegetationToggle.checked; }; vegetationToggle.addEventListener('change',syncVeg); syncVeg(); }
+    const trailMute=document.getElementById('trailEffectMute');
+    if(trailMute){ const syncTrail=()=>{ state.trailIntensity=trailMute.checked?0.35:0.9; }; trailMute.addEventListener('change',syncTrail); syncTrail(); }
     document.getElementById('speciesEditor').addEventListener('input',e=>{
       const kind=e.target.dataset.kind; const id=e.target.dataset.id; if(kind==='param'){ const sp=state.species.find(s=>s.id===id); sp[e.target.dataset.field]=parseFloat(e.target.value); }
     });
