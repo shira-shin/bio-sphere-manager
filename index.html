@@ -17,6 +17,10 @@
     <section id="mapStage" aria-label="シミュレーションマップ">
       <div id="canvasHost"></div>
       <div id="mapOverlay" aria-label="表示ガイド">
+        <div class="floating-controls">
+          <button type="button" id="resetFloating">配置リセット</button>
+          <button type="button" id="centerLegend">凡例を左上に戻す</button>
+        </div>
         <div class="legend draggable-panel" id="legendPanel" aria-label="凡例">
           <div class="legend-header" id="legendPanel-header">
             <div class="legend-title">フローティング凡例</div>
@@ -49,6 +53,17 @@
             <ul class="legend-filter" id="legendFilters" aria-live="polite"></ul>
           </div>
         </div>
+        <div class="mini-map-panel draggable-panel" id="trophicPanel" aria-label="肉食・草食ミニマップ">
+          <div class="legend-header" id="trophicPanel-header">
+            <h3>肉食/草食ミニマップ</h3>
+            <div class="legend-sub">ドラッグで位置変更 / ダブルクリックでリセット</div>
+          </div>
+          <div class="trophic-bars">
+            <div class="trophic-row"><span>草食</span><div class="trophic-bar"><span class="trophic-fill herb" id="herbFill" style="width:0%"></span></div><span id="herbValue">0</span></div>
+            <div class="trophic-row"><span>肉食</span><div class="trophic-bar"><span class="trophic-fill carn" id="carnFill" style="width:0%"></span></div><span id="carnValue">0</span></div>
+            <div class="trophic-row"><span>雑食</span><div class="trophic-bar"><span class="trophic-fill omn" id="omnFill" style="width:0%"></span></div><span id="omnValue">0</span></div>
+          </div>
+        </div>
       </div>
       <div id="terrainToolbar">
         <button type="button" id="terrainModeToggle">地形編集 OFF</button>
@@ -59,6 +74,7 @@
       <div id="cellTooltip" class="hidden"></div>
       <div id="renderAlert">描画エラーが発生したため簡易描画に切替えました</div>
     </section>
+    <div id="layoutHandle" role="separator" aria-label="マップ幅をドラッグで変更"></div>
     <aside>
       <div class="panel">
         <h2>操作</h2>
