@@ -20,6 +20,7 @@
         <div class="floating-controls">
           <button type="button" id="resetFloating">配置リセット</button>
           <button type="button" id="centerLegend">凡例を左上に戻す</button>
+          <button type="button" id="toggleExpand" aria-pressed="false">マップを最大化</button>
         </div>
         <div class="legend draggable-panel" id="legendPanel" aria-label="凡例">
           <div class="legend-header" id="legendPanel-header">
@@ -144,6 +145,14 @@
         <div class="legend-hint">レイヤーごとのON/OFFと強調度を切り替えると、凡例と表示が連動して「いま見ているもの」がわかりやすくなります。</div>
       </div>
       <div class="panel">
+        <h2>パフォーマンス</h2>
+        <div class="row pill-row" style="flex-wrap:wrap; gap:8px;">
+          <label class="pill"><input type="checkbox" id="performanceMode">軽量モード (粒子と装飾を抑制)</label>
+          <label class="pill"><input type="checkbox" id="hudMode" checked>情報HUDとインスペクタを表示</label>
+        </div>
+        <div class="legend-hint subtle">重く感じる場合は軽量モードに切り替えてエフェクトを抑えてください。HUDを消すと画面が広がり描画負荷が下がります。</div>
+      </div>
+      <div class="panel hud-panel">
         <h2>状態</h2>
         <div class="hud-grid">
           <div class="hud"><div class="label">ステップ</div><div class="value" id="hudStep">0</div></div>
@@ -158,7 +167,7 @@
         </div>
         <div class="badge hidden" id="movementWarning">更新停止の可能性: movedAgents=0 が連続</div>
       </div>
-      <div class="panel">
+      <div class="panel hud-panel">
         <h2>インスペクタ</h2>
         <div class="row"><label><input id="trailToggle" type="checkbox" checked>選択個体の軌跡を描画</label><label><input id="haloToggle" type="checkbox" checked>行動ハロー</label></div>
         <div id="selectedInfo" style="font-size:12px; color:#cdd8ea; margin-top:8px; white-space:pre; min-height:120px;">クリックで個体情報を表示</div>
@@ -167,8 +176,14 @@
       <div class="panel">
         <h2>種・遺伝</h2>
         <div class="row"><label><input id="evoToggle" type="checkbox" checked>進化ON</label><label>突然変異率<input id="mutRate" type="number" value="0.05" min="0" max="0.5" step="0.01"></label></div>
-        <div style="font-size:12px; color:#9fb0c3; margin-top:4px;">移動速度=最大移動量 / 索敵範囲=探索半径 / 代謝コスト=消費倍率 / 繁殖閾値=繁殖に必要なエネルギー / 水消費率=水分消費倍率</div>
-        <div style="font-size:12px; color:#8ba6c6; margin-top:2px;">遺伝子値は1.0が基準。1より大きいほど長所が伸びるが消費も増え、0.5以下では弱点が増えるイメージです。🌿植物も成長・拡散・防御・回復・変異率の遺伝子をもつ独立レイヤーとして動きます。</div>
+        <div class="gene-guide">
+          <div class="gene-guide__item"><strong>移動速度</strong> 追跡・回避のしやすさ</div>
+          <div class="gene-guide__item"><strong>索敵範囲</strong> 食料や捕食者の検知距離</div>
+          <div class="gene-guide__item"><strong>代謝コスト</strong> 行動ごとのエネルギー消費</div>
+          <div class="gene-guide__item"><strong>繁殖閾値</strong> 繁殖に必要な蓄積エネルギー</div>
+          <div class="gene-guide__item"><strong>水消費率</strong> 渇きやすさと生存時間</div>
+        </div>
+        <div class="gene-note">遺伝子値は <strong>1.0 が基準</strong>。1より大きいほど長所が伸びるが消費も増え、0.5以下では弱点が増えるイメージです。🌿植物も成長・拡散・防御・回復・変異率の遺伝子をもつ独立レイヤーとして動きます。</div>
         <div id="speciesEditor" style="display:grid; gap:8px; grid-template-columns:1fr;"></div>
         <details style="margin-top:8px;">
           <summary>架空生物エディタ</summary>
