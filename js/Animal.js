@@ -2,10 +2,12 @@ import DNA from './dna.js';
 import { STATES, WORLD_WIDTH, WORLD_HEIGHT, TERRAIN } from './constants.js';
 
 export default class Animal {
-    constructor(x, y, dna = null) {
+    constructor(x, y, dna = null, generation = 1) {
         this.pos = createVector(x, y);
         this.dna = dna ? dna.copy() : new DNA(); // 親がいればコピー、いなければ新規
-        
+
+        this.generation = generation;
+
         // --- 遺伝子からの能力値反映 ---
         this.size = this.dna.genes.size * 10;
         this.maxSpeed = this.dna.genes.speed * 2;
@@ -28,6 +30,7 @@ export default class Animal {
         this.age = 0;
         this.dead = false;
         this.lastEnergy = this.energy;
+        this.digestTimer = 0;
 
         // 状態管理
         this.isSleeping = false;
@@ -53,7 +56,11 @@ export default class Animal {
         const isNight = !!env.isNight;
         const nightVisionFactor = isNight && !this.nocturnal ? 0.5 : 1;
         const weatherVisionFactor = weather === 'storm' ? 0.25 : 1;
-        this.sensorRange = this.baseSensorRange * nightVisionFactor * weatherVisionFactor;
+        const baseVision = this.baseSensorRange * nightVisionFactor * weatherVisionFactor;
+
+        let speedFactor = 1;
+        let metabolismFactor = 1;
+        let visionFactor = 1;
 
         // 夜間の睡眠（昼行性のみ）
         if (isNight && !this.nocturnal) {
@@ -65,12 +72,37 @@ export default class Animal {
             this.isSleeping = false;
         }
 
+        // 肉食動物の空腹度に応じた行動モード
+        if (this.isCarnivore) {
+            const energyRatio = constrain(this.energy / this.maxEnergy, 0, 1);
+            if (this.digestTimer > 0) {
+                this.digestTimer--;
+                speedFactor *= 0.4;
+                metabolismFactor *= 0.5;
+            } else if (energyRatio > 0.65) {
+                // 低空腹: 休息モード
+                speedFactor *= 0.6;
+                metabolismFactor *= 0.6;
+            } else if (energyRatio > 0.3) {
+                // 中空腹: 探索モード
+                speedFactor *= 0.85;
+                visionFactor *= 1.2;
+                metabolismFactor *= 0.9;
+            } else {
+                // 高空腹: 追跡スプリント
+                speedFactor *= 2.0;
+                metabolismFactor *= 4.0;
+                visionFactor *= 0.95;
+            }
+        }
+
         // 天候 + 地形による速度低下
-        let speedFactor = 1;
         const currentTile = env.tile || TERRAIN.GRASS;
         if (weather === 'rain') speedFactor *= 0.7;
         if (weather === 'storm') speedFactor *= 0.5;
         if (this.isSleeping) speedFactor *= 0.2;
+
+        this.sensorRange = baseVision * visionFactor;
 
         // ... (移動ロジックは既存と同じ) ...
         this.vel.add(this.acc);
@@ -88,7 +120,7 @@ export default class Animal {
         // 寿命とエネルギー消費
         this.age++;
         // 代謝コスト：体が大きく、速いほど燃費が悪い（リアルな制約）
-        let cost = (this.size * this.size * this.maxSpeed) * 0.001;
+        let cost = (this.size * this.size * this.maxSpeed) * 0.001 * metabolismFactor;
         // 砂地などでは余分にエネルギーを消費
         cost *= currentTile.energyCost || 1;
         if (this.isSleeping) cost *= 0.2;
@@ -160,7 +192,8 @@ export default class Animal {
             // 捕食
             if (p5.Vector.dist(this.pos, other.pos) < this.size) {
                 this.showEmote("⚔️", 45);
-                this.energy += other.energy * 0.8; // 食べる
+                this.energy = Math.min(this.maxEnergy, this.energy + other.energy * 0.8); // 食べる
+                this.digestTimer = Math.max(this.digestTimer, 240);
                 other.dead = true;
                 other.showEmote("💀");
                 this.showEmote("🍖", 75); // ごちそう
@@ -182,7 +215,7 @@ export default class Animal {
         if (this.energy > this.maxEnergy * 0.6) {
             this.energy *= 0.5; // 出産コスト
             this.showEmote("❤️");
-            return new Animal(this.pos.x, this.pos.y, this.dna); // DNAを引き継ぐ
+            return new Animal(this.pos.x, this.pos.y, this.dna, this.generation + 1); // DNAを引き継ぐ
         }
         return null;
     }
