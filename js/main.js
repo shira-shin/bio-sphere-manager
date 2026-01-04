@@ -176,7 +176,7 @@
       poisonTolerance:0.45, thornHandling:0.6, climbSkill:0.6, dietPreference:{grass:0.68,poison:0.08,shrub:0.18,tree:0.06}},
   ];
   const defaultGenes=()=>({g_speed:1,g_vision:1,g_metabolism:1,g_fertility:1,g_thirstTol:1,g_starveTol:1});
-  const initialUiParams={rainyLen:600,dryLen:400,shareRate:0.6,leaderBonus:1.2};
+  const initialUiParams={rainyLen:600,dryLen:400,shareRate:0.6,leaderBonus:1.2, miniMapPos:null};
   const presets={
     temperate:{seed:'temperate', species:JSON.parse(JSON.stringify(baseSpecies)), counts:{hare:28,deer:18,boar:12,wolf:8,bear:4,zebra:16}},
     herdFocus:{seed:'herd', species:JSON.parse(JSON.stringify(baseSpecies)).map(sp=>({...sp, fertility:sp.id==='hare'?0.8:sp.id==='deer'?0.55:sp.fertility})), counts:{hare:36,deer:28,boar:10,wolf:8,bear:3,zebra:20}},
@@ -872,14 +872,24 @@
   // --- RENDER ---
   let p5inst=null; let canvasW=0, canvasH=0; let selectedAnimal=null; let overlayLayer=null; let bgLayer=null; let currentWeather=null; let lastMutationMapStep=-1;
   let terrainEditMode=false; let camera={x:0,y:0,zoom:1};
+  let miniMapRect=null; let miniMapDragging=false; let miniMapDragOffset={x:0,y:0};
+  function resizeCanvasToHost(){
+    const host=document.getElementById('canvasHost'); if(!host || !p5inst) return;
+    const w=Math.max(200, host.clientWidth); const h=Math.max(200, host.clientHeight);
+    canvasW=w; canvasH=h;
+    if(p5inst.resizeCanvas) p5inst.resizeCanvas(w,h);
+    if(overlayLayer){ overlayLayer.resizeCanvas(w,h); overlayLayer.noStroke(); }
+    if(bgLayer){ bgLayer.resizeCanvas(w,h); bgLayer.noStroke(); state.needsBgRedraw=true; }
+  }
   function startP5(){
     p5inst=new p5(p=>{
       p.setup=()=>{const host=document.getElementById('canvasHost'); const w=host.clientWidth, h=host.clientHeight; canvasW=w; canvasH=h; p.createCanvas(w,h); overlayLayer=p.createGraphics(w,h); bgLayer=p.createGraphics(w,h); overlayLayer.noStroke(); bgLayer.noStroke(); state.needsBgRedraw=true; ensureP5Globals(p); if(plants.length===0) seedPlants();};
-      p.windowResized=()=>{const host=document.getElementById('canvasHost'); canvasW=host.clientWidth; canvasH=host.clientHeight; p.resizeCanvas(canvasW,canvasH); if(overlayLayer){overlayLayer.resizeCanvas(canvasW,canvasH); overlayLayer.noStroke();} if(bgLayer){bgLayer.resizeCanvas(canvasW,canvasH); bgLayer.noStroke(); state.needsBgRedraw=true;} ensureP5Globals(p);};
+      p.windowResized=()=>{resizeCanvasToHost(); ensureP5Globals(p);};
       p.draw=()=>{try{ensureP5Globals(p); if(state.running){for(let i=0;i<parseInt(document.getElementById('speedSelect').value);i++) stepSimulation();} render(p);}catch(err){state.lastError=err; document.getElementById('renderAlert').style.display='block'; console.error(err);} };
       p.mouseMoved=()=>{handleHover(p);};
-      p.mousePressed=()=>{ if(handleBrush(p)) return; handleSelect(p); };
-      p.mouseDragged=()=>{ handleBrush(p); };
+      p.mousePressed=()=>{ if(startMiniMapDrag(p)) return; if(handleBrush(p)) return; handleSelect(p); };
+      p.mouseDragged=()=>{ if(updateMiniMapDrag(p)) return; handleBrush(p); };
+      p.mouseReleased=()=>{ stopMiniMapDrag(); };
       p.keyPressed=()=>{ if(p.key==='e' || p.key==='E'){ state.animals.forEach(a=>{ if(a.alive && typeof a.showEmote==='function') a.showEmote('❤️',90); }); } };
     },'canvasHost');
   }
@@ -1105,19 +1115,26 @@
     const label=document.getElementById('layerLabel'); label.textContent=`レイヤー: ${overlayLabelText(overlay)}`; label.innerHTML=`レイヤー: ${overlayLabelText(overlay)}<small>表示中: ${overlayLabelText(overlay)} / マップ ${params.gridW}x${params.gridH} (バイオーム・粒子演出強化版)</small>`;
     drawColorbar(p, overlay);
     updateLegendFilterPanel();
-    updateHud(); updateInspector(currentWeather); updateChart();
+    updateHud(); updateTrophicPanel(); updateInspector(currentWeather); updateChart();
     if(lastMutationMapStep!==state.step){ renderMutationMap(); lastMutationMapStep=state.step; }
   }
 
   function drawMiniMap(p){
-    const mapW=150, mapH=100; const margin=16; const x=canvasW-mapW-margin; const y=canvasH-mapH-margin;
-    p.push(); p.translate(x,y);
+    const mapW=150, mapH=100; const margin=16;
+    const defaultPos={x:canvasW-mapW-margin, y:canvasH-mapH-margin};
+    const pos=uiParams.miniMapPos||defaultPos;
+    miniMapRect={x:clampRange(pos.x,0,Math.max(0,canvasW-mapW)), y:clampRange(pos.y,0,Math.max(0,canvasH-mapH)), w:mapW, h:mapH};
+    p.push(); p.translate(miniMapRect.x, miniMapRect.y);
     p.noStroke(); p.fill(0,160); p.rect(0,0,mapW,mapH,10);
     const scaleX=mapW/params.gridW, scaleY=mapH/params.gridH;
     for(const a of state.animals){ if(!a.alive) continue; const sp=state.species.find(s=>s.id===a.speciesId); const px=clampRange(a.x,0,params.gridW); const py=clampRange(a.y,0,params.gridH); const dotX=px*scaleX; const dotY=py*scaleY; const col=p.color(sp.color||'#8ec7ff'); p.noStroke(); p.fill(p.red(col),p.green(col),p.blue(col),220); p.circle(dotX,dotY,3); }
     p.noFill(); p.stroke(255); const viewW=Math.min(mapW, canvasW/params.cellSize*scaleX); const viewH=Math.min(mapH, canvasH/params.cellSize*scaleY); p.rect(0,0,viewW,viewH);
     p.pop();
   }
+  function isWithinMiniMap(x,y){ return miniMapRect && x>=miniMapRect.x && y>=miniMapRect.y && x<=miniMapRect.x+miniMapRect.w && y<=miniMapRect.y+miniMapRect.h; }
+  function startMiniMapDrag(p){ if(!isWithinMiniMap(p.mouseX,p.mouseY)) return false; miniMapDragging=true; miniMapDragOffset={x:p.mouseX-miniMapRect.x,y:p.mouseY-miniMapRect.y}; return true; }
+  function updateMiniMapDrag(p){ if(!miniMapDragging) return false; const mapW=miniMapRect?.w||150; const mapH=miniMapRect?.h||100; const nx=clampRange(p.mouseX-miniMapDragOffset.x,0,Math.max(0,canvasW-mapW)); const ny=clampRange(p.mouseY-miniMapDragOffset.y,0,Math.max(0,canvasH-mapH)); uiParams.miniMapPos={x:nx,y:ny}; return true; }
+  function stopMiniMapDrag(){ miniMapDragging=false; }
   function drawAnimalShape(p, shape, size, strokeColor, trophic){
     p.stroke(strokeColor);
     switch(shape){
@@ -1222,6 +1239,16 @@
     document.getElementById('hudStability').textContent=(log.stability||0).toFixed(2);
     document.getElementById('hudExtinct').textContent=state.extinction;
     const warn=document.getElementById('movementWarning'); if(state.zeroMoveStreak>=2){warn.classList.remove('hidden');} else {warn.classList.add('hidden');}
+  }
+  function updateTrophicPanel(){
+    const log=state.logs[state.logs.length-1]; if(!log) return;
+    let herb=0, carn=0, omn=0; const counts=log.counts||{};
+    Object.entries(counts).forEach(([id,val])=>{ const sp=state.species.find(s=>s.id===id); if(!sp) return; if(sp.trophic==='herb') herb+=val; else if(sp.trophic==='carn') carn+=val; else omn+=val; });
+    const total=Math.max(herb+carn+omn,1);
+    const setBar=(id,val)=>{ const bar=document.getElementById(id); if(bar) bar.style.width=`${Math.min(100,(val/total)*100)}%`; };
+    const setVal=(id,val)=>{ const el=document.getElementById(id); if(el) el.textContent=val; };
+    setBar('herbFill',herb); setBar('carnFill',carn); setBar('omnFill',omn);
+    setVal('herbValue',herb); setVal('carnValue',carn); setVal('omnValue',omn);
   }
   function updateInspector(weather=currentWeather){
     const box=document.getElementById('selectedInfo');
@@ -1366,17 +1393,41 @@
   }
 
   // --- INIT ---
+  function resetFloatingPanels(){
+    const legend=document.getElementById('legendPanel'); if(legend){ legend.style.left='20px'; legend.style.top='20px'; }
+    const trophic=document.getElementById('trophicPanel'); if(trophic){ trophic.style.left='20px'; trophic.style.top='320px'; }
+    uiParams.miniMapPos=null; resizeCanvasToHost();
+    document.documentElement.style.setProperty('--map-col-width','minmax(720px,1fr)');
+  }
+  function setupLayoutHandle(){
+    const handle=document.getElementById('layoutHandle'); const main=document.querySelector('main'); const mapStage=document.getElementById('mapStage');
+    if(!handle || !main || !mapStage) return;
+    handle.addEventListener('mousedown',e=>{
+      e.preventDefault(); main.classList.add('resizing');
+      const startX=e.clientX; const startW=mapStage.getBoundingClientRect().width;
+      const onMove=ev=>{ const delta=ev.clientX-startX; const newW=Math.max(520, startW+delta); document.documentElement.style.setProperty('--map-col-width', `${newW}px`); resizeCanvasToHost(); };
+      const onUp=()=>{ main.classList.remove('resizing'); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+      document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+    });
+    handle.addEventListener('dblclick',()=>{ document.documentElement.style.setProperty('--map-col-width','minmax(720px,1fr)'); resizeCanvasToHost(); });
+  }
   function init(){
     resetSpeciesEditor();
     if(localStorage.getItem(STORAGE_KEY)){ loadSpeciesLocal(true); }
     generateTerrain(document.getElementById('patternSelect').value);
     spawnAnimals();
     const canvasHost=document.getElementById('canvasHost'); if(canvasHost){ canvasHost.addEventListener('contextmenu',e=>{ if(terrainEditMode) e.preventDefault(); }); }
+    setupLayoutHandle();
     startP5();
     bindUI();
     makeDraggable('legendPanel');
+    makeDraggable('trophicPanel');
+    resetFloatingPanels();
   }
   function bindUI(){
+    const resetBtn=document.getElementById('resetFloating'); if(resetBtn) resetBtn.addEventListener('click',resetFloatingPanels);
+    const centerBtn=document.getElementById('centerLegend'); if(centerBtn) centerBtn.addEventListener('click',()=>{ const legend=document.getElementById('legendPanel'); if(legend){ legend.style.left='20px'; legend.style.top='20px'; } });
+    const trophicPanel=document.getElementById('trophicPanel'); if(trophicPanel) trophicPanel.addEventListener('dblclick', resetFloatingPanels);
     document.querySelectorAll('button[data-action]').forEach(btn=>btn.addEventListener('click',()=>{
       const act=btn.dataset.action; if(act==='start') state.running=true; else if(act==='stop') state.running=false; else if(act==='reset'){ state=createState(document.getElementById('seedInput').value); generateTerrain(document.getElementById('patternSelect').value); spawnAnimals(); selectedAnimal=null; seedPlants(); applyLayerSettingsFromUI(); }
       else if(act==='regen'){ state.seed=document.getElementById('seedInput').value; state.rng=createRng(state.seed); generateTerrain(document.getElementById('patternSelect').value); seedPlants(); applyLayerSettingsFromUI(); }
