@@ -4,14 +4,14 @@
     header{padding:14px 18px; border-bottom:1px solid #162030; background:linear-gradient(180deg,#0c1420,#0a1018); box-shadow:0 12px 32px rgba(0,0,0,0.35); position:sticky; top:0; z-index:30;}
     header h1{margin:0; font-size:22px; letter-spacing:0.05em;}
     header .lead{margin:4px 0 0; font-size:13px; color:#9fb0c3;}
-    :root{--map-col-width:minmax(860px,1.05fr);}
+    :root{--map-col-width:minmax(980px,1.15fr);}
     main{display:grid; grid-template-columns: var(--map-col-width) 10px 380px; gap:0; min-height:calc(100vh - 76px);}
-    main.map-expanded{grid-template-columns: minmax(0,1.2fr) 0 0;}
+    main.map-expanded{grid-template-columns: minmax(0,1.6fr) 0 0;}
     main.map-expanded aside{display:none;}
     main.map-expanded #layoutHandle{display:none;}
     #mapStage{position:relative; background:radial-gradient(circle at 20% 30%, rgba(80,140,220,0.06), transparent 40%), #060b12; overflow:hidden;}
-    #canvasHost{position:absolute; inset:12px; border-radius:18px; box-shadow:0 16px 40px rgba(0,0,0,0.55); background:#050910; overflow:hidden;}
-    main.map-expanded #canvasHost{inset:6px; border-radius:16px;}
+    #canvasHost{position:absolute; inset:10px; border-radius:18px; box-shadow:0 16px 40px rgba(0,0,0,0.55); background:#050910; overflow:hidden;}
+    main.map-expanded #canvasHost{inset:4px; border-radius:16px;}
     #mapOverlay{position:absolute; left:20px; top:20px; z-index:10;}
     .floating-controls{display:flex; gap:8px; margin-bottom:8px;}
     .floating-controls button{background:#0f1b2c; border-color:#1f2c44; font-size:12px; padding:6px 10px;}

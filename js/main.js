@@ -17,7 +17,7 @@
     return {noise};
   }
   const clamp01=v=>Math.max(0,Math.min(1,v));
-  const MOVEMENT_SCALE=0.72; // 全体の移動速度を抑えてマップの広さを感じやすくする
+  const MOVEMENT_SCALE=0.58; // 全体の移動速度をさらに抑えて広いマップでゆったり動くようにする
   const clampRange=(v,min,max)=>{ if(!Number.isFinite(v)) return (min+max)/2; return Math.max(min, Math.min(max, v)); };
   const lerp=(a,b,t)=>a+(b-a)*t;
   const wrap=(v,max)=>{ if(!Number.isFinite(v)) return 0; return ((v%max)+max)%max; };
@@ -158,7 +158,7 @@
   const particles=new ParticleSystem();
 
   // --- STATE ---
-  const params={gridW:96, gridH:64, cellSize:8};
+  const params={gridW:120, gridH:80, cellSize:7};
   const POPULATION_LIMIT=2000;
   const VEG_UPDATE_INTERVAL=30;
   let plants=[];
@@ -178,7 +178,7 @@
   ];
   const defaultGenes=()=>({g_speed:1,g_vision:1,g_metabolism:1,g_fertility:1,g_thirstTol:1,g_starveTol:1});
   const GENE_KEYS=['g_speed','g_vision','g_metabolism','g_fertility','g_thirstTol','g_starveTol'];
-  const initialUiParams={rainyLen:600,dryLen:400,shareRate:0.6,leaderBonus:1.2, miniMapPos:null, mapColWidth:'minmax(860px,1.05fr)'};
+  const initialUiParams={rainyLen:600,dryLen:400,shareRate:0.6,leaderBonus:1.2, miniMapPos:null, mapColWidth:'minmax(980px,1.15fr)'};
   const presets={
     temperate:{seed:'temperate', species:JSON.parse(JSON.stringify(baseSpecies)), counts:{hare:28,deer:18,boar:12,wolf:8,bear:4,zebra:16}},
     herdFocus:{seed:'herd', species:JSON.parse(JSON.stringify(baseSpecies)).map(sp=>({...sp, fertility:sp.id==='hare'?0.8:sp.id==='deer'?0.55:sp.fertility})), counts:{hare:36,deer:28,boar:10,wolf:8,bear:3,zebra:20}},
@@ -1115,6 +1115,41 @@
       p.rect(0,0,w,h);
     }
 
+    const hazard=state.currentHazard;
+    if(hazard){
+      const pulse=0.5+0.5*Math.sin((p.frameCount||0)*0.08);
+      let tint='#5ad17f', fx='soft';
+      if(hazard.type==='disease'){ tint='#b05dcc'; fx='veins'; }
+      else if(hazard.type==='storm'){ tint='#c7903e'; fx='dust'; }
+      else if(hazard.type==='toxin'){ tint='#7fd89f'; fx='spores'; }
+      const col=p.color(tint);
+      p.noStroke();
+      p.fill(p.red(col), p.green(col), p.blue(col), 28+30*pulse);
+      p.rect(0,0,w,h);
+      if(fx==='dust'){
+        p.stroke(p.red(col), p.green(col), p.blue(col), 40+60*pulse);
+        p.strokeWeight(2);
+        for(let i=0;i<22;i++){
+          const y=(p.noise((p.frameCount+i)*0.02)*h+h*0.1)%h; const x=p.random(w);
+          p.line(x,y, x+30+Math.random()*20, y-6-Math.random()*8);
+        }
+      } else if(fx==='veins'){
+        p.noFill(); p.stroke(p.red(col), p.green(col), p.blue(col), 55+45*pulse); p.strokeWeight(1.4);
+        for(let i=0;i<7;i++){
+          const offset=(i/6)*w; p.beginShape();
+          for(let y=0;y<=h;y+=32){ const sway=Math.sin((y*0.03)+(p.frameCount*0.05)+i)*24; p.vertex(offset+sway,y); }
+          p.endShape();
+        }
+      } else if(fx==='spores'){
+        p.noStroke();
+        for(let i=0;i<32;i++){
+          const x=p.random(w), y=p.random(h); const sz=6+p.random(10); const alpha=70+40*pulse;
+          p.fill(p.red(col), p.green(col), p.blue(col), alpha);
+          p.circle(x,y,sz);
+        }
+      }
+    }
+
     const icon=weather.weather==='RAINY'?'🌧️':'☀️';
     p.textAlign(p.RIGHT,p.TOP);
     p.textSize(26);
@@ -1477,7 +1512,7 @@
     const legend=document.getElementById('legendPanel'); if(legend){ legend.style.left='20px'; legend.style.top='20px'; }
     const trophic=document.getElementById('trophicPanel'); if(trophic){ trophic.style.left='20px'; trophic.style.top='320px'; }
     uiParams.miniMapPos=null; resizeCanvasToHost();
-    uiParams.mapColWidth='minmax(860px,1.05fr)';
+    uiParams.mapColWidth='minmax(980px,1.15fr)';
     document.documentElement.style.setProperty('--map-col-width',uiParams.mapColWidth);
     const main=document.querySelector('main'); if(main){ main.classList.remove('map-expanded'); }
     state.mapExpanded=false; updateExpandButton();
@@ -1488,10 +1523,10 @@
     const expanded=main.classList.toggle('map-expanded');
     if(expanded){
       uiParams.mapColWidth=getComputedStyle(document.documentElement).getPropertyValue('--map-col-width')||uiParams.mapColWidth;
-      document.documentElement.style.setProperty('--map-col-width','minmax(1280px,1.2fr)');
+      document.documentElement.style.setProperty('--map-col-width','minmax(1480px,1.6fr)');
       state.mapExpanded=true;
     } else {
-      document.documentElement.style.setProperty('--map-col-width', uiParams.mapColWidth||'minmax(860px,1.05fr)');
+      document.documentElement.style.setProperty('--map-col-width', uiParams.mapColWidth||'minmax(980px,1.15fr)');
       state.mapExpanded=false;
     }
     resizeCanvasToHost(); updateExpandButton();
@@ -1504,11 +1539,11 @@
     handle.addEventListener('mousedown',e=>{
       e.preventDefault(); if(main.classList.contains('map-expanded')) return; main.classList.add('resizing');
       const startX=e.clientX; const startW=mapStage.getBoundingClientRect().width;
-      const onMove=ev=>{ const delta=ev.clientX-startX; const newW=Math.max(640, startW+delta); uiParams.mapColWidth=`${newW}px`; document.documentElement.style.setProperty('--map-col-width', uiParams.mapColWidth); resizeCanvasToHost(); };
+      const onMove=ev=>{ const delta=ev.clientX-startX; const newW=Math.max(720, startW+delta); uiParams.mapColWidth=`${newW}px`; document.documentElement.style.setProperty('--map-col-width', uiParams.mapColWidth); resizeCanvasToHost(); };
       const onUp=()=>{ main.classList.remove('resizing'); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
       document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
     });
-    handle.addEventListener('dblclick',()=>{ uiParams.mapColWidth='minmax(860px,1.05fr)'; document.documentElement.style.setProperty('--map-col-width',uiParams.mapColWidth); resizeCanvasToHost(); updateExpandButton(); });
+    handle.addEventListener('dblclick',()=>{ uiParams.mapColWidth='minmax(980px,1.15fr)'; document.documentElement.style.setProperty('--map-col-width',uiParams.mapColWidth); resizeCanvasToHost(); updateExpandButton(); });
   }
   function init(){
     resetSpeciesEditor();
