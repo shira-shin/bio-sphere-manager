@@ -96,6 +96,9 @@
     .inspector-row span:first-child{color:#9fb0c3; font-size:12px;}
     .inspector-row span:last-child{color:#e9f2ff; font-weight:600; text-align:right;}
     .inspector-row.genetics span:last-child{font-size:12px; line-height:1.4; font-weight:500; color:#cde7ff;}
+    .inspector-subhead{font-size:12px; color:#8fa6c8; font-weight:700; letter-spacing:0.02em; margin-top:4px;}
+    .inspector-row.timeline{font-size:11px; color:#cfe0fa;}
+    .inspector-row.timeline span:first-child{color:#7ea2ff;}
     .inspector-empty{color:#8fa6c8; font-size:12px; text-align:center; padding:6px 0;}
     .mini-map-panel{padding:12px 14px; border-radius:12px; background:rgba(10,16,26,0.9); border:1px solid #1f2c44; box-shadow:0 12px 26px rgba(0,0,0,0.45); min-width:220px;}
     .mini-map-panel h3{margin:0 0 6px; font-size:13px; letter-spacing:0.03em; color:#dce8ff;}
