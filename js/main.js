@@ -1041,6 +1041,7 @@
 
   // --- RENDER ---
   let p5inst=null; let canvasW=0, canvasH=0; let selectedAnimal=null; let overlayLayer=null; let bgLayer=null; let currentWeather=null; let lastMutationMapStep=-1;
+  let bgm=null; let audioUnlocked=false;
   let terrainEditMode=false; let camera={x:0,y:0,zoom:1};
   let miniMapRect=null; let miniMapDragging=false; let miniMapDragOffset={x:0,y:0};
   function resizeCanvasToHost(){
@@ -1051,8 +1052,22 @@
     if(overlayLayer){ overlayLayer.resizeCanvas(w,h); overlayLayer.noStroke(); }
     if(bgLayer){ bgLayer.resizeCanvas(w,h); bgLayer.noStroke(); state.needsBgRedraw=true; }
   }
+  function unlockAudio(){
+    if(audioUnlocked) return;
+    if(typeof userStartAudio==='function') userStartAudio();
+    const ctx=typeof getAudioContext==='function'?getAudioContext():null;
+    if(ctx && ctx.state==='suspended'){ ctx.resume(); }
+    audioUnlocked=true;
+  }
+  function startBgmLoop(){
+    unlockAudio();
+    if(!bgm || !bgm.isLoaded()) return;
+    if(!bgm.isPlaying()) bgm.loop();
+  }
+  function stopBgm(){ if(bgm){ bgm.stop(); } }
   function startP5(){
     p5inst=new p5(p=>{
+      p.preload=()=>{ bgm=p.loadSound('assets/audio/biological-signal.mp3'); };
       p.setup=()=>{const host=document.getElementById('canvasHost'); const w=host.clientWidth, h=host.clientHeight; canvasW=w; canvasH=h; p.createCanvas(w,h); overlayLayer=p.createGraphics(w,h); bgLayer=p.createGraphics(w,h); overlayLayer.noStroke(); bgLayer.noStroke(); state.needsBgRedraw=true; ensureP5Globals(p); if(plants.length===0) seedPlants();};
       p.windowResized=()=>{resizeCanvasToHost(); ensureP5Globals(p);};
       p.draw=()=>{try{ensureP5Globals(p); if(state.running){for(let i=0;i<parseInt(document.getElementById('speedSelect').value);i++) stepSimulation();} render(p);}catch(err){state.lastError=err; document.getElementById('renderAlert').style.display='block'; console.error(err);} };
@@ -1719,7 +1734,7 @@
     const centerBtn=document.getElementById('centerLegend'); if(centerBtn) centerBtn.addEventListener('click',()=>{ const legend=document.getElementById('legendPanel'); if(legend){ legend.style.left='20px'; legend.style.top='20px'; } });
     const trophicPanel=document.getElementById('trophicPanel'); if(trophicPanel) trophicPanel.addEventListener('dblclick', resetFloatingPanels);
     document.querySelectorAll('button[data-action]').forEach(btn=>btn.addEventListener('click',()=>{
-      const act=btn.dataset.action; if(act==='start') state.running=true; else if(act==='stop') state.running=false; else if(act==='reset'){ state=createState(document.getElementById('seedInput').value); generateTerrain(document.getElementById('patternSelect').value); spawnAnimals(); selectedAnimal=null; seedPlants(); applyLayerSettingsFromUI(); }
+      const act=btn.dataset.action; if(act==='start'){ state.running=true; startBgmLoop(); } else if(act==='stop'){ state.running=false; stopBgm(); } else if(act==='reset'){ state=createState(document.getElementById('seedInput').value); generateTerrain(document.getElementById('patternSelect').value); spawnAnimals(); selectedAnimal=null; seedPlants(); applyLayerSettingsFromUI(); stopBgm(); }
       else if(act==='regen'){ state.seed=document.getElementById('seedInput').value; state.rng=createRng(state.seed); generateTerrain(document.getElementById('patternSelect').value); seedPlants(); applyLayerSettingsFromUI(); }
       else if(act==='download-csv') downloadCsv(); else if(act==='run-test') runTest(); else if(act==='self-test') runSelfTest(); else if(act==='headless-3000') runHeadless3000();
       else if(act==='add-species') addCustomSpeciesFromForm(); else if(act==='export-species') exportSpeciesJSON(); else if(act==='import-species') importSpeciesJSON(); else if(act==='save-species') saveSpeciesLocal(); else if(act==='load-species') loadSpeciesLocal();
