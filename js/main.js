@@ -498,9 +498,15 @@
     applyForces(state){
       const sp=this.getSpecies(); let {speed,vision}=this.cached; const w=params.gridW, h=params.gridH; const rng=state.rng; const hazard=state.currentHazard;
       let steerX=0, steerY=0;
-      this.wanderAngle+= (rng()-0.5)*0.35; steerX+=Math.cos(this.wanderAngle)*0.35; steerY+=Math.sin(this.wanderAngle)*0.35;
 
       const cx=Math.floor(wrap(this.x,w)), cy=Math.floor(wrap(this.y,h));
+      const densityField=state.lastDensity||state.density;
+      const localDensity=densityField?.length===w*h? (densityField[cy*w+cx]||0):0;
+      const crowdPressure=clampRange(localDensity/6,0,1);
+
+      const wanderJitter=0.35 + crowdPressure*0.25;
+      this.wanderAngle+= (rng()-0.5)*wanderJitter; steerX+=Math.cos(this.wanderAngle)*0.35; steerY+=Math.sin(this.wanderAngle)*0.35;
+
       const cellNow=state.cells[cy*w+cx];
       const terrainCost=BIOMES[cellNow?.biome]?.moveCost||1;
       const rugged=cellNow?.rugged||0;
@@ -548,6 +554,28 @@
         const mates=getNeighbors(this,state,vision).filter(o=>o.speciesId===this.speciesId && Math.hypot(torusDelta(o.x,this.x,w), torusDelta(o.y,this.y,h))<vision);
         let alignX=0,alignY=0,cohX=0,cohY=0; mates.forEach(o=>{const dx=torusDelta(o.x,this.x,w), dy=torusDelta(o.y,this.y,h); const d=safeNorm(dx,dy); if(!d) return; alignX+=o.vx||0; alignY+=o.vy||0; cohX+=dx; cohY+=dy; });
         if(mates.length>0){ alignX/=mates.length; alignY/=mates.length; cohX/=mates.length; cohY/=mates.length; const aN=safeNorm(alignX,alignY); if(aN){steerX+=alignX/aN*0.2; steerY+=alignY/aN*0.2;} const cN=safeNorm(cohX,cohY); if(cN){steerX+=cohX/cN*0.12; steerY+=cohY/cN*0.12;} }
+      }
+
+      if(crowdPressure>0.15){
+        let gradX=0, gradY=0, samples=0;
+        for(let dy=-1;dy<=1;dy++){
+          for(let dx=-1;dx<=1;dx++){
+            if(dx===0 && dy===0) continue;
+            const nx=state.boundaryMode==='wrap'? wrap(cx+dx,w) : clampRange(cx+dx,0,w-1);
+            const ny=state.boundaryMode==='wrap'? wrap(cy+dy,h) : clampRange(cy+dy,0,h-1);
+            const neighbor=densityField?.length===w*h? densityField[ny*w+nx]||0:0;
+            gradX+=neighbor*dx; gradY+=neighbor*dy; samples++;
+          }
+        }
+        if(samples>0){
+          const gN=safeNorm(gradX,gradY);
+          if(gN){
+            const push=clampRange(crowdPressure*0.45,0,0.6);
+            steerX-=gradX/gN*push;
+            steerY-=gradY/gN*push;
+          }
+        }
+        this.wanderAngle += (rng()-0.5)*crowdPressure*0.8;
       }
 
       if(this.state!==AnimalStates.DRINK && (cellNow.river||cellNow.shore)){ steerX-=0.25; steerY-=0.25; }
