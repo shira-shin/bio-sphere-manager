@@ -23,6 +23,11 @@
           <button type="button" id="centerLegend">凡例を左上に戻す</button>
           <button type="button" id="toggleExpand" aria-pressed="false">マップを最大化</button>
         </div>
+        <div class="sim-control-bar" id="floatingSimControls" aria-label="フローティング操作ボタン">
+          <button type="button" data-action="start" class="primary">開始</button>
+          <button type="button" data-action="stop">停止</button>
+          <button type="button" data-action="reset" class="danger">リセット</button>
+        </div>
         <div class="legend draggable-panel" id="legendPanel" aria-label="凡例">
           <div class="legend-header" id="legendPanel-header">
             <div class="legend-title">フローティング凡例</div>
@@ -38,17 +43,18 @@
               <li><span class="swatch plant"></span>植生ポイント</li>
             </ul>
           </div>
-          <div class="legend-section">
-            <h4>動物の凡例</h4>
-            <ul class="legend-list legend-animals">
-              <li><span class="legend-icon" aria-hidden="true">🟢</span><span>緑の円: 草食動物 (Herbivore)</span></li>
-              <li><span class="legend-icon" aria-hidden="true">🔺</span><span>赤の三角: 肉食動物 (Carnivore)</span></li>
-              <li><span class="legend-icon" aria-hidden="true">💀</span><span>ドクロ: 死亡した個体</span></li>
-            </ul>
-            <div class="legend-species">
-              <div class="legend-species-title">種別カラー / 形状</div>
-              <ul class="legend-species-list" id="speciesLegend" aria-label="種別凡例"></ul>
-            </div>
+        <div class="legend-section">
+          <h4>動物の凡例</h4>
+          <ul class="legend-list legend-animals">
+            <li><span class="legend-icon" aria-hidden="true">⬭</span><span>色と形状: 種固有のカラーとシェイプで描画</span></li>
+            <li><span class="legend-icon" aria-hidden="true">◎</span><span>ハロー: 採食/追跡/水飲みなど行動状態を縁取りで表示</span></li>
+            <li><span class="legend-icon" aria-hidden="true">⋯</span><span>トレイル: 最近の移動軌跡を淡い線で表示</span></li>
+            <li><span class="legend-icon" aria-hidden="true">◻︎</span><span>淡色表示: 種別フィルターの対象外</span></li>
+          </ul>
+          <div class="legend-species">
+            <div class="legend-species-title">種別カラー / 形状</div>
+            <ul class="legend-species-list" id="speciesLegend" aria-label="種別凡例"></ul>
+          </div>
           </div>
           <div class="legend-section legend-filters">
             <h4>表示フィルター</h4>

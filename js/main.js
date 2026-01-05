@@ -363,7 +363,7 @@
     state.species.forEach(sp=>{
       const li=document.createElement('li'); li.className='legend-species-item';
       const shape=shapeSymbol(sp.shape);
-      li.innerHTML=`<span class="legend-swatch" style="background:${sp.color}"></span><span class="legend-shape">${shape}</span><div><div style="font-weight:700; color:#fff;">${sp.name}</div><div style="font-size:11px; color:#9fb0c3;">${sp.id} / ${sp.trophic}</div></div>`;
+      li.innerHTML=`<span class="legend-swatch" style="background:${sp.color}"></span><span class="legend-shape">${shape}</span><div><div style="font-weight:700; color:#fff;">${sp.name}</div><div style="font-size:11px; color:#9fb0c3;">${sp.id} / ${trophicLabel(sp.trophic)}</div></div>`;
       list.appendChild(li);
     });
   }
