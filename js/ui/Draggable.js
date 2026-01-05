@@ -23,8 +23,15 @@ export function makeDraggable(elementId) {
     pos2 = pos4 - e.clientY;
     pos3 = e.clientX;
     pos4 = e.clientY;
-    elm.style.top = (elm.offsetTop - pos2) + "px";
-    elm.style.left = (elm.offsetLeft - pos1) + "px";
+
+    const parent = elm.parentElement;
+    const maxLeft = Math.max(8, (parent?.clientWidth || window.innerWidth) - elm.offsetWidth - 8);
+    const maxTop = Math.max(8, (parent?.clientHeight || window.innerHeight) - elm.offsetHeight - 8);
+    const nextLeft = Math.min(Math.max(8, elm.offsetLeft - pos1), maxLeft);
+    const nextTop = Math.min(Math.max(8, elm.offsetTop - pos2), maxTop);
+
+    elm.style.left = `${nextLeft}px`;
+    elm.style.top = `${nextTop}px`;
   }
 
   function closeDragElement() {

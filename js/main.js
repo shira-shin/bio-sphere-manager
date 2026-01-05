@@ -1676,14 +1676,27 @@
   }
 
   // --- INIT ---
+  function clampPanelToOverlay(id){
+    const panel=document.getElementById(id);
+    const overlay=document.getElementById('mapOverlay');
+    if(!panel || !overlay) return;
+    const left=parseFloat(panel.style.left)||panel.offsetLeft||0;
+    const top=parseFloat(panel.style.top)||panel.offsetTop||0;
+    const maxLeft=Math.max(8, overlay.clientWidth - panel.offsetWidth - 8);
+    const maxTop=Math.max(8, overlay.clientHeight - panel.offsetHeight - 8);
+    panel.style.left=`${Math.min(Math.max(8,left), maxLeft)}px`;
+    panel.style.top=`${Math.min(Math.max(8,top), maxTop)}px`;
+  }
   function resetFloatingPanels(){
-    const legend=document.getElementById('legendPanel'); if(legend){ legend.style.left='20px'; legend.style.top='20px'; }
-    const trophic=document.getElementById('trophicPanel'); if(trophic){ trophic.style.left='20px'; trophic.style.top='320px'; }
+    const legend=document.getElementById('legendPanel'); if(legend){ legend.style.left='20px'; legend.style.top='20px'; legend.style.width=''; legend.style.height=''; }
+    const trophic=document.getElementById('trophicPanel'); if(trophic){ trophic.style.left='20px'; trophic.style.top='320px'; trophic.style.width=''; trophic.style.height=''; }
     uiParams.miniMapPos=null; resizeCanvasToHost();
     uiParams.mapColWidth='minmax(980px,1.15fr)';
     document.documentElement.style.setProperty('--map-col-width',uiParams.mapColWidth);
     const main=document.querySelector('main'); if(main){ main.classList.remove('map-expanded'); }
     state.mapExpanded=false; updateExpandButton();
+    clampPanelToOverlay('legendPanel');
+    clampPanelToOverlay('trophicPanel');
   }
   function updateExpandButton(){ const btn=document.getElementById('toggleExpand'); const main=document.querySelector('main'); if(!btn||!main) return; const expanded=main.classList.contains('map-expanded'); btn.textContent=expanded?'サイドパネル表示':'マップを最大化'; btn.setAttribute('aria-pressed', expanded?'true':'false'); }
   function toggleExpandMap(){
@@ -1698,6 +1711,8 @@
       state.mapExpanded=false;
     }
     resizeCanvasToHost(); updateExpandButton();
+    clampPanelToOverlay('legendPanel');
+    clampPanelToOverlay('trophicPanel');
   }
   function setPerformanceMode(lightweight){ state.renderEffects=!lightweight; if(lightweight){ particles.clear(); document.body.classList.add('effects-off'); } else { document.body.classList.remove('effects-off'); } const cb=document.getElementById('performanceMode'); if(cb) cb.checked=!!lightweight; }
   function setHudVisible(show){ state.hudVisible=show; document.body.classList.toggle('hud-hidden', !show); const cb=document.getElementById('hudMode'); if(cb) cb.checked=!!show; }
@@ -1728,6 +1743,7 @@
     makeDraggable('legendPanel');
     makeDraggable('trophicPanel');
     resetFloatingPanels();
+    window.addEventListener('resize',()=>{ clampPanelToOverlay('legendPanel'); clampPanelToOverlay('trophicPanel'); });
   }
   function bindUI(){
     const resetBtn=document.getElementById('resetFloating'); if(resetBtn) resetBtn.addEventListener('click',resetFloatingPanels);
