@@ -12,7 +12,9 @@
     #mapStage{position:relative; background:radial-gradient(circle at 20% 30%, rgba(80,140,220,0.06), transparent 40%), #060b12; overflow:hidden;}
     #canvasHost{position:absolute; inset:10px; border-radius:18px; box-shadow:0 16px 40px rgba(0,0,0,0.55); background:#050910; overflow:hidden;}
     main.map-expanded #canvasHost{inset:4px; border-radius:16px;}
-    #mapOverlay{position:absolute; left:20px; top:20px; z-index:10;}
+    #mapOverlay{position:absolute; inset:0; padding:0 0 12px 0; z-index:10; pointer-events:none;}
+    #mapOverlay > *{pointer-events:auto;}
+    main.map-expanded #mapOverlay{inset:6px;}
     .floating-controls{display:flex; gap:8px; margin-bottom:8px;}
     .floating-controls button{background:#0f1b2c; border-color:#1f2c44; font-size:12px; padding:6px 10px;}
     .floating-controls #toggleExpand{font-weight:800; background:#163252;}
@@ -22,6 +24,7 @@
     .layer-label{padding:8px 10px; border-radius:10px; background:rgba(24,24,28,0.48); border:1px solid rgba(34,52,74,0.7); font-weight:700; color:#d7e6ff; box-shadow:0 6px 20px rgba(0,0,0,0.25); min-width:240px; margin:0 0 8px;}
     .layer-label small{display:block; color:#8da5c7; font-weight:600; margin-top:2px;}
     .legend{padding:12px 14px; border-radius:12px; background:rgba(0,0,0,0.8); border:1px solid rgba(34,52,74,0.85); box-shadow:0 10px 26px rgba(0,0,0,0.5); min-width:260px; backdrop-filter:blur(2px);}
+    #legendPanel{resize:both; overflow:auto; max-width:540px; max-height:calc(100% - 40px);}
     .legend-header{display:flex; flex-direction:column; gap:2px; margin:0 0 6px; cursor:move;}
     .legend-title{font-size:14px; font-weight:800; letter-spacing:0.04em; color:#e9f2ff;}
     .legend-sub{font-size:12px; color:#8fa6c8;}
@@ -76,6 +79,7 @@
     #cellTooltip{position:absolute; pointer-events:none; padding:8px 10px; border-radius:10px; background:rgba(12,18,28,0.9); border:1px solid #22344a; font-size:12px; color:#d7e6ff; z-index:20; white-space:pre;}
     .draggable-panel{position:absolute; cursor:move; top:12px; left:12px; user-select:none; touch-action:none;}
     .draggable-panel h3{cursor:move;}
+    #trophicPanel{resize:both; overflow:auto; max-width:420px; max-height:calc(100% - 60px);}
     #layoutHandle{cursor:col-resize; background:linear-gradient(180deg, rgba(45,75,120,0.8), rgba(80,140,200,0.4)); width:100%; height:100%; min-height:100%;}
     #layoutHandle::after{content:''; display:block; margin:0 auto; width:4px; height:36px; background:rgba(255,255,255,0.25); border-radius:2px;}
     main.resizing #layoutHandle{background:linear-gradient(180deg, rgba(90,160,120,0.6), rgba(120,220,160,0.5));}
