@@ -7,7 +7,7 @@
     :root{--map-col-width:minmax(980px,1.15fr);}
     main{display:grid; grid-template-columns: var(--map-col-width) 10px 380px; gap:0; min-height:calc(100vh - 76px); position:relative;}
     main.map-expanded{grid-template-columns: minmax(0,1.6fr) 0 0;}
-    main.map-expanded aside{position:absolute; right:14px; top:90px; width:340px; max-width:40vw; max-height:calc(100vh - 120px); overflow:auto; display:block; background:rgba(6,10,18,0.92); border:1px solid #162030; box-shadow:0 18px 36px rgba(0,0,0,0.45); border-radius:14px; padding:6px 0;}
+    main.map-expanded aside{display:none;}
     main.map-expanded #layoutHandle{display:none;}
     #mapStage{position:relative; background:radial-gradient(circle at 20% 30%, rgba(80,140,220,0.06), transparent 40%), #060b12; overflow:hidden;}
     #canvasHost{position:absolute; inset:10px; border-radius:18px; box-shadow:0 16px 40px rgba(0,0,0,0.55); background:#050910; overflow:hidden;}
@@ -18,7 +18,8 @@
     .floating-controls{display:flex; gap:8px; margin-bottom:8px;}
     .floating-controls button{background:#0f1b2c; border-color:#1f2c44; font-size:12px; padding:6px 10px;}
     .floating-controls #toggleExpand{font-weight:800; background:#163252;}
-    .sim-control-bar{display:none; gap:8px; margin-bottom:8px;}
+    .sim-control-bar{display:none; gap:8px; margin-bottom:8px; align-items:center; background:rgba(5,9,16,0.92); border:1px solid #162030; box-shadow:0 12px 24px rgba(0,0,0,0.45); padding:10px 12px; border-radius:12px;}
+    .sim-control-bar .sim-control-label{font-size:11px; letter-spacing:0.04em; color:#9fb0c3; font-weight:700; margin-right:6px; text-transform:uppercase;}
     main.map-expanded .sim-control-bar{display:flex; position:absolute; right:20px; top:20px; z-index:12;}
     .sim-control-bar button{padding:6px 10px; font-size:12px;}
     .layer-label{padding:8px 10px; border-radius:10px; background:rgba(24,24,28,0.48); border:1px solid rgba(34,52,74,0.7); font-weight:700; color:#d7e6ff; box-shadow:0 6px 20px rgba(0,0,0,0.25); min-width:240px; margin:0 0 8px;}
