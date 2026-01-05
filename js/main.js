@@ -1781,7 +1781,11 @@
     if(brushSlider && brushLabel){ const sync=()=>brushLabel.textContent=brushSlider.value; brushSlider.addEventListener('input',sync); sync(); }
     const terrainBtn=document.getElementById('terrainModeToggle'); if(terrainBtn){ terrainBtn.addEventListener('click',()=>{ terrainEditMode=!terrainEditMode; updateTerrainEditButton(); }); updateTerrainEditButton(); }
     const vegetationToggle=document.getElementById('showVegetation');
-    if(vegetationToggle){ const syncVeg=()=>{ state.showVegetation=vegetationToggle.checked; }; vegetationToggle.addEventListener('change',syncVeg); syncVeg(); }
+    if(vegetationToggle){
+      const syncVeg=()=>{ state.showVegetation=vegetationToggle.checked; updateLegendFilterPanel(); };
+      vegetationToggle.addEventListener('change',syncVeg);
+      syncVeg();
+    }
     const trailMute=document.getElementById('trailEffectMute');
     if(trailMute){ const syncTrail=()=>{ state.trailIntensity=trailMute.checked?0.35:0.9; }; trailMute.addEventListener('change',syncTrail); syncTrail(); }
     document.getElementById('speciesEditor').addEventListener('input',e=>{
