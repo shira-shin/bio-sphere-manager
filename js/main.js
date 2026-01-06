@@ -1601,6 +1601,14 @@
     const setVal=(id,val)=>{ const el=document.getElementById(id); if(el) el.textContent=val; };
     setBar('herbFill',herb); setBar('carnFill',carn); setBar('omnFill',omn);
     setVal('herbValue',herb); setVal('carnValue',carn); setVal('omnValue',omn);
+    const diversityLabel=(val)=>{ if(!Number.isFinite(val)) return '-'; if(val<0.06) return '多様性:低'; if(val<0.14) return '多様性:中'; return '多様性:高'; };
+    const diversityText=diversityLabel(log.shannon);
+    const plantBiomass=Math.max(0,(state.vegMean||0)*state.cells.length);
+    const animalBiomass=state.animals.filter(a=>a.alive).reduce((sum,a)=>{ const sp=state.species.find(s=>s.id===a.speciesId); const body=(sp?.baseSpeed??1)*(sp?.metabolism??1); return sum + body*(a.energy??1); },0);
+    const ratio=plantBiomass>0? (animalBiomass/plantBiomass):0;
+    const biomassText=`植物 ${plantBiomass.toFixed(1)} / 動物 ${animalBiomass.toFixed(1)} (A/P ${ratio.toFixed(2)})`;
+    setVal('miniDiversity', diversityText);
+    setVal('miniBiomass', biomassText);
   }
   function updateInspector(weather=currentWeather){
     const box=document.getElementById('selectedInfo');

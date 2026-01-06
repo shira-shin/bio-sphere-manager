@@ -38,12 +38,11 @@
           <div class="legend-section">
             <h4>地形・植生レイヤー</h4>
             <ul class="legend-list">
-              <li><span class="swatch base"></span>ベース地形</li>
-              <li><span class="swatch river"></span>河川セル</li>
-              <li><span class="swatch moist"></span>水分</li>
+              <li><span class="swatch" style="background:#0e4022;"></span>密林: 隠蔽0.8 / 摩擦1.1</li>
+              <li><span class="swatch" style="background:#1f6b63;"></span>湿地: 減速0.5 / 水分供給 2x</li>
+              <li><span class="swatch" style="background:#6f767d;"></span>岩稜: 進入不可（バリア）</li>
+              <li><span class="swatch" style="background:#8a9c39;"></span>草原: 隠蔽0.1 / 移動コスト0.8</li>
               <li><span class="swatch plant"></span>植生ポイント</li>
-              <li><span class="swatch" style="background:#2e8b57;"></span>隠蔽力が高い場所（見つかりにくい）</li>
-              <li><span class="swatch" style="background:#a8b7c7;"></span>通行難度が高い場所（移動に追加コスト）</li>
             </ul>
           </div>
         <div class="legend-section">
@@ -81,6 +80,10 @@
             <div class="trophic-row"><span>草食</span><div class="trophic-bar"><span class="trophic-fill herb" id="herbFill" style="width:0%"></span></div><span id="herbValue">0</span></div>
             <div class="trophic-row"><span>肉食</span><div class="trophic-bar"><span class="trophic-fill carn" id="carnFill" style="width:0%"></span></div><span id="carnValue">0</span></div>
             <div class="trophic-row"><span>雑食</span><div class="trophic-bar"><span class="trophic-fill omn" id="omnFill" style="width:0%"></span></div><span id="omnValue">0</span></div>
+          </div>
+          <div class="trophic-meta">
+            <div id="miniDiversity">多様性: -</div>
+            <div id="miniBiomass">総バイオマス: -</div>
           </div>
         </div>
       </div>

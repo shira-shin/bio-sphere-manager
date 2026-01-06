@@ -78,15 +78,19 @@ export default class Animal {
         // 肉食動物の空腹度に応じた行動モード
         if (this.isCarnivore) {
             const energyRatio = constrain(this.energy / this.maxEnergy, 0, 1);
+            const canHide = (env.tile?.stealthValue || 0) >= 0.5;
             if (this.digestTimer > 0) {
                 this.digestTimer--;
-                speedFactor *= 0.4;
-                metabolismFactor *= 0.5;
-            } else if (energyRatio > 0.65) {
-                // 低空腹: 休息モード
-                speedFactor *= 0.6;
-                metabolismFactor *= 0.6;
-                this.isAmbushing = false;
+                speedFactor *= 0.35;
+                metabolismFactor *= 0.35;
+                this.isAmbushing = true;
+            } else if (energyRatio > 0.65 && canHide) {
+                // 満腹時は隠れて静止し、基礎代謝のみ
+                speedFactor *= 0.1;
+                metabolismFactor *= 0.25;
+                this.isAmbushing = true;
+                this.vel.mult(0.8);
+                if (this.emoteTimer === 0) this.showEmote("🪤", 80);
             } else if (energyRatio > 0.3) {
                 // 中空腹: 探索モード
                 speedFactor *= 0.85;
@@ -95,13 +99,12 @@ export default class Animal {
                 this.isAmbushing = false;
             } else {
                 // 高空腹: 追跡スプリント / 待ち伏せ
-                const canHide = (env.tile?.stealthValue || 0) >= 0.5;
                 if (canHide) {
-                    // ステルス地形で息を潜める
-                    speedFactor *= 0.3;
-                    metabolismFactor *= 0.7;
-                    visionFactor *= 1.15;
+                    speedFactor *= 0.25;
+                    metabolismFactor *= 0.6;
+                    visionFactor *= 1.2;
                     this.isAmbushing = true;
+                    this.vel.mult(0.5);
                     if (this.emoteTimer === 0) this.showEmote("👀", 60);
                 } else {
                     speedFactor *= 2.0;
@@ -113,7 +116,7 @@ export default class Animal {
         }
 
         // 天候 + 地形による速度低下
-        const currentTile = env.tile || TERRAIN.GRASS;
+        const currentTile = env.tile || TERRAIN.SAVANNA;
         if (weather === 'rain') speedFactor *= 0.7;
         if (weather === 'storm') speedFactor *= 0.5;
         if (this.isSleeping) speedFactor *= 0.2;
@@ -136,11 +139,12 @@ export default class Animal {
 
         // 寿命とエネルギー消費
         this.age++;
-        // 代謝コスト：体が大きく、速いほど燃費が悪い（リアルな制約）
-        let cost = (this.size * this.size * this.maxSpeed) * 0.001 * metabolismFactor;
-        // 砂地などでは余分にエネルギーを消費
-        cost *= currentTile.energyCost || 1;
-        if (this.isSleeping) cost *= 0.2;
+        const speed = this.vel.mag();
+        const terrainWeight = currentTile.energyCost || 1;
+        const baseMetabolism = this.size * 0.02;
+        const locomotionCost = speed * speed * terrainWeight * 0.15 * metabolismFactor;
+        let cost = baseMetabolism * metabolismFactor + locomotionCost;
+        if (this.isSleeping || this.isAmbushing) cost *= 0.25;
         this.energy -= cost;
 
         // --- 環境適応ロジック ---
@@ -209,11 +213,12 @@ export default class Animal {
             // 捕食
             if (p5.Vector.dist(this.pos, other.pos) < this.size) {
                 this.showEmote("⚔️", 45);
-                this.energy = Math.min(this.maxEnergy, this.energy + other.energy * 0.8); // 食べる
-                this.digestTimer = Math.max(this.digestTimer, 240);
+                const preyEnergy = other.size * 150;
+                this.energy = Math.min(this.maxEnergy, this.energy + preyEnergy);
+                this.digestTimer = Math.max(this.digestTimer, 600);
                 other.dead = true;
                 other.showEmote("💀");
-                this.showEmote("🍖", 75); // ごちそう
+                this.showEmote("🍖", 120); // ごちそう
             }
         } else if (this.isCarnivore && other.isCarnivore) {
             // 縄張り争い（喧嘩）
