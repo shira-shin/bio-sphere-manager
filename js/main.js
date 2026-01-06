@@ -1194,6 +1194,15 @@
   function overlayLabelText(mode){
     const map={base:'地形+植生', river:'河川(流路)', moisture:'水分', vegetation_total:'植生合計', vegetation_grass:'草(密度ヒート)', vegetation_poison:'毒草', vegetation_shrub:'低木', vegetation_shrubThorn:'トゲ低木', vegetation_tree:'樹木', animals_all:'動物(全)', animals_filter:'動物(種別)', density_heatmap:'密度ヒート'}; return map[mode]||mode;
   }
+
+  function ensureVegetationLayersVisible(){
+    const vegToggle=document.getElementById('showVegetation');
+    if(vegToggle && !vegToggle.checked){ vegToggle.checked=true; state.showVegetation=true; }
+    const vegLayer=document.getElementById('toggleVegetationLayer');
+    if(vegLayer && !vegLayer.checked){ vegLayer.checked=true; state.layerSettings.vegetation=true; }
+    const animalLayer=document.getElementById('toggleAnimals');
+    if(animalLayer && !animalLayer.checked){ animalLayer.checked=true; state.layerSettings.animals=true; }
+  }
   function drawColorbar(p,mode){
     const x=12,y=12,w=18,h=140; p.push(); p.translate(12,60); const grad=p.drawingContext.createLinearGradient(0,0,0,h); const colors={moisture:['#1b2d6b','#6fa4ff'], vegetation_total:['#17351f','#68e38f'], vegetation_grass:['#16361c','#5acb72'], vegetation_poison:['#30202e','#e64f86'], vegetation_shrub:['#1d2f1c','#90d088'], vegetation_shrubThorn:['#231f13','#d6b15d'], vegetation_tree:['#18261a','#5fa173'], density_heatmap:['#1d1b4f','#ffcc66'], river:['#0c2238','#59c6ff'], animals_all:['#222','#fff']};
       const cs=colors[mode]||['#111','#888']; grad.addColorStop(0,cs[0]); grad.addColorStop(1,cs[1]); p.drawingContext.fillStyle=grad; p.rect(0,0,w,h); p.fill('#dce8ff'); p.noStroke(); p.textSize(10); p.text('low',2,h+12); p.text('high',2,-4); p.pop();
@@ -1270,11 +1279,20 @@
     const animals=document.getElementById('toggleAnimals');
     const vegBoost=document.getElementById('vegBoost');
     const animalScale=document.getElementById('animalScale');
+    const overlayInput=document.querySelector('input[name="overlay"]:checked');
+    const overlayAlpha=document.getElementById('overlayAlpha');
+    const overlaySpecies=document.getElementById('overlaySpecies');
+    const showVeg=document.getElementById('showVegetation');
     if(terrain) state.layerSettings.terrain=terrain.checked;
     if(vegetation) state.layerSettings.vegetation=vegetation.checked;
     if(animals) state.layerSettings.animals=animals.checked;
     if(vegBoost) state.layerSettings.vegetationBoost=parseFloat(vegBoost.value)||1;
     if(animalScale) state.layerSettings.animalScale=parseFloat(animalScale.value)||1;
+    if(overlayInput) state.overlay=overlayInput.value;
+    if(overlayAlpha) state.overlayAlpha=parseFloat(overlayAlpha.value)||0.6;
+    if(overlaySpecies) state.overlaySpecies=overlaySpecies.value;
+    if(showVeg) state.showVegetation=showVeg.checked;
+    if(state.overlay?.startsWith('vegetation')) ensureVegetationLayersVisible();
     state.needsBgRedraw=true;
     updateLegendFilterPanel();
   }
@@ -1513,6 +1531,7 @@
     const size=baseSize*pulse*(state.layerSettings?.animalScale||1); const screenX=a.x*params.cellSize+params.cellSize/2; const screenY=a.y*params.cellSize+params.cellSize/2;
     if(a.x<0||a.x>params.gridW||a.y<0||a.y>params.gridH) return;
     if(screenX<-16||screenX>canvasW+16||screenY<-16||screenY>canvasH+16) return;
+    const overlayIsVegetation=state.overlay?.startsWith('vegetation');
     const [r,g,b]=a.getColor();
     let color=p.color(r,g,b);
     const origin=state.geneOrigins?.[a.speciesId];
@@ -1536,6 +1555,13 @@
         p.strokeWeight(3*t);
         p.line(curr.x*params.cellSize+params.cellSize/2, curr.y*params.cellSize+params.cellSize/2, prev.x*params.cellSize+params.cellSize/2, prev.y*params.cellSize+params.cellSize/2);
       }
+    }
+    if(overlayIsVegetation){
+      p.noStroke();
+      p.fill(0,0,0,150);
+      p.circle(screenX, screenY, size+10);
+      p.fill(255,255,255,90);
+      p.circle(screenX, screenY, size+4);
     }
     p.push(); p.translate(screenX,screenY); p.rotate(angle); const stroke=p.brightness(color)>50?'#000':'#fff'; p.strokeWeight(a.state===AnimalStates.DRINK?2:1.1); p.stroke(a.state===AnimalStates.DRINK?'#6fa4ff':stroke); p.fill(color);
     const ctx=p.drawingContext; const glowCol=`rgba(${p.red(color)},${p.green(color)},${p.blue(color)},0.6)`; ctx.shadowBlur=24; ctx.shadowColor=glowCol;
@@ -1840,7 +1866,7 @@
       else if(act==='add-species') addCustomSpeciesFromForm(); else if(act==='export-species') exportSpeciesJSON(); else if(act==='import-species') importSpeciesJSON(); else if(act==='save-species') saveSpeciesLocal(); else if(act==='load-species') loadSpeciesLocal();
     }));
     document.querySelectorAll('button[data-preset]').forEach(btn=>btn.addEventListener('click',()=>applyPreset(btn.dataset.preset)));
-    document.querySelectorAll('input[name="overlay"]').forEach(r=>r.addEventListener('change',e=>{state.overlay=e.target.value; updateLegendFilterPanel();}));
+    document.querySelectorAll('input[name="overlay"]').forEach(r=>r.addEventListener('change',e=>{state.overlay=e.target.value; if(state.overlay.startsWith('vegetation')) ensureVegetationLayersVisible(); state.needsBgRedraw=true; updateLegendFilterPanel();}));
     document.getElementById('overlaySpecies').addEventListener('change',e=>{state.overlaySpecies=e.target.value; updateLegendFilterPanel();});
     document.getElementById('boundaryMode').addEventListener('change',e=>{state.boundaryMode=e.target.value;});
     const expandBtn=document.getElementById('toggleExpand'); if(expandBtn){ expandBtn.addEventListener('click', toggleExpandMap); updateExpandButton(); }
@@ -1849,7 +1875,7 @@
     const terrainToggle=document.getElementById('toggleTerrain');
     if(terrainToggle){ terrainToggle.addEventListener('change',e=>{ state.layerSettings.terrain=e.target.checked; state.needsBgRedraw=true; updateLegendFilterPanel(); }); }
     const vegetationLayerToggle=document.getElementById('toggleVegetationLayer');
-    if(vegetationLayerToggle){ vegetationLayerToggle.addEventListener('change',e=>{ state.layerSettings.vegetation=e.target.checked; updateLegendFilterPanel(); }); }
+    if(vegetationLayerToggle){ vegetationLayerToggle.addEventListener('change',e=>{ state.layerSettings.vegetation=e.target.checked; state.needsBgRedraw=true; updateLegendFilterPanel(); }); }
     const animalToggle=document.getElementById('toggleAnimals');
     if(animalToggle){ animalToggle.addEventListener('change',e=>{ state.layerSettings.animals=e.target.checked; updateLegendFilterPanel(); }); }
     const vegBoost=document.getElementById('vegBoost');
@@ -1866,7 +1892,7 @@
     const terrainBtn=document.getElementById('terrainModeToggle'); if(terrainBtn){ terrainBtn.addEventListener('click',()=>{ terrainEditMode=!terrainEditMode; updateTerrainEditButton(); }); updateTerrainEditButton(); }
     const vegetationToggle=document.getElementById('showVegetation');
     if(vegetationToggle){
-      const syncVeg=()=>{ state.showVegetation=vegetationToggle.checked; updateLegendFilterPanel(); };
+      const syncVeg=()=>{ state.showVegetation=vegetationToggle.checked; state.needsBgRedraw=true; updateLegendFilterPanel(); };
       vegetationToggle.addEventListener('change',syncVeg);
       syncVeg();
     }
