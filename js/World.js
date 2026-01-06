@@ -17,8 +17,12 @@ export default class World {
         this.temperature = 24;
         this.moisture = 0.5;
 
-        this.tiles = Array.from({ length: ROWS }, () =>
-            Array.from({ length: COLS }, () => ({ type: TERRAIN.GRASS }))
+        this.tiles = Array.from({ length: ROWS }, (_, row) =>
+            Array.from({ length: COLS }, (_, col) => {
+                const elev = 0.3 + (row / ROWS) * 0.6 + (Math.sin(col * 0.15) * 0.05);
+                const moisture = 0.45 + Math.sin(row * 0.08) * 0.15 + Math.cos(col * 0.04) * 0.1;
+                return { type: TERRAIN.GRASS, elev: constrain(elev, 0, 1), moisture: constrain(moisture, 0, 1) };
+            })
         );
 
         this.statsHistory = { speed: [], size: [], vision: [] };
@@ -49,7 +53,8 @@ export default class World {
                 if (cx < 0 || cy < 0 || cx >= COLS || cy >= ROWS) continue;
                 const dist = Math.hypot(dx, dy);
                 if (dist > radCells) continue;
-                this.tiles[cy][cx] = { type: terrainType };
+                const existing = this.tiles[cy][cx];
+                this.tiles[cy][cx] = { type: terrainType, elev: existing.elev, moisture: existing.moisture };
             }
         }
     }
@@ -157,8 +162,25 @@ export default class World {
         noStroke();
         for (let y = 0; y < ROWS; y++) {
             for (let x = 0; x < COLS; x++) {
-                const t = this.tiles[y][x].type;
-                fill(t.color);
+                const tile = this.tiles[y][x];
+                const t = tile.type;
+                const baseDry = color('#c59b6c');
+                const baseWet = color('#2e8b57');
+                const mountain = color('#a8b7c7');
+                const biomeColor = lerpColor(baseDry, baseWet, tile.moisture);
+                const shaded = lerpColor(biomeColor, mountain, pow(tile.elev, 1.4));
+                if (t === TERRAIN.WATER) {
+                    const shimmer = (sin(frameCount * 0.08 + x * 0.5 + y * 0.5) + 1) * 0.08;
+                    const waterColor = lerpColor(color('#2a6ed2'), color('#5fc0ff'), 0.4 + shimmer);
+                    fill(waterColor);
+                } else {
+                    fill(t.color || shaded);
+                    if (t.passable && t.stealthValue) {
+                        // 隠蔽力が高いほど陰影を濃くする
+                        const coverShade = lerpColor(shaded, color(20, 40, 20), t.stealthValue * 0.3);
+                        fill(coverShade);
+                    }
+                }
                 rect(x * cellW, y * cellH, cellW, cellH);
             }
         }
@@ -222,6 +244,7 @@ export default class World {
         for (let y = 0; y < ROWS; y++) {
             for (let x = 0; x < COLS; x++) {
                 const tile = this.tiles[y][x];
+                tile.moisture = constrain(lerp(tile.moisture, this.moisture, 0.01), 0, 1);
                 const t = tile.type;
                 if (freeze && t === TERRAIN.WATER && random() < 0.02) tile.type = TERRAIN.ICE;
                 if (thaw && t === TERRAIN.ICE && random() < 0.02) tile.type = TERRAIN.WATER;

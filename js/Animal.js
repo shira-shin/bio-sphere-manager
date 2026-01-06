@@ -32,6 +32,9 @@ export default class Animal {
         this.lastEnergy = this.energy;
         this.digestTimer = 0;
 
+        // 待ち伏せフラグ
+        this.isAmbushing = false;
+
         // 状態管理
         this.isSleeping = false;
 
@@ -83,16 +86,29 @@ export default class Animal {
                 // 低空腹: 休息モード
                 speedFactor *= 0.6;
                 metabolismFactor *= 0.6;
+                this.isAmbushing = false;
             } else if (energyRatio > 0.3) {
                 // 中空腹: 探索モード
                 speedFactor *= 0.85;
                 visionFactor *= 1.2;
                 metabolismFactor *= 0.9;
+                this.isAmbushing = false;
             } else {
-                // 高空腹: 追跡スプリント
-                speedFactor *= 2.0;
-                metabolismFactor *= 4.0;
-                visionFactor *= 0.95;
+                // 高空腹: 追跡スプリント / 待ち伏せ
+                const canHide = (env.tile?.stealthValue || 0) >= 0.5;
+                if (canHide) {
+                    // ステルス地形で息を潜める
+                    speedFactor *= 0.3;
+                    metabolismFactor *= 0.7;
+                    visionFactor *= 1.15;
+                    this.isAmbushing = true;
+                    if (this.emoteTimer === 0) this.showEmote("👀", 60);
+                } else {
+                    speedFactor *= 2.0;
+                    metabolismFactor *= 4.0;
+                    visionFactor *= 0.95;
+                    this.isAmbushing = false;
+                }
             }
         }
 
@@ -102,7 +118,8 @@ export default class Animal {
         if (weather === 'storm') speedFactor *= 0.5;
         if (this.isSleeping) speedFactor *= 0.2;
 
-        this.sensorRange = baseVision * visionFactor;
+        const stealthDampening = 1 - (env.tile?.stealthValue || 0);
+        this.sensorRange = baseVision * visionFactor * stealthDampening;
 
         // ... (移動ロジックは既存と同じ) ...
         this.vel.add(this.acc);
