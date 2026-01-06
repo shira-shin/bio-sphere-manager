@@ -23,6 +23,7 @@
   const wrap=(v,max)=>{ if(!Number.isFinite(v)) return 0; return ((v%max)+max)%max; };
   const torusDelta=(a,b,size)=>{ const d=((a-b+size/2)%size)-size/2; return Number.isFinite(d)?d:0; };
   const safeNorm=(x,y)=>{const d=Math.hypot(x,y); if(!Number.isFinite(d) || d<1e-9) return null; return d;};
+  const OVERLAY_OPTIONS=['animals_all','animals_filter','density_heatmap','base','river','moisture','vegetation_total','vegetation_grass','vegetation_poison','vegetation_tree'];
   const toId=str=>str.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')||`sp_${Date.now()}`;
   const parseDiet=str=>{ const [g,p,s,t]=str.split(',').map(v=>parseFloat(v)||0); return {grass:clamp01(g||0), poison:clamp01(p||0), shrub:clamp01(s||0), tree:clamp01(t||0)}; };
   const BIOMES={
@@ -889,7 +890,7 @@
     };
     p.push();
     p.drawingContext.save();
-    p.drawingContext.globalAlpha=0.92;
+    p.drawingContext.globalAlpha=0.68;
     p.blendMode(p.NORMAL);
     // セルごとの植生アイコンを描画し、存在位置を把握しやすくする
     for(let y=0;y<params.gridH;y++){
@@ -899,8 +900,8 @@
         if(total<0.05) continue;
         const {type,value}=typeInfo(cell);
         const density=clamp01(Math.pow(total,0.8));
-        const size=clampRange(cs*0.25 + density*cs*0.35, cs*0.2, cs*0.7) * clampRange(boost,0.75,1.6);
-        const alpha=clampRange((70+value*280)*boost,50,240);
+        const size=clampRange(cs*0.24 + density*cs*0.32, cs*0.2, cs*0.62) * clampRange(boost,0.75,1.45);
+        const alpha=clampRange((45+value*190)*Math.min(boost,1.4),40,180);
         const [r,g,b]=palette[type]?.col||palette.grass.col;
         const biomeTint=BIOMES[cell.biome]?.color ?? null;
         const tintColor=biomeTint? bgLayer.color(biomeTint):null;
@@ -1192,8 +1193,9 @@
     btn.classList.toggle('active', terrainEditMode);
   }
   function overlayLabelText(mode){
-    const map={base:'地形+植生', river:'河川(流路)', moisture:'水分', vegetation_total:'植生合計', vegetation_grass:'草(密度ヒート)', vegetation_poison:'毒草', vegetation_shrub:'低木', vegetation_shrubThorn:'トゲ低木', vegetation_tree:'樹木', animals_all:'動物(全)', animals_filter:'動物(種別)', density_heatmap:'密度ヒート'}; return map[mode]||mode;
+    const map={base:'地形+植生', river:'河川(流路)', moisture:'水分', vegetation_total:'植生合計', vegetation_grass:'草(密度ヒート)', vegetation_poison:'毒草', vegetation_tree:'樹木', animals_all:'動物(全)', animals_filter:'動物(種別)', density_heatmap:'密度ヒート'}; return map[mode]||mode;
   }
+  const normalizeOverlay=mode=> OVERLAY_OPTIONS.includes(mode)?mode:'animals_all';
 
   function ensureVegetationLayersVisible(){
     const vegToggle=document.getElementById('showVegetation');
@@ -1204,7 +1206,7 @@
     if(animalLayer && !animalLayer.checked){ animalLayer.checked=true; state.layerSettings.animals=true; }
   }
   function drawColorbar(p,mode){
-    const x=12,y=12,w=18,h=140; p.push(); p.translate(12,60); const grad=p.drawingContext.createLinearGradient(0,0,0,h); const colors={moisture:['#1b2d6b','#6fa4ff'], vegetation_total:['#17351f','#68e38f'], vegetation_grass:['#16361c','#5acb72'], vegetation_poison:['#30202e','#e64f86'], vegetation_shrub:['#1d2f1c','#90d088'], vegetation_shrubThorn:['#231f13','#d6b15d'], vegetation_tree:['#18261a','#5fa173'], density_heatmap:['#1d1b4f','#ffcc66'], river:['#0c2238','#59c6ff'], animals_all:['#222','#fff']};
+    const x=12,y=12,w=18,h=140; p.push(); p.translate(12,60); const grad=p.drawingContext.createLinearGradient(0,0,0,h); const colors={moisture:['#1b2d6b','#6fa4ff'], vegetation_total:['#17351f','#68e38f'], vegetation_grass:['#16361c','#5acb72'], vegetation_poison:['#30202e','#e64f86'], vegetation_tree:['#18261a','#5fa173'], density_heatmap:['#1d1b4f','#ffcc66'], river:['#0c2238','#59c6ff'], animals_all:['#222','#fff']};
       const cs=colors[mode]||['#111','#888']; grad.addColorStop(0,cs[0]); grad.addColorStop(1,cs[1]); p.drawingContext.fillStyle=grad; p.rect(0,0,w,h); p.fill('#dce8ff'); p.noStroke(); p.textSize(10); p.text('low',2,h+12); p.text('high',2,-4); p.pop();
   }
   function drawOverlay(p, overlay, alpha){
@@ -1218,8 +1220,6 @@
           case 'vegetation_total': col=overlayLayer.lerpColor(overlayLayer.color('#14301e'), overlayLayer.color('#68e38f'), clamp01((c.veg.grass+c.veg.shrub+c.veg.tree)/2)); break;
           case 'vegetation_grass': col=overlayLayer.lerpColor(overlayLayer.color('#16361c'), overlayLayer.color('#5acb72'), clamp01(c.veg.grass*1.2)); break;
           case 'vegetation_poison': col=overlayLayer.lerpColor(overlayLayer.color('#30202e'), overlayLayer.color('#e64f86'), clamp01(c.veg.poison*1.4)); break;
-          case 'vegetation_shrub': col=overlayLayer.lerpColor(overlayLayer.color('#1d2f1c'), overlayLayer.color('#90d088'), clamp01(c.veg.shrub*1.2)); break;
-          case 'vegetation_shrubThorn': col=overlayLayer.lerpColor(overlayLayer.color('#231f13'), overlayLayer.color('#d6b15d'), clamp01(c.veg.shrubThorn*1.3)); break;
           case 'vegetation_tree': col=overlayLayer.lerpColor(overlayLayer.color('#18261a'), overlayLayer.color('#5fa173'), clamp01(c.veg.tree*1.2)); break;
           case 'animals_all': {
             const density=clamp01(state.density[y*params.gridW+x]/5); col=overlayLayer.lerpColor(overlayLayer.color('#222222'), overlayLayer.color('#ffffff'),density); break; }
@@ -1290,7 +1290,7 @@
     if(vegBoost) state.layerSettings.vegetationBoost=parseFloat(vegBoost.value)||1;
     if(animalScale) state.layerSettings.animalScale=parseFloat(animalScale.value)||1;
     if(animalOpacity) state.layerSettings.animalOpacity=parseFloat(animalOpacity.value)||1;
-    if(overlayInput) state.overlay=overlayInput.value;
+    if(overlayInput) state.overlay=normalizeOverlay(overlayInput.value);
     if(overlayAlpha) state.overlayAlpha=parseFloat(overlayAlpha.value)||0.6;
     if(overlaySpecies) state.overlaySpecies=overlaySpecies.value;
     if(showVeg) state.showVegetation=showVeg.checked;
@@ -1414,7 +1414,8 @@
   function render(p){
     const cellSize=params.cellSize; p.background('#050910');
     const dimTerrain=document.getElementById('dimTerrain').checked;
-    const activeOverlay=state.overlay;
+    const activeOverlay=normalizeOverlay(state.overlay);
+    state.overlay=activeOverlay;
     const layerSettings=state.layerSettings||{};
     const vegetationVisible=state.showVegetation && layerSettings.vegetation && (document.getElementById('showVegetation')?.checked ?? true);
     state.showVegetation=vegetationVisible;
@@ -1424,7 +1425,7 @@
     p.translate(canvasW/2, canvasH/2); p.scale(camera.zoom); p.translate(-camera.x, -camera.y);
     if(bgLayer && layerSettings.terrain) p.image(bgLayer,0,0);
     if(vegetationVisible){ drawPlants(p); }
-    if(dimTerrain && activeOverlay.startsWith('vegetation')){ p.fill(5,9,16,130); p.noStroke(); p.rect(0,0,canvasW,canvasH); }
+    if(dimTerrain && activeOverlay.startsWith('vegetation')){ p.fill(5,9,16,90); p.noStroke(); p.rect(0,0,canvasW,canvasH); }
     drawOverlay(p, state.overlay, parseFloat(document.getElementById('overlayAlpha').value||'0.6'));
     if(state.renderEffects){ particles.update(); particles.draw(p, cellSize); }
     else { particles.clear(); }
