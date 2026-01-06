@@ -438,6 +438,7 @@
       this.lastSafeX=this.x; this.lastSafeY=this.y; this.headingX=1; this.headingY=0; this.wanderAngle=rng()*Math.PI*2; this.mateCooldown=0;
       this.reproCooldown=0; this.emote=''; this.emoteTimer=0; this.generation=1; this.lineageId=sp.id;
       this.timeline=[]; this.recordEvent('誕生', '初期配置');
+      this.digestTimer=0; this.meatFocus=false;
     }
 
     getSpecies(){ return state.species.find(s=>s.id===this.speciesId); }
@@ -453,6 +454,7 @@
 
     update(state){
       if(!this.alive) return;
+      if(this.digestTimer>0) this.digestTimer--;
       if(this.reproCooldown>0) this.reproCooldown--;
       this.decideState(state);
       this.applyForces(state);
@@ -501,13 +503,22 @@
       const mateThreshold=sp.reproThreshold??0.6;
       const mateReady=this.energy>mateThreshold && thirstPct<35 && this.mateCooldown<=0 && this.reproCooldown<=0;
       const drinkNeed=thirstPct>60 && this.waterCooldown<=0;
-      const foodNearby=this.hasFoodNearby(state,vision);
+      const preyNearby=this.hasPreyNearby(state,vision);
+      const plantNearby=this.hasPlantNearby(state);
+      const preferPrey=sp.trophic==='carn' || (sp.trophic==='omn' && hungerPct>80);
+      this.meatFocus=preferPrey && preyNearby;
+      const foodNearby=this.meatFocus?preyNearby:plantNearby;
       const ambushSpot=sp.trophic==='carn' && hungerPct>45 && thirstPct<55? this.findRiverAmbushSpot(state, vision):null;
+
+      if(this.digestTimer>0 && !drinkNeed && hungerPct<70){
+        this.state=AnimalStates.WANDER; this.behavior='digest';
+        return;
+      }
 
       const prevState=this.state;
       let next=AnimalStates.WANDER;
       if(drinkNeed) next=AnimalStates.DRINK;
-      else if(hungerPct>40 && foodNearby) next=AnimalStates.EAT;
+      else if((this.meatFocus && preyNearby) || (hungerPct>40 && foodNearby)) next=AnimalStates.EAT;
       else if(ambushSpot) { next=AnimalStates.AMBUSH; this.target=ambushSpot; }
       else if(mateReady) next=AnimalStates.MATE;
 
@@ -519,13 +530,15 @@
       }
     }
 
-    hasFoodNearby(state, vision){
+    hasPreyNearby(state, vision){
       const sp=this.getSpecies(); const w=params.gridW, h=params.gridH;
-      if(sp.trophic==='carn'){
-        const nearby=getNeighbors(this,state,vision);
-        return nearby.some(o=>sp.preyList.includes(o.speciesId) && Math.hypot(torusDelta(o.x,this.x,w), torusDelta(o.y,this.y,h))<vision);
-      }
-      const cx=Math.floor(wrap(this.x,w)), cy=Math.floor(wrap(this.y,h));
+      if(sp.preyList?.length===0) return false;
+      const nearby=getNeighbors(this,state,vision);
+      return nearby.some(o=>sp.preyList.includes(o.speciesId) && Math.hypot(torusDelta(o.x,this.x,w), torusDelta(o.y,this.y,h))<vision);
+    }
+
+    hasPlantNearby(state){
+      const w=params.gridW, h=params.gridH; const cx=Math.floor(wrap(this.x,w)), cy=Math.floor(wrap(this.y,h));
       for(let dy=-2;dy<=2;dy++) for(let dx=-2;dx<=2;dx++){
         const nx=wrap(cx+dx,w), ny=wrap(cy+dy,h); const c=state.cells[ny*w+nx];
         const vegScore=(c.veg.grass+c.veg.poison+c.veg.shrub+c.veg.shrubThorn+c.veg.tree);
@@ -577,9 +590,9 @@
         if(['prairie','shrubland','desert','oasis','highland'].includes(cellNow?.biome)) habitatBonus+= (habitatPref.plains-0.5)*0.35;
         speed*=clampRange(1+habitatBonus*0.08,0.5,1.4);
 
-        if(this.state===AnimalStates.AMBUSH){
-          this.behavior='ambush';
-          speed*=0.55;
+      if(this.state===AnimalStates.AMBUSH){
+        this.behavior='ambush';
+        speed*=0.55;
           if(this.target){ steerX+=torusDelta(this.target.x,this.x,w)*0.6; steerY+=torusDelta(this.target.y,this.y,h)*0.6; }
           const prey=getNeighbors(this,state,vision/2).find(o=>sp.preyList.includes(o.speciesId) && (state.cells[Math.floor(o.y)*w+Math.floor(o.x)]?.river||state.cells[Math.floor(o.y)*w+Math.floor(o.x)]?.shore));
           if(prey){
@@ -595,7 +608,7 @@
         }
         steerX+=torusDelta(best.x+0.5,this.x,w); steerY+=torusDelta(best.y+0.5,this.y,h); this.behavior='water'; this.target=best;
       } else if(this.state===AnimalStates.EAT){
-        if(sp.trophic==='carn'){
+        if(sp.trophic==='carn' || (sp.trophic==='omn' && this.meatFocus)){
           let targetPrey=null,minD=Infinity; const nearby=getNeighbors(this,state,vision);
           nearby.forEach(o=>{ if(!sp.preyList.includes(o.speciesId)) return; const dx=torusDelta(o.x,this.x,w), dy=torusDelta(o.y,this.y,h); const d=safeNorm(dx,dy); if(d && d<minD && d<vision){minD=d; targetPrey=o;} });
           if(targetPrey){const dx=torusDelta(targetPrey.x,this.x,w), dy=torusDelta(targetPrey.y,this.y,h); const d=safeNorm(dx,dy); if(d){steerX+=dx/d*1.6; steerY+=dy/d*1.6; this.target=targetPrey; this.behavior='chase';}}
@@ -656,6 +669,7 @@
 
         const hazardSlow=hazard?.type==='storm'?0.8:(hazard?.type==='disease'?0.9:1);
         this.moveMul=(this.state===AnimalStates.WANDER?0.6:(this.state===AnimalStates.DRINK?0.48:(this.state===AnimalStates.MATE?0.65:(this.state===AnimalStates.AMBUSH?0.4:0.55))))*hazardSlow;
+      if(this.digestTimer>0){ this.moveMul*=0.6; }
       const targetVx=steerX*speed*this.moveMul; const targetVy=steerY*speed*this.moveMul;
       const inertia=0.82; const accel=0.18;
       const prevVx=this.vx, prevVy=this.vy;
@@ -709,10 +723,13 @@
 
     consumeAndMetabolize(state){
       const sp=this.getSpecies(); const genes=this.genes; const w=params.gridW; const rng=state.rng;
-      const trophicMeta=sp.trophic==='carn'?2.3:(sp.trophic==='omn'?1.4:1);
-      const metabolism=clampRange(sp.metabolism*genes.g_metabolism*trophicMeta,0.2,3);
       const thirstTol=clampRange(lerp(0.7,1.3,genes.g_thirstTol),0.2,2.0); const waterNeed=clampRange(sp.waterNeed,0.2,2.0);
-      this.age+=1; this.energy-=0.002*metabolism; this.hydration-=0.002*waterNeed*thirstTol; if(this.waterCooldown>0) this.waterCooldown-=1; if(this.mateCooldown>0) this.mateCooldown-=1;
+      const bodyMass=clampRange((sp.metabolism||1)*lerp(0.85,1.2,genes.g_starveTol||1),0.5,1.8);
+      const runSpeed=clampRange(sp.baseSpeed*lerp(0.7,1.3,genes.g_speed),0.4,2.6);
+      const metabolismGene=clampRange(genes.g_metabolism||1,0.5,1.6);
+      const baseMetabolicCost=0.0016*Math.pow(bodyMass,0.75)*metabolismGene;
+      const movementCost=this.digestTimer>0?0:0.0009*runSpeed*runSpeed*(this.moveMul||1);
+      this.age+=1; this.energy-=baseMetabolicCost+movementCost; this.hydration-=0.002*waterNeed*thirstTol; if(this.waterCooldown>0) this.waterCooldown-=1; if(this.mateCooldown>0) this.mateCooldown-=1;
       const cell=state.cells[Math.floor(this.y)*w+Math.floor(this.x)];
       const prevHydration=this.hydration;
 
@@ -728,11 +745,15 @@
 
       if(this.state===AnimalStates.DRINK && (cell.shore||cell.river||cell.moist>0.45)) {this.hydration=Math.min(1,this.hydration+0.08*cell.moist+0.05); this.waterCooldown=40+Math.floor(rng()*80); if(this.hydration>prevHydration+0.03) this.recordEvent('水分補給', '水場で回復');}
 
-      if(sp.trophic==='carn'){
+      if(sp.trophic==='carn' || (sp.trophic==='omn' && this.meatFocus)){
         const victim=getNeighbors(this,state,0.8).find(o=>sp.preyList.includes(o.speciesId) && Math.hypot(torusDelta(o.x,this.x,params.gridW), torusDelta(o.y,this.y,params.gridH))<0.6);
-        if(victim){victim.alive=false; removeAnimalFromGrid(victim,state); state.kills++; const pack=getNeighbors(this,state,3).filter(o=>o.speciesId===this.speciesId); const shareBase=0.35/Math.max(1,pack.length);
-          pack.forEach(o=>{o.energy=Math.min(1,o.energy+shareBase); o.hydration=Math.min(1,o.hydration+0.12);});
-          this.energy=Math.min(1,this.energy+0.1); this.hydration=Math.min(1,this.hydration+0.05);
+        if(victim){victim.alive=false; removeAnimalFromGrid(victim,state); state.kills++; const pack=getNeighbors(this,state,3).filter(o=>o.speciesId===this.speciesId);
+          const preySpec=victim.getSpecies?victim.getSpecies():null; const preySize=clampRange((preySpec?.metabolism||1)*0.6 + (preySpec?.baseSpeed||1)*0.2,0.5,2.2);
+          const meatValue=clampRange(preySize*(sp.trophic==='omn'?0.28:0.34),0.12,0.65);
+          const shareBase=meatValue/Math.max(1,pack.length||1);
+          const digestTime=90+Math.floor(rng()*50);
+          pack.forEach(o=>{o.energy=Math.min(1,o.energy+shareBase); o.hydration=Math.min(1,o.hydration+0.12); o.digestTimer=Math.max(o.digestTimer||0,digestTime);});
+          this.energy=Math.min(1,this.energy+shareBase*1.2); this.hydration=Math.min(1,this.hydration+0.08); this.digestTimer=Math.max(this.digestTimer,digestTime);
           this.behavior='hunt'; state.events.push({type:'hunt', predator:sp.id, prey:victim.speciesId}); this.recordEvent('捕食', `${victim.speciesId}を捕食`); if(victim.recordEvent) victim.recordEvent('捕食された', `捕食者:${this.id}`);
           if(state.renderEffects) particles.burst({x:this.x,y:this.y,color:'#ff5c5c',count:14,speed:1.1,life:50});
         }
@@ -840,7 +861,7 @@
     plants.push(...newborns);
   }
 
-  function drawPlants(){
+  function drawPlants(p){
     const boost=state.layerSettings?.vegetationBoost||1;
     const cs=params.cellSize;
     const typeInfo=cell=>{
@@ -860,6 +881,8 @@
       thorn:{col:[198,164,90]},
       tree:{col:[70,150,98]},
     };
+    p.push();
+    p.blendMode(p.NORMAL);
     // セルごとの植生アイコンを描画し、存在位置を把握しやすくする
     for(let y=0;y<params.gridH;y++){
       for(let x=0;x<params.gridW;x++){
@@ -874,35 +897,36 @@
         const biomeTint=BIOMES[cell.biome]?.color ?? null;
         const tintColor=biomeTint? bgLayer.color(biomeTint):null;
         const tintMix=tintColor? [r*0.6+tintColor.levels[0]*0.4, g*0.6+tintColor.levels[1]*0.4, b*0.6+tintColor.levels[2]*0.4] : [r,g,b];
-        noStroke();
-        fill(tintMix[0], tintMix[1], tintMix[2], alpha);
+        p.noStroke();
+        p.fill(tintMix[0], tintMix[1], tintMix[2], alpha);
         const cx=x*cs+cs*0.5, cy=y*cs+cs*0.5;
         if(type==='poison'){
-          push(); translate(cx,cy); rotate(Math.PI/4); rectMode(CENTER); rect(0,0,size*0.9,size*0.9); pop();
-          fill(tintMix[0], tintMix[1], tintMix[2], alpha*0.6); ellipse(cx+2, cy+2, size*0.4, size*0.35);
+          p.push(); p.translate(cx,cy); p.rotate(Math.PI/4); p.rectMode(p.CENTER); p.rect(0,0,size*0.9,size*0.9); p.pop();
+          p.fill(tintMix[0], tintMix[1], tintMix[2], alpha*0.6); p.ellipse(cx+2, cy+2, size*0.4, size*0.35);
         } else if(type==='thorn'){
-          push(); translate(cx,cy); stroke(r,g,b,alpha+10); strokeWeight(1.4); line(-size*0.5,0,size*0.5,0); line(0,-size*0.5,0,size*0.5); pop();
-          fill(tintMix[0], tintMix[1], tintMix[2], alpha*0.45); circle(cx, cy, size*0.45);
+          p.push(); p.translate(cx,cy); p.stroke(r,g,b,alpha+10); p.strokeWeight(1.4); p.line(-size*0.5,0,size*0.5,0); p.line(0,-size*0.5,0,size*0.5); p.pop();
+          p.fill(tintMix[0], tintMix[1], tintMix[2], alpha*0.45); p.circle(cx, cy, size*0.45);
         } else if(type==='tree'){
-          rect(cx-size*0.2, cy-size*0.45, size*0.4, size*0.9, 2);
-          ellipse(cx, cy-size*0.1, size*0.85, size*0.7);
-          fill(50,30,10,alpha*0.8); rect(cx-size*0.12, cy, size*0.24, size*0.35, 1);
+          p.rect(cx-size*0.2, cy-size*0.45, size*0.4, size*0.9, 2);
+          p.ellipse(cx, cy-size*0.1, size*0.85, size*0.7);
+          p.fill(50,30,10,alpha*0.8); p.rect(cx-size*0.12, cy, size*0.24, size*0.35, 1);
         } else {
-          ellipse(cx, cy, size, size*0.7);
+          p.ellipse(cx, cy, size, size*0.7);
           if(density>0.42){
-            ellipse(cx+cs*0.15, cy-cs*0.15, size*0.6, size*0.4);
-            ellipse(cx-cs*0.12, cy+cs*0.1, size*0.4, size*0.3);
+            p.ellipse(cx+cs*0.15, cy-cs*0.15, size*0.6, size*0.4);
+            p.ellipse(cx-cs*0.12, cy+cs*0.1, size*0.4, size*0.3);
           }
         }
       }
     }
     // 実体の植生はセル情報に応じた色で上書き
-    plants.forEach(p=>{
-      const cx=Math.floor(p.pos.x/params.cellSize); const cy=Math.floor(p.pos.y/params.cellSize);
+    plants.forEach(plant=>{
+      const cx=Math.floor(plant.pos.x/params.cellSize); const cy=Math.floor(plant.pos.y/params.cellSize);
       const idx=cy*params.gridW+cx; const cell=state.cells[idx];
-      if(cell){ const info=typeInfo(cell); p.lastType=info.type; p.lastDensity=info.value; }
-      p.draw(boost);
+      if(cell){ const info=typeInfo(cell); plant.lastType=info.type; plant.lastDensity=info.value; }
+      plant.draw(boost);
     });
+    p.pop();
   }
 
   // --- ENGINE ---
@@ -1340,9 +1364,9 @@
     p.push();
     p.translate(canvasW/2, canvasH/2); p.scale(camera.zoom); p.translate(-camera.x, -camera.y);
     if(bgLayer && layerSettings.terrain) p.image(bgLayer,0,0);
+    if(vegetationVisible){ drawPlants(p); }
     if(dimTerrain && activeOverlay.startsWith('vegetation')){ p.fill(5,9,16,130); p.noStroke(); p.rect(0,0,canvasW,canvasH); }
     drawOverlay(p, state.overlay, parseFloat(document.getElementById('overlayAlpha').value||'0.6'));
-    if(vegetationVisible){ drawPlants(); }
     if(state.renderEffects){ particles.update(); particles.draw(p, cellSize); }
     else { particles.clear(); }
     // animals
