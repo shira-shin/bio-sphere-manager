@@ -17,13 +17,9 @@ export default class World {
         this.temperature = 24;
         this.moisture = 0.5;
 
-        this.tiles = Array.from({ length: ROWS }, (_, row) =>
-            Array.from({ length: COLS }, (_, col) => {
-                const elev = 0.3 + (row / ROWS) * 0.6 + (Math.sin(col * 0.15) * 0.05);
-                const moisture = 0.45 + Math.sin(row * 0.08) * 0.15 + Math.cos(col * 0.04) * 0.1;
-                return { type: TERRAIN.GRASS, elev: constrain(elev, 0, 1), moisture: constrain(moisture, 0, 1) };
-            })
-        );
+        this.tiles = this.generateTerrain();
+        this.passableMask = new Uint8Array(COLS * ROWS);
+        this.refreshPassableMask();
 
         this.statsHistory = { speed: [], size: [], vision: [] };
         this.historyMax = 400;
@@ -40,6 +36,54 @@ export default class World {
         const col = constrain(Math.floor(x / (WORLD_WIDTH / COLS)), 0, COLS - 1);
         const row = constrain(Math.floor(y / (WORLD_HEIGHT / ROWS)), 0, ROWS - 1);
         return this.tiles[row][col];
+    }
+
+    refreshPassableMask() {
+        for (let y = 0; y < ROWS; y++) {
+            for (let x = 0; x < COLS; x++) {
+                const idx = y * COLS + x;
+                this.passableMask[idx] = this.tiles[y][x].passable ? 1 : 0;
+            }
+        }
+    }
+
+    generateTerrain() {
+        noiseDetail(4, 0.55);
+        const elevScale = 0.05;
+        const moistScale = 0.08;
+        const ridgeMaskScale = 0.12;
+        return Array.from({ length: ROWS }, (_, row) =>
+            Array.from({ length: COLS }, (_, col) => {
+                const nx = col * elevScale;
+                const ny = row * elevScale;
+                const baseElev = noise(nx, ny);
+                const ridgeNoise = noise(col * ridgeMaskScale, row * ridgeMaskScale) * 0.35;
+                const elevation = constrain(baseElev * 0.75 + ridgeNoise, 0, 1);
+
+                const mx = col * moistScale + 200;
+                const my = row * moistScale + 200;
+                const moistureLayer = noise(mx, my);
+                const moisture = constrain(0.35 + moistureLayer * 0.65, 0, 1);
+
+                const biome = this.selectBiome(elevation, moisture);
+                return {
+                    type: biome,
+                    elev: elevation,
+                    moisture,
+                    friction: biome.friction,
+                    stealthValue: biome.stealthValue,
+                    energyCost: biome.energyCost,
+                    passable: biome.passable,
+                };
+            })
+        );
+    }
+
+    selectBiome(elevation, moisture) {
+        if (elevation > 0.7) return TERRAIN.RIDGE;
+        if (moisture > 0.7) return TERRAIN.WETLAND;
+        if (moisture > 0.5 && elevation < 0.45) return TERRAIN.DENSE_FOREST;
+        return TERRAIN.SAVANNA;
     }
 
     paintTerrain(centerX, centerY, radius, terrainType) {
@@ -164,22 +208,16 @@ export default class World {
             for (let x = 0; x < COLS; x++) {
                 const tile = this.tiles[y][x];
                 const t = tile.type;
-                const baseDry = color('#c59b6c');
-                const baseWet = color('#2e8b57');
-                const mountain = color('#a8b7c7');
-                const biomeColor = lerpColor(baseDry, baseWet, tile.moisture);
-                const shaded = lerpColor(biomeColor, mountain, pow(tile.elev, 1.4));
-                if (t === TERRAIN.WATER) {
-                    const shimmer = (sin(frameCount * 0.08 + x * 0.5 + y * 0.5) + 1) * 0.08;
-                    const waterColor = lerpColor(color('#2a6ed2'), color('#5fc0ff'), 0.4 + shimmer);
-                    fill(waterColor);
-                } else {
-                    fill(t.color || shaded);
-                    if (t.passable && t.stealthValue) {
-                        // 隠蔽力が高いほど陰影を濃くする
-                        const coverShade = lerpColor(shaded, color(20, 40, 20), t.stealthValue * 0.3);
-                        fill(coverShade);
-                    }
+                const baseColor = color(t.color);
+                const highlight = t === TERRAIN.SAVANNA ? color('#b6c96c') :
+                    t === TERRAIN.WETLAND ? color('#3cb3a5') :
+                    t === TERRAIN.DENSE_FOREST ? color('#1a5b38') : color('#9aa3ae');
+                const shade = lerpColor(baseColor, highlight, 0.35 + 0.25 * tile.moisture);
+                const depthShade = lerpColor(shade, color(10, 15, 25), pow(tile.elev, 1.5) * 0.4);
+                fill(depthShade);
+                if (t.passable && t.stealthValue) {
+                    const coverShade = lerpColor(depthShade, color(10, 30, 10), t.stealthValue * 0.4);
+                    fill(coverShade);
                 }
                 rect(x * cellW, y * cellH, cellW, cellH);
             }
@@ -238,8 +276,8 @@ export default class World {
     applyDynamicTerrain() {
         const freeze = this.temperature <= -5;
         const thaw = this.temperature > 1;
-        const dryOut = this.temperature > 30 && this.moisture < 0.25;
-        const becomeMud = this.moisture > 0.75;
+        const drying = this.temperature > 30 && this.moisture < 0.25;
+        const soaking = this.moisture > 0.75;
 
         for (let y = 0; y < ROWS; y++) {
             for (let x = 0; x < COLS; x++) {
@@ -248,10 +286,11 @@ export default class World {
                 const t = tile.type;
                 if (freeze && t === TERRAIN.WATER && random() < 0.02) tile.type = TERRAIN.ICE;
                 if (thaw && t === TERRAIN.ICE && random() < 0.02) tile.type = TERRAIN.WATER;
-                if (dryOut && t === TERRAIN.GRASS && random() < 0.01) tile.type = TERRAIN.SAND;
-                if (becomeMud && (t === TERRAIN.SAND || t === TERRAIN.GRASS) && random() < 0.02) tile.type = TERRAIN.MUD;
+                if (drying && t === TERRAIN.WETLAND && tile.moisture < 0.35) tile.type = TERRAIN.SAVANNA;
+                if (soaking && t === TERRAIN.SAVANNA && tile.moisture > 0.65) tile.type = TERRAIN.WETLAND;
             }
         }
+        this.refreshPassableMask();
     }
 }
 
