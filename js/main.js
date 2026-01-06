@@ -505,8 +505,8 @@
       const drinkNeed=thirstPct>60 && this.waterCooldown<=0;
       const preyNearby=this.hasPreyNearby(state,vision);
       const plantNearby=this.hasPlantNearby(state);
-      const preferPrey=sp.trophic==='carn' || (sp.trophic==='omn' && hungerPct>80);
-      this.meatFocus=preferPrey && preyNearby;
+      const preferPrey=sp.trophic==='carn' || (sp.trophic==='omn' && hungerPct>=70);
+      this.meatFocus=preferPrey;
       const foodNearby=this.meatFocus?preyNearby:plantNearby;
       const ambushSpot=sp.trophic==='carn' && hungerPct>45 && thirstPct<55? this.findRiverAmbushSpot(state, vision):null;
 
@@ -727,9 +727,10 @@
       const bodyMass=clampRange((sp.metabolism||1)*lerp(0.85,1.2,genes.g_starveTol||1),0.5,1.8);
       const runSpeed=clampRange(sp.baseSpeed*lerp(0.7,1.3,genes.g_speed),0.4,2.6);
       const metabolismGene=clampRange(genes.g_metabolism||1,0.5,1.6);
-      const baseMetabolicCost=0.0016*Math.pow(bodyMass,0.75)*metabolismGene;
-      const movementCost=this.digestTimer>0?0:0.0009*runSpeed*runSpeed*(this.moveMul||1);
-      this.age+=1; this.energy-=baseMetabolicCost+movementCost; this.hydration-=0.002*waterNeed*thirstTol; if(this.waterCooldown>0) this.waterCooldown-=1; if(this.mateCooldown>0) this.mateCooldown-=1;
+      const kleiberCost=0.00125*Math.pow(bodyMass,0.75)*metabolismGene;
+      const locomotionCost=this.digestTimer>0?0:0.0007*Math.pow(runSpeed,2)*(this.moveMul||1);
+      const baseMetabolicCost=kleiberCost+locomotionCost;
+      this.age+=1; this.energy-=baseMetabolicCost; this.hydration-=0.002*waterNeed*thirstTol; if(this.waterCooldown>0) this.waterCooldown-=1; if(this.mateCooldown>0) this.mateCooldown-=1;
       const cell=state.cells[Math.floor(this.y)*w+Math.floor(this.x)];
       const prevHydration=this.hydration;
 
@@ -746,10 +747,15 @@
       if(this.state===AnimalStates.DRINK && (cell.shore||cell.river||cell.moist>0.45)) {this.hydration=Math.min(1,this.hydration+0.08*cell.moist+0.05); this.waterCooldown=40+Math.floor(rng()*80); if(this.hydration>prevHydration+0.03) this.recordEvent('水分補給', '水場で回復');}
 
       if(sp.trophic==='carn' || (sp.trophic==='omn' && this.meatFocus)){
-        const victim=getNeighbors(this,state,0.8).find(o=>sp.preyList.includes(o.speciesId) && Math.hypot(torusDelta(o.x,this.x,params.gridW), torusDelta(o.y,this.y,params.gridH))<0.6);
+        const nearbyPrey=getNeighbors(this,state,1.2).filter(o=>sp.preyList.includes(o.speciesId));
+        const preyDensity=nearbyPrey.length;
+        const attackRate=0.65;
+        const handlingTime=0.85;
+        const successChance=clamp01((attackRate*preyDensity)/(1+attackRate*handlingTime*preyDensity));
+        const victim=nearbyPrey.find(o=>Math.hypot(torusDelta(o.x,this.x,params.gridW), torusDelta(o.y,this.y,params.gridH))<0.6 && rng()<successChance);
         if(victim){victim.alive=false; removeAnimalFromGrid(victim,state); state.kills++; const pack=getNeighbors(this,state,3).filter(o=>o.speciesId===this.speciesId);
           const preySpec=victim.getSpecies?victim.getSpecies():null; const preySize=clampRange((preySpec?.metabolism||1)*0.6 + (preySpec?.baseSpeed||1)*0.2,0.5,2.2);
-          const meatValue=clampRange(preySize*(sp.trophic==='omn'?0.28:0.34),0.12,0.65);
+          const meatValue=clampRange(preySize*(sp.trophic==='omn'?0.28:0.34),0.12,0.65)*(0.7+0.6*successChance);
           const shareBase=meatValue/Math.max(1,pack.length||1);
           const digestTime=90+Math.floor(rng()*50);
           pack.forEach(o=>{o.energy=Math.min(1,o.energy+shareBase); o.hydration=Math.min(1,o.hydration+0.12); o.digestTimer=Math.max(o.digestTimer||0,digestTime);});
@@ -882,6 +888,8 @@
       tree:{col:[70,150,98]},
     };
     p.push();
+    p.drawingContext.save();
+    p.drawingContext.globalAlpha=0.92;
     p.blendMode(p.NORMAL);
     // セルごとの植生アイコンを描画し、存在位置を把握しやすくする
     for(let y=0;y<params.gridH;y++){
@@ -926,6 +934,7 @@
       if(cell){ const info=typeInfo(cell); plant.lastType=info.type; plant.lastDensity=info.value; }
       plant.draw(boost);
     });
+    p.drawingContext.restore();
     p.pop();
   }
 
@@ -1050,6 +1059,20 @@
       speciesUsed++;
     });
     return speciesUsed?totalStd/speciesUsed:0;
+  }
+  function computeTrophicDiversity(){
+    const keys=['g_speed','g_metabolism','g_thirstTol','g_starveTol'];
+    const calcStd=vals=>{ if(vals.length<2) return 0; const mean=vals.reduce((s,v)=>s+v,0)/vals.length; const variance=vals.reduce((s,v)=>s+(v-mean)*(v-mean),0)/(vals.length-1); return Math.sqrt(variance); };
+    const groups={herb:[], carn:[], omn:[]};
+    state.animals.forEach(a=>{ if(!a.alive) return; const sp=state.species.find(s=>s.id===a.speciesId); if(sp) groups[sp.trophic]?.push(a); });
+    const result={};
+    Object.entries(groups).forEach(([k,list])=>{
+      const diversities=[];
+      keys.forEach(gk=>{ const vals=list.map(a=>clampRange(a.genes[gk]||1,0.2,2)); diversities.push(calcStd(vals)); });
+      const avg=diversities.length?diversities.reduce((s,v)=>s+v,0)/diversities.length:0;
+      result[k]={count:list.length, diversity:avg};
+    });
+    return result;
   }
   function computeTraitSpread(){
     const living=state.animals.filter(a=>a.alive);
@@ -1223,6 +1246,22 @@
       list.appendChild(li);
     });
   }
+  function updateLegendPopulation(){
+    const stats=computeTrophicDiversity();
+    const diversityLabel=val=>{
+      if(!Number.isFinite(val)) return '-';
+      if(val<0.06) return '多様性:低';
+      if(val<0.14) return '多様性:中';
+      return '多様性:高';
+    };
+    const setText=(id,text)=>{ const el=document.getElementById(id); if(el) el.textContent=text; };
+    setText('legendHerbCount', stats.herb?.count??0);
+    setText('legendCarnCount', stats.carn?.count??0);
+    setText('legendOmnCount', stats.omn?.count??0);
+    setText('legendHerbDiversity', diversityLabel(stats.herb?.diversity));
+    setText('legendCarnDiversity', diversityLabel(stats.carn?.diversity));
+    setText('legendOmnDiversity', diversityLabel(stats.omn?.diversity));
+  }
 
   function applyLayerSettingsFromUI(){
     if(!state.layerSettings){ state.layerSettings={terrain:true, vegetation:true, animals:true, vegetationBoost:1, animalScale:1}; }
@@ -1383,6 +1422,7 @@
     const label=document.getElementById('layerLabel'); label.textContent=`レイヤー: ${overlayLabelText(overlay)}`; label.innerHTML=`レイヤー: ${overlayLabelText(overlay)}<small>表示中: ${overlayLabelText(overlay)} / マップ ${params.gridW}x${params.gridH} (バイオーム・粒子演出強化版)</small>`;
     drawColorbar(p, overlay);
     updateLegendFilterPanel();
+    updateLegendPopulation();
     updateHud(); updateTrophicPanel(); updateInspector(currentWeather); updateChart();
     if(lastMutationMapStep!==state.step){ renderMutationMap(); lastMutationMapStep=state.step; }
   }
@@ -1475,6 +1515,12 @@
     if(screenX<-16||screenX>canvasW+16||screenY<-16||screenY>canvasH+16) return;
     const [r,g,b]=a.getColor();
     let color=p.color(r,g,b);
+    const origin=state.geneOrigins?.[a.speciesId];
+    const divergence=origin? geneDivergence(origin, a.genes):0;
+    if(divergence>0.08){
+      const speciationHue=p.color(120+((a.genes.g_speed||1)*60)%120, 180, 220);
+      color=p.lerpColor(color, speciationHue, clamp01((divergence-0.05)*1.2));
+    }
     const speedTrait=clamp01(((a.genes?.g_speed??1)-0.8)/0.7);
     const speedHue=p.lerpColor(p.color('#4fa3ff'), p.color('#ff6b6b'), speedTrait);
     color=p.lerpColor(color, speedHue, 0.45);
@@ -1496,7 +1542,13 @@
     if(state.overlay==='animals_filter' && document.getElementById('speciesDim').checked && state.overlaySpecies && state.overlaySpecies!==a.speciesId){ p.tint(255,60); p.stroke(255,80);}
     drawAnimalShape(p, sp.shape, size, a.state===AnimalStates.DRINK?'#6fa4ff':stroke, sp.trophic, a.genes.g_aspect||1, a.genes.g_spikes||0);
     ctx.shadowBlur=0; ctx.shadowColor='transparent';
-    if(document.getElementById('haloToggle').checked){ if(a.behavior==='graze') {p.noFill(); p.stroke(50,200,120,160); p.circle(0,0,size+6);} else if(a.behavior==='chase'){p.noFill(); p.stroke(255,80,80,180); p.circle(0,0,size+6);} else if(a.behavior==='water'){p.noFill(); p.stroke(80,160,255,200); p.circle(0,0,size+7);} else if(a.behavior==='seek-mate'){p.noStroke(); p.fill(255,180,200,200); p.text('♡',-4,4);} }
+    if(document.getElementById('haloToggle').checked){
+      const envTemp=currentWeather?.temperature??24;
+      const preferredTemp=lerp(18,32, clamp01((a.genes.g_habitatPlains??0.5)*0.4 + (a.genes.g_habitatForest??0.5)*0.35 + (a.genes.g_habitatWater??0.5)*0.25));
+      const tempDiff=Math.abs(envTemp-preferredTemp);
+      const stressLevel=clamp01(tempDiff/10);
+      const stressColor=p.lerpColor(p.color('#68e38f'), p.color('#ff7b5f'), stressLevel);
+      if(a.behavior==='graze') {p.noFill(); p.stroke(p.red(stressColor),p.green(stressColor),p.blue(stressColor),160); p.circle(0,0,size+6);} else if(a.behavior==='chase'){p.noFill(); p.stroke(p.red(stressColor),p.green(stressColor),p.blue(stressColor),200); p.circle(0,0,size+6);} else if(a.behavior==='water'){p.noFill(); p.stroke(p.lerpColor(stressColor,p.color('#6fa4ff'),0.5)); p.circle(0,0,size+7);} else if(a.behavior==='seek-mate'){p.noStroke(); p.fill(p.red(stressColor),p.green(stressColor),p.blue(stressColor),200); p.text('♡',-4,4);} else { p.noFill(); p.stroke(p.red(stressColor),p.green(stressColor),p.blue(stressColor),140); p.circle(0,0,size+5);} }
     if(a.emoteTimer>0 && a.emote){ p.textAlign(p.CENTER,p.BOTTOM); p.textSize(18); p.stroke(0); p.strokeWeight(2); p.fill(255); p.text(a.emote,0,-size-4); }
     if(selectedAnimal && selectedAnimal.id===a.id){ p.noFill(); p.stroke(255); p.strokeWeight(2); p.circle(0,0,size+8); }
     p.pop();
@@ -1774,7 +1826,7 @@
     const centerBtn=document.getElementById('centerLegend'); if(centerBtn) centerBtn.addEventListener('click',()=>{ const legend=document.getElementById('legendPanel'); if(legend){ legend.style.left='20px'; legend.style.top='20px'; } });
     const trophicPanel=document.getElementById('trophicPanel'); if(trophicPanel) trophicPanel.addEventListener('dblclick', resetFloatingPanels);
     document.querySelectorAll('button[data-action]').forEach(btn=>btn.addEventListener('click',()=>{
-      const act=btn.dataset.action; if(act==='start'){ state.running=true; startBgmLoop(); } else if(act==='stop'){ state.running=false; stopBgm(); } else if(act==='reset'){ state=createState(document.getElementById('seedInput').value); generateTerrain(document.getElementById('patternSelect').value); spawnAnimals(); selectedAnimal=null; seedPlants(); applyLayerSettingsFromUI(); stopBgm(); }
+      const act=btn.dataset.action; if(act==='start'){ state.running=true; startBgmLoop(); } else if(act==='stop'){ state.running=false; stopBgm(); } else if(act==='reset'){ state.running=false; state=createState(document.getElementById('seedInput').value); generateTerrain(document.getElementById('patternSelect').value); spawnAnimals(); selectedAnimal=null; seedPlants(); applyLayerSettingsFromUI(); stopBgm(); }
       else if(act==='regen'){ state.seed=document.getElementById('seedInput').value; state.rng=createRng(state.seed); generateTerrain(document.getElementById('patternSelect').value); seedPlants(); applyLayerSettingsFromUI(); }
       else if(act==='download-csv') downloadCsv(); else if(act==='run-test') runTest(); else if(act==='self-test') runSelfTest(); else if(act==='headless-3000') runHeadless3000();
       else if(act==='add-species') addCustomSpeciesFromForm(); else if(act==='export-species') exportSpeciesJSON(); else if(act==='import-species') importSpeciesJSON(); else if(act==='save-species') saveSpeciesLocal(); else if(act==='load-species') loadSpeciesLocal();
