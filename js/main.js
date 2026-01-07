@@ -68,6 +68,8 @@
     if(typeof window.textSize!=='function') window.textSize=p.textSize.bind(p);
     if(typeof window.textAlign!=='function') window.textAlign=p.textAlign.bind(p);
     if(typeof window.colorMode!=='function') window.colorMode=p.colorMode.bind(p);
+    if(typeof window.HSB==='undefined' && typeof p.HSB!=='undefined') window.HSB=p.HSB;
+    if(typeof window.RGB==='undefined' && typeof p.RGB!=='undefined') window.RGB=p.RGB;
   }
   const randomPositionWithinMargin=(rng, w, h)=>{
     const margin=Math.max(0.5, Math.min(w, h)*0.05);
