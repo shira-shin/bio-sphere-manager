@@ -23,7 +23,7 @@
   const wrap=(v,max)=>{ if(!Number.isFinite(v)) return 0; return ((v%max)+max)%max; };
   const torusDelta=(a,b,size)=>{ const d=((a-b+size/2)%size)-size/2; return Number.isFinite(d)?d:0; };
   const safeNorm=(x,y)=>{const d=Math.hypot(x,y); if(!Number.isFinite(d) || d<1e-9) return null; return d;};
-  const OVERLAY_OPTIONS=['animals_all','animals_filter','density_heatmap','base','river','moisture','vegetation_total','vegetation_grass','vegetation_poison','vegetation_tree'];
+  const OVERLAY_OPTIONS=['animals_all','animals_filter','density_heatmap','base','river','moisture','cover','vegetation_total','vegetation_grass','vegetation_poison','vegetation_tree'];
   const toId=str=>str.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')||`sp_${Date.now()}`;
   const parseDiet=str=>{ const [g,p,s,t]=str.split(',').map(v=>parseFloat(v)||0); return {grass:clamp01(g||0), poison:clamp01(p||0), shrub:clamp01(s||0), tree:clamp01(t||0)}; };
   const BIOMES={
@@ -37,6 +37,11 @@
     snow:{label:'雪原', color:'#6e7c91', moveCost:1.35, vegBias:{grass:0.08, poison:0.04, shrub:0.12, thorn:0.08, tree:0.05}, growth:{grass:0.55, shrub:0.5, tree:0.35}, particles:'#dfe8f5'},
     desert:{label:'砂漠', color:'#8f7b3d', moveCost:1.3, vegBias:{grass:0.06, poison:0.02, shrub:0.08, thorn:0.2, tree:0.02}, growth:{grass:0.45, shrub:0.6, tree:0.2}, particles:'#e7d39c'},
     oasis:{label:'オアシス', color:'#2f6f58', moveCost:1.05, vegBias:{grass:0.18, poison:0.08, shrub:0.14, thorn:0.1, tree:0.2}, growth:{grass:1.1, shrub:1.0, tree:1.05}, particles:'#7fe0c5'},
+  };
+  const PATTERN_CONFIGS={
+    meandering_river:{label:'蛇行河川', elevScale:0.07, wetScale:0.08, riverBias:0, coverBias:0.06, coverNoise:0.12, ruggedPush:0.08, waterOffset:0},
+    delta_wetland:{label:'デルタ湿地', elevScale:0.06, wetScale:0.11, riverBias:-0.12, coverBias:0.16, coverNoise:0.1, ruggedPush:0.02, waterOffset:0.06},
+    mountain_valley:{label:'山岳渓谷', elevScale:0.045, wetScale:0.065, riverBias:0.15, coverBias:0.12, coverNoise:0.14, ruggedPush:0.18, waterOffset:-0.02},
   };
   function ensureP5Globals(p){
     if(!p) return;
@@ -207,10 +212,10 @@
   const GENE_KEYS=['g_speed','g_vision','g_metabolism','g_fertility','g_thirstTol','g_starveTol','g_colorR','g_colorG','g_colorB','g_aspect','g_spikes','g_habitatWater','g_habitatForest','g_habitatPlains'];
   const initialUiParams={rainyLen:600,dryLen:400,shareRate:0.6,leaderBonus:1.2, miniMapPos:null, mapColWidth:'minmax(980px,1.15fr)'};
   const presets={
-    temperate:{seed:'temperate', species:JSON.parse(JSON.stringify(baseSpecies)), counts:{proto_herb:36,proto_carn:10,proto_omn:18}},
-    herdFocus:{seed:'herd', species:JSON.parse(JSON.stringify(baseSpecies)).map(sp=>({...sp, fertility:sp.trophic==='herb'?0.78:sp.fertility})), counts:{proto_herb:48,proto_carn:8,proto_omn:22}},
-    predatorHeavy:{seed:'predator', species:JSON.parse(JSON.stringify(baseSpecies)).map(sp=>({...sp, socialMode:sp.trophic==='carn'?'pack':sp.socialMode, baseSpeed:sp.trophic==='carn'?sp.baseSpeed*1.05:sp.baseSpeed})), counts:{proto_herb:22,proto_carn:18,proto_omn:14}},
-    tutorial:{seed:'tutorial', species:JSON.parse(JSON.stringify(baseSpecies)).map(sp=>({...sp, baseSpeed:lerp(0.9,1.1,0.52)})), counts:{proto_herb:28,proto_carn:8,proto_omn:16}},
+    temperate:{seed:'temperate', pattern:'meandering_river', species:JSON.parse(JSON.stringify(baseSpecies)), counts:{proto_herb:36,proto_carn:10,proto_omn:18}},
+    herdFocus:{seed:'herd', pattern:'delta_wetland', species:JSON.parse(JSON.stringify(baseSpecies)).map(sp=>({...sp, fertility:sp.trophic==='herb'?0.78:sp.fertility})), counts:{proto_herb:48,proto_carn:8,proto_omn:22}},
+    predatorHeavy:{seed:'predator', pattern:'mountain_valley', species:JSON.parse(JSON.stringify(baseSpecies)).map(sp=>({...sp, socialMode:sp.trophic==='carn'?'pack':sp.socialMode, baseSpeed:sp.trophic==='carn'?sp.baseSpeed*1.05:sp.baseSpeed})), counts:{proto_herb:22,proto_carn:18,proto_omn:14}},
+    tutorial:{seed:'tutorial', pattern:'meandering_river', species:JSON.parse(JSON.stringify(baseSpecies)).map(sp=>({...sp, baseSpeed:lerp(0.9,1.1,0.52)})), counts:{proto_herb:28,proto_carn:8,proto_omn:16}},
   };
   function createState(seed){
     return {seed, rng:createRng(seed), perlin:null, cells:[], animals:[], species:JSON.parse(JSON.stringify(baseSpecies)), overlay:'animals_all', overlayAlpha:0.6, overlaySpecies:null, boundaryMode:'bounce',
@@ -253,9 +258,10 @@
   function generateTerrain(pattern){
     const waterSlider=document.getElementById('waterLevel'); if(waterSlider){ state.waterLevel=parseFloat(waterSlider.value)||0; }
     const rng=state.rng; const perlin=createPerlin(rng); state.perlin=perlin; const w=params.gridW, h=params.gridH; const arr=new Array(w*h);
+    const patternCfg=PATTERN_CONFIGS[pattern]||PATTERN_CONFIGS.meandering_river;
     for(let y=0;y<h;y++) for(let x=0;x<w;x++){const idx=y*w+x; arr[idx]={elev:0, wet:0, moist:0.5, river:false, riverWidth:0,
-      veg:{grass:0, poison:0, shrub:0, shrubThorn:0, tree:0}, terrain:'平地', biome:'prairie', rugged:0};}
-    const elevScale=pattern==='mountain_valley'?0.045:0.07; const wetScale=pattern==='delta_wetland'?0.06:0.08;
+      veg:{grass:0, poison:0, shrub:0, shrubThorn:0, tree:0}, terrain:'平地', biome:'prairie', rugged:0, cover:0};}
+    const elevScale=patternCfg.elevScale??0.07; const wetScale=patternCfg.wetScale??0.08;
     for(let y=0;y<h;y++){
       for(let x=0;x<w;x++){
         const idx=y*w+x; const warp=pattern==='meandering_river'?Math.sin(y*0.05)*0.05:0; const elev=perlin.noise(x*elevScale+warp, y*elevScale);
@@ -264,11 +270,12 @@
         arr[idx].wet=clamp01(pattern==='delta_wetland'?Math.min(1,wet*0.75+0.25):wet);
       }
     }
-    state.cells=arr; updateRivers(pattern);
+    state.cells=arr; updateRivers(pattern, patternCfg);
   }
-  function updateRivers(pattern){
-    const w=params.gridW, h=params.gridH; const riverFactor=parseFloat(document.getElementById('riverThresh').value)||1.2; const widthCtrl=parseFloat(document.getElementById('riverWidthCtrl').value)||1;
-    const waterLevel=parseFloat(state.waterLevel||0);
+  function updateRivers(pattern, patternCfg={}){
+    const w=params.gridW, h=params.gridH; let riverFactor=parseFloat(document.getElementById('riverThresh').value)||1.2; const widthCtrl=parseFloat(document.getElementById('riverWidthCtrl').value)||1;
+    const waterLevel=parseFloat(state.waterLevel||0) + (patternCfg.waterOffset||0);
+    riverFactor+=patternCfg.riverBias||0;
     let riverCount=0;
     for(let y=0;y<h;y++){
       for(let x=0;x<w;x++){
@@ -302,7 +309,8 @@
       }
     }
     computeRuggedness();
-    if(pattern==='delta_wetland' && riverCount===0){ document.getElementById('riverThresh').value=Math.max(0.6, riverFactor-0.2).toFixed(2); updateRivers(pattern); return; }
+    computeCoverMap(patternCfg);
+    if(pattern==='delta_wetland' && riverCount===0){ document.getElementById('riverThresh').value=Math.max(0.6, riverFactor-0.2).toFixed(2); updateRivers(pattern, patternCfg); return; }
     state.needsBgRedraw=true;
   }
 
@@ -323,6 +331,32 @@
         c.rugged=clamp01(Math.max(maxDiff*1.8, avgDiff*2.4));
       }
     }
+  }
+
+  function computeCoverMap(patternCfg={}){
+    const w=params.gridW, h=params.gridH; const coverNoise=patternCfg.coverNoise||0.12; const coverBias=patternCfg.coverBias||0;
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const idx=y*w+x; const c=state.cells[idx];
+        const vegDensity=clamp01((c.veg.grass*0.35 + c.veg.shrub*0.55 + c.veg.shrubThorn*0.4 + c.veg.tree*0.75));
+        const ruggedBonus=clamp01(c.rugged*0.6 + (c.terrain==='丘陵'?0.2:0) + (patternCfg.ruggedPush||0));
+        const wetBonus=c.river?0.3:(c.shore?0.18:0);
+        const noise=state.perlin?.noise((x+40)*coverNoise,(y-60)*coverNoise)||0.5;
+        const raw=vegDensity + ruggedBonus + wetBonus + (noise-0.5)*0.4 + coverBias;
+        c.cover=clamp01(raw);
+      }
+    }
+    // 軽く平滑化して土壌の「隠れ家」帯を作る
+    const smooth=new Float32Array(w*h);
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        let sum=0, cnt=0;
+        for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
+          const nx=clampRange(x+dx,0,w-1), ny=clampRange(y+dy,0,h-1); sum+=state.cells[ny*w+nx].cover||0; cnt++; }
+        smooth[y*w+x]=sum/Math.max(1,cnt);
+      }
+    }
+    for(let i=0;i<smooth.length;i++){ state.cells[i].cover=clamp01(smooth[i]); }
   }
 
   // --- SPECIES & ANIMALS ---
@@ -419,7 +453,10 @@
     const preset=presets[key]; if(!preset) return;
     state.seed=preset.seed; state.rng=createRng(state.seed); state.species=JSON.parse(JSON.stringify(preset.species));
     resetSpeciesEditor(); Object.entries(preset.counts).forEach(([id,val])=>{const input=document.querySelector(`#speciesEditor input[data-kind="count"][data-id="${id}"]`); if(input) input.value=val;});
-    document.getElementById('seedInput').value=preset.seed; generateTerrain(document.getElementById('patternSelect').value); spawnAnimals(); applyLayerSettingsFromUI();
+    document.getElementById('seedInput').value=preset.seed;
+    const patternSelect=document.getElementById('patternSelect'); if(patternSelect && preset.pattern){ patternSelect.value=preset.pattern; }
+    const pattern=patternSelect?.value || document.getElementById('patternSelect').value;
+    generateTerrain(pattern); spawnAnimals(); applyLayerSettingsFromUI();
   }
   // FSM states for animal behavior
   const AnimalStates={WANDER:'WANDER', DRINK:'DRINK', EAT:'EAT', MATE:'MATE', AMBUSH:'AMBUSH'};
@@ -510,9 +547,11 @@
       this.meatFocus=preferPrey;
       const foodNearby=this.meatFocus?preyNearby:plantNearby;
       const ambushSpot=sp.trophic==='carn' && hungerPct>45 && thirstPct<55? this.findRiverAmbushSpot(state, vision):null;
+      const coverSpot=this.findCoverSpot(state, vision);
 
       if(this.digestTimer>0 && !drinkNeed && hungerPct<70){
         this.state=AnimalStates.WANDER; this.behavior='digest';
+        if(coverSpot){ this.target=coverSpot; this.state=AnimalStates.AMBUSH; this.stateTimer=45; }
         return;
       }
 
@@ -521,6 +560,7 @@
       if(drinkNeed) next=AnimalStates.DRINK;
       else if((this.meatFocus && preyNearby) || (hungerPct>40 && foodNearby)) next=AnimalStates.EAT;
       else if(ambushSpot) { next=AnimalStates.AMBUSH; this.target=ambushSpot; }
+      else if(coverSpot && thirstPct<65){ next=AnimalStates.AMBUSH; this.target=coverSpot; this.behavior='hide'; }
       else if(mateReady) next=AnimalStates.MATE;
 
       if(next!==prevState){ this.state=next; this.stateTimer=30+Math.floor(rng()*20); this.target=null;
@@ -559,10 +599,26 @@
           const dist=Math.hypot(dx,dy)+0.1;
           const moisture=cell.moist||0;
           const score=(cell.shore?1.2:1)+(moisture*0.6)-dist*0.15;
-          if(score>bestScore){ bestScore=score; best={x:nx+0.5, y:ny+0.5}; }
+          if(score>bestScore){ bestScore=score; best={x:nx+0.5, y:ny+0.5, type:'river'}; }
         }
       }
       return best;
+    }
+
+    findCoverSpot(state, vision){
+      const w=params.gridW, h=params.gridH; const cx=Math.floor(this.x), cy=Math.floor(this.y);
+      let best=null, bestScore=-Infinity;
+      for(let dy=-Math.ceil(vision); dy<=Math.ceil(vision); dy++){
+        for(let dx=-Math.ceil(vision); dx<=Math.ceil(vision); dx++){
+          const nx=wrap(cx+dx,w), ny=wrap(cy+dy,h); const cell=state.cells[ny*w+nx]; if(!cell) continue;
+          const dist=Math.hypot(dx,dy)+0.1;
+          const cover=cell.cover||0;
+          const vegSum=cell.veg.grass+cell.veg.shrub+cell.veg.tree;
+          const coverScore=cover*1.25 + vegSum*0.25 + (cell.rugged||0)*0.2 - dist*0.12 + (cell.shore?0.08:0);
+          if(coverScore>bestScore){ bestScore=coverScore; best={x:nx+0.5,y:ny+0.5, type:'cover', score:cover}; }
+        }
+      }
+      return bestScore>0.35?best:null;
     }
 
     applyForces(state){
@@ -592,15 +648,15 @@
         speed*=clampRange(1+habitatBonus*0.08,0.5,1.4);
 
       if(this.state===AnimalStates.AMBUSH){
-        this.behavior='ambush';
+        this.behavior=this.target?.type==='cover'?'hide':'ambush';
         speed*=0.55;
           if(this.target){ steerX+=torusDelta(this.target.x,this.x,w)*0.6; steerY+=torusDelta(this.target.y,this.y,h)*0.6; }
-          const prey=getNeighbors(this,state,vision/2).find(o=>sp.preyList.includes(o.speciesId) && (state.cells[Math.floor(o.y)*w+Math.floor(o.x)]?.river||state.cells[Math.floor(o.y)*w+Math.floor(o.x)]?.shore));
+          const prey=getNeighbors(this,state,vision/2).find(o=>sp.preyList.includes(o.speciesId) && ((state.cells[Math.floor(o.y)*w+Math.floor(o.x)]?.river||state.cells[Math.floor(o.y)*w+Math.floor(o.x)]?.shore) || (state.cells[Math.floor(o.y)*w+Math.floor(o.x)]?.cover>0.55)));
           if(prey){
             const dx=torusDelta(prey.x,this.x,w), dy=torusDelta(prey.y,this.y,h); const d=safeNorm(dx,dy);
             if(d){ steerX=dx/d*2.1; steerY=dy/d*2.1; this.state=AnimalStates.EAT; this.target=prey; this.recordEvent('水辺ダッシュ','突撃'); this.emote='⚔️'; this.emoteTimer=35; }
           }
-        } else if(this.state===AnimalStates.DRINK){
+      } else if(this.state===AnimalStates.DRINK){
           let best={score:-Infinity,x:cx,y:cy};
           for(let dy=-3;dy<=3;dy++) for(let dx=-3;dx<=3;dx++){
             const nx=wrap(cx+dx,w), ny=wrap(cy+dy,h); const c=state.cells[ny*w+nx];
@@ -871,6 +927,8 @@
   function drawPlants(p){
     const boost=state.layerSettings?.vegetationBoost||1;
     const cs=params.cellSize;
+    const lightweight=document.getElementById('performanceMode')?.checked;
+    const cellStep=lightweight?2:1;
     const typeInfo=cell=>{
       const entries=[
         ['grass',cell.veg.grass],
@@ -890,11 +948,11 @@
     };
     p.push();
     p.drawingContext.save();
-    p.drawingContext.globalAlpha=0.68;
+    p.drawingContext.globalAlpha=lightweight?0.52:0.68;
     p.blendMode(p.NORMAL);
     // セルごとの植生アイコンを描画し、存在位置を把握しやすくする
-    for(let y=0;y<params.gridH;y++){
-      for(let x=0;x<params.gridW;x++){
+    for(let y=0;y<params.gridH;y+=cellStep){
+      for(let x=0;x<params.gridW;x+=cellStep){
         const cell=state.cells[y*params.gridW+x];
         const total=cell.veg.grass+cell.veg.poison+cell.veg.shrub+cell.veg.shrubThorn+cell.veg.tree;
         if(total<0.05) continue;
@@ -929,7 +987,8 @@
       }
     }
     // 実体の植生はセル情報に応じた色で上書き
-    plants.forEach(plant=>{
+    plants.forEach((plant,plantIdx)=>{
+      if(lightweight && plantIdx%2===1) return;
       const cx=Math.floor(plant.pos.x/params.cellSize); const cy=Math.floor(plant.pos.y/params.cellSize);
       const idx=cy*params.gridW+cx; const cell=state.cells[idx];
       if(cell){ const info=typeInfo(cell); plant.lastType=info.type; plant.lastDensity=info.value; }
@@ -1145,6 +1204,12 @@
           bgLayer.circle(x*cellSize+cellSize*0.3,y*cellSize+cellSize*0.25,1.5);
           if(dense){ bgLayer.circle(x*cellSize+cellSize*0.65,y*cellSize+cellSize*0.65,1.8); bgLayer.circle(x*cellSize+cellSize*0.4,y*cellSize+cellSize*0.7,1.2); }
         }
+        if((c.cover||0)>0.55){
+          const shade=clampRange((c.cover-0.4)*160,30,160);
+          bgLayer.fill(28,56,38,shade);
+          bgLayer.rect(x*cellSize, y*cellSize, cellSize, cellSize);
+          bgLayer.fill(12,28,18,shade*0.35); bgLayer.circle(x*cellSize+cellSize*0.25,y*cellSize+cellSize*0.3,1.8);
+        }
         if(c.river){bgLayer.fill(70,160,255,200); bgLayer.rect(x*cellSize,y*cellSize,cellSize,cellSize);} else if(c.shore){bgLayer.fill(90,140,200,60); bgLayer.rect(x*cellSize,y*cellSize,cellSize,cellSize);}
       }
     }
@@ -1154,7 +1219,7 @@
   function handleHover(p){
     const cellTooltip=document.getElementById('cellTooltip'); const x=Math.floor(p.mouseX/params.cellSize), y=Math.floor(p.mouseY/params.cellSize);
     if(x<0||y<0||x>=params.gridW||y>=params.gridH){cellTooltip.classList.add('hidden'); return;}
-    const c=state.cells[y*params.gridW+x]; cellTooltip.textContent=`(${x},${y}) elev:${c.elev.toFixed(2)} rugged:${(c.rugged||0).toFixed(2)}\n地形:${c.terrain} (${c.biome}) river:${c.river?'yes':'no'}\nmoist:${c.moist.toFixed(2)}\n草:${c.veg.grass.toFixed(2)} 毒:${c.veg.poison.toFixed(2)}\n低木:${c.veg.shrub.toFixed(2)} トゲ:${c.veg.shrubThorn.toFixed(2)} 樹木:${c.veg.tree.toFixed(2)}`;
+    const c=state.cells[y*params.gridW+x]; cellTooltip.textContent=`(${x},${y}) elev:${c.elev.toFixed(2)} rugged:${(c.rugged||0).toFixed(2)} cover:${(c.cover||0).toFixed(2)}\n地形:${c.terrain} (${c.biome}) river:${c.river?'yes':'no'}\nmoist:${c.moist.toFixed(2)}\n草:${c.veg.grass.toFixed(2)} 毒:${c.veg.poison.toFixed(2)}\n低木:${c.veg.shrub.toFixed(2)} トゲ:${c.veg.shrubThorn.toFixed(2)} 樹木:${c.veg.tree.toFixed(2)}`;
     cellTooltip.style.left=(p.mouseX+16)+'px'; cellTooltip.style.top=(p.mouseY+16)+'px'; cellTooltip.classList.remove('hidden');
   }
   function handleSelect(p){
@@ -1169,13 +1234,15 @@
         const nx=cx+dx, ny=cy+dy; if(nx<0||ny<0||nx>=params.gridW||ny>=params.gridH) continue; const idx=ny*params.gridW+nx; const c=state.cells[idx]; if(!c) continue;
         if(isWater){
           c.river=true; c.shore=false; c.moist=1; c.wet=1; c.terrain='水域'; c.biome='wetland'; c.veg={grass:0,poison:0,shrub:0,shrubThorn:0,tree:0};
+          c.cover=0;
         } else {
           c.river=false; c.shore=false; c.moist=Math.max(0.2,c.moist*0.6); c.wet=Math.max(0.15,c.wet*0.5); c.terrain='陸地';
-          c.biome='prairie'; c.veg=initVegByBiome('prairie', state.rng);
+          c.biome='prairie'; c.veg=initVegByBiome('prairie', state.rng); c.cover=clamp01((c.cover||0)*0.5 + 0.2);
         }
       }
     }
     computeRuggedness();
+    const pat=document.getElementById('patternSelect')?.value; computeCoverMap(PATTERN_CONFIGS[pat]||{});
     state.needsBgRedraw=true;
   }
 
@@ -1193,7 +1260,7 @@
     btn.classList.toggle('active', terrainEditMode);
   }
   function overlayLabelText(mode){
-    const map={base:'地形+植生', river:'河川(流路)', moisture:'水分', vegetation_total:'植生合計', vegetation_grass:'草(密度ヒート)', vegetation_poison:'毒草', vegetation_tree:'樹木', animals_all:'動物(全)', animals_filter:'動物(種別)', density_heatmap:'密度ヒート'}; return map[mode]||mode;
+    const map={base:'地形+植生', river:'河川(流路)', moisture:'水分', cover:'隠れ家', vegetation_total:'植生合計', vegetation_grass:'草(密度ヒート)', vegetation_poison:'毒草', vegetation_tree:'樹木', animals_all:'動物(全)', animals_filter:'動物(種別)', density_heatmap:'密度ヒート'}; return map[mode]||mode;
   }
   const normalizeOverlay=mode=> OVERLAY_OPTIONS.includes(mode)?mode:'animals_all';
 
@@ -1206,7 +1273,7 @@
     if(animalLayer && !animalLayer.checked){ animalLayer.checked=true; state.layerSettings.animals=true; }
   }
   function drawColorbar(p,mode){
-    const x=12,y=12,w=18,h=140; p.push(); p.translate(12,60); const grad=p.drawingContext.createLinearGradient(0,0,0,h); const colors={moisture:['#1b2d6b','#6fa4ff'], vegetation_total:['#17351f','#68e38f'], vegetation_grass:['#16361c','#5acb72'], vegetation_poison:['#30202e','#e64f86'], vegetation_tree:['#18261a','#5fa173'], density_heatmap:['#1d1b4f','#ffcc66'], river:['#0c2238','#59c6ff'], animals_all:['#222','#fff']};
+    const x=12,y=12,w=18,h=140; p.push(); p.translate(12,60); const grad=p.drawingContext.createLinearGradient(0,0,0,h); const colors={moisture:['#1b2d6b','#6fa4ff'], cover:['#1a2018','#6bc58a'], vegetation_total:['#17351f','#68e38f'], vegetation_grass:['#16361c','#5acb72'], vegetation_poison:['#30202e','#e64f86'], vegetation_tree:['#18261a','#5fa173'], density_heatmap:['#1d1b4f','#ffcc66'], river:['#0c2238','#59c6ff'], animals_all:['#222','#fff']};
       const cs=colors[mode]||['#111','#888']; grad.addColorStop(0,cs[0]); grad.addColorStop(1,cs[1]); p.drawingContext.fillStyle=grad; p.rect(0,0,w,h); p.fill('#dce8ff'); p.noStroke(); p.textSize(10); p.text('low',2,h+12); p.text('high',2,-4); p.pop();
   }
   function drawOverlay(p, overlay, alpha){
@@ -1217,6 +1284,7 @@
         const c=state.cells[y*params.gridW+x]; let col=null; switch(overlay){
           case 'river': col=overlayLayer.color(70,160,255,alpha*255*(0.4+c.riverWidth)); break;
           case 'moisture': col=overlayLayer.lerpColor(overlayLayer.color('#1b2d6b'), overlayLayer.color('#6fa4ff'), c.moist); break;
+          case 'cover': col=overlayLayer.lerpColor(overlayLayer.color('#1a2018'), overlayLayer.color('#6bc58a'), clamp01((c.cover||0))); break;
           case 'vegetation_total': col=overlayLayer.lerpColor(overlayLayer.color('#14301e'), overlayLayer.color('#68e38f'), clamp01((c.veg.grass+c.veg.shrub+c.veg.tree)/2)); break;
           case 'vegetation_grass': col=overlayLayer.lerpColor(overlayLayer.color('#16361c'), overlayLayer.color('#5acb72'), clamp01(c.veg.grass*1.2)); break;
           case 'vegetation_poison': col=overlayLayer.lerpColor(overlayLayer.color('#30202e'), overlayLayer.color('#e64f86'), clamp01(c.veg.poison*1.4)); break;
@@ -1894,16 +1962,16 @@
     const animalOpacity=document.getElementById('animalOpacity');
     if(animalOpacity){ const sync=()=>{ state.layerSettings.animalOpacity=parseFloat(animalOpacity.value)||1; updateLegendFilterPanel(); }; animalOpacity.addEventListener('input',sync); sync(); }
     applyLayerSettingsFromUI();
-    document.getElementById('riverThresh').addEventListener('change',()=>updateRivers(document.getElementById('patternSelect').value));
-    document.getElementById('riverWidthCtrl').addEventListener('input',()=>updateRivers(document.getElementById('patternSelect').value));
+    document.getElementById('riverThresh').addEventListener('change',()=>{ const pat=document.getElementById('patternSelect').value; updateRivers(pat, PATTERN_CONFIGS[pat]); });
+    document.getElementById('riverWidthCtrl').addEventListener('input',()=>{ const pat=document.getElementById('patternSelect').value; updateRivers(pat, PATTERN_CONFIGS[pat]); });
     const waterSlider=document.getElementById('waterLevel');
-    if(waterSlider){ waterSlider.addEventListener('input',()=>{ state.waterLevel=parseFloat(waterSlider.value)||0; updateRivers(document.getElementById('patternSelect').value); }); state.waterLevel=parseFloat(waterSlider.value)||0; }
+    if(waterSlider){ waterSlider.addEventListener('input',()=>{ state.waterLevel=parseFloat(waterSlider.value)||0; const pat=document.getElementById('patternSelect').value; updateRivers(pat, PATTERN_CONFIGS[pat]); }); state.waterLevel=parseFloat(waterSlider.value)||0; }
     const brushSlider=document.getElementById('brushSize'); const brushLabel=document.getElementById('brushSizeValue');
     if(brushSlider && brushLabel){ const sync=()=>brushLabel.textContent=brushSlider.value; brushSlider.addEventListener('input',sync); sync(); }
     const terrainBtn=document.getElementById('terrainModeToggle'); if(terrainBtn){ terrainBtn.addEventListener('click',()=>{ terrainEditMode=!terrainEditMode; updateTerrainEditButton(); }); updateTerrainEditButton(); }
     const vegetationToggle=document.getElementById('showVegetation');
     if(vegetationToggle){
-      const syncVeg=()=>{ state.showVegetation=vegetationToggle.checked; state.needsBgRedraw=true; updateLegendFilterPanel(); };
+      const syncVeg=()=>{ state.showVegetation=vegetationToggle.checked; state.needsBgRedraw=true; if(overlayLayer){ overlayLayer.clear(); } updateLegendFilterPanel(); };
       vegetationToggle.addEventListener('change',syncVeg);
       syncVeg();
     }
